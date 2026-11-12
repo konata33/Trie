@@ -14,8 +14,8 @@ import (
 	"trie/internal/theme"
 )
 
-// refreshState is the subscriptions' refresh as the sidebar shows it
-// (main.tsx refreshFeeds): rows dim while their feed is read and brighten
+// refreshState is the subscriptions' refresh as the sidebar shows it: rows
+// dim while their feed is read and brighten
 // one by one as each settles; a failed feed keeps its retry.
 type refreshState struct {
 	busy    bool
@@ -25,7 +25,7 @@ type refreshState struct {
 	retries []string        // retries waiting for the refresh under way
 	arrived map[string]time.Time
 
-	// The refresh icon's turn (useTurning).
+	// The refresh icon's turn.
 	spinAt, stopAt time.Time
 	from, rest     float64
 
@@ -180,7 +180,7 @@ func (a *App) refreshFeeds(sourceID string) {
 }
 
 // arrive flares a refreshed author's face once: light, not movement, so it
-// stays under less motion (Sidebar.tsx arrive: brightness 1.7 over 480 ms).
+// stays under less motion (brightness 1.7 over 480 ms).
 func (a *App) arrive(id string) {
 	if a.refresh.arrived == nil {
 		a.refresh.arrived = map[string]time.Time{}

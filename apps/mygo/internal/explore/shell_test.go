@@ -25,7 +25,7 @@ import (
 	"trie/internal/reading"
 )
 
-// index.ts's Explore handlers: findIcon, the pictures Explore keeps, the stage's first screens, previews.
+// The app's Explore handlers: FindIcon, the pictures Explore keeps, the stage's first screens, previews.
 
 func pngOf(w, h int) []byte {
 	var b bytes.Buffer
@@ -81,7 +81,7 @@ func picture(mime string, data []byte) *fetch.Response {
 	return &fetch.Response{Status: 200, Type: mime, Body: data}
 }
 
-// findIcon: the best icon a home page declares, drawn at most 96 wide; one nativeImage cannot read goes as it came;
+// findIcon: the best icon a home page declares, drawn at most 96 wide; one decodeNative cannot read goes as it came;
 // a site that answered with none is nil, one that could not be reached an error.
 func TestFindIcon(t *testing.T) {
 	ico := []byte{0, 0, 1, 0, 1, 0, 16, 16, 0, 0}
@@ -151,7 +151,7 @@ func galleryOf(t *testing.T, images ...string) (string, func(context.Context, st
 	return dir, feedsOf(t, xml)
 }
 
-// Work: a work's picture, fetched once, shrunk to 1200 wide and kept on disk; one nativeImage cannot read goes as it
+// Work: a work's picture, fetched once, shrunk to 1200 wide and kept on disk; one decodeNative cannot read goes as it
 // came; one that cannot be had is "" for the session.
 func TestWorkPictures(t *testing.T) {
 	dir, fetchFeed := galleryOf(t, "https://cdn.example/big.jpg", "https://cdn.example/w.webp", "https://cdn.example/gone.jpg")

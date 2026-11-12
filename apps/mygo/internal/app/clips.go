@@ -16,7 +16,7 @@ import (
 	"trie/internal/theme"
 )
 
-// 摘录 (Clips.tsx, clips.styles.ts): whose words were kept, a page for
+// 摘录: whose words were kept, a page for
 // each person, set like a magazine's pull quotes. Whoever was quoted last
 // opens the page on a spread of their own; everyone else follows in
 // columns. On each page their latest passage stands large, sized by its
@@ -66,7 +66,7 @@ type clipNote struct {
 	editing, cancel bool
 }
 
-// fold is a deleted passage folding shut (Clips.tsx fold): from the height
+// fold is a deleted passage folding shut: from the height
 // it had, since when.
 type fold struct {
 	at   time.Time
@@ -377,7 +377,7 @@ type clipsLayout struct {
 	placed map[string]int
 }
 
-// arrange composes the page (Clips.tsx arrange): whoever was quoted last
+// arrange composes the page: whoever was quoted last
 // on a spread of their own, everyone else into the column shortest so far,
 // by their page as last laid out (by its passages before). People already
 // placed stay in their column, so a page deleted closes up where it was.
@@ -1088,8 +1088,8 @@ func washed(c *ui.Context, key string, k float32, text func() ui.Element) ui.Ele
 	})
 }
 
-// foldClip deletes a passage: it folds shut first, and the rest close up
-// (Clips.tsx fold); from the keys, or under less motion, it goes at once.
+// foldClip deletes a passage: it folds shut first, and the rest close up;
+// from the keys, or under less motion, it goes at once.
 func (a *App) foldClip(c *ui.Context, id string) {
 	cs := a.clipsSt()
 	if a.kbd || a.still(c) || a.busy {
@@ -1223,7 +1223,7 @@ func (a *App) cardContent(c *ui.Context, p page, cl *library.Clip, at, total int
 		next := cs.order[at+1].ID
 		c.OnShortcut(0, ui.KeyRight, func() { a.kbd = true; a.showClip(next, ui.Rect{}) })
 	}
-	// Their halo comes along into the card (useAura).
+	// Their halo comes along into the card.
 	if ic != nil {
 		a.aura(c, ic.hues, false)
 	}
@@ -1486,7 +1486,7 @@ func (a *App) handOff(c *ui.Context, cl *library.Clip) {
 	}
 }
 
-// openClip opens a passage's article from the card (main.tsx openClipArticle):
+// openClip opens a passage's article from the card:
 // the same crossing as from a list, the card's ground becoming the
 // reader's page while the title in its citation travels to the headline;
 // the card and its shade let go with the page. Back, the page shrinks into

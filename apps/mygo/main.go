@@ -34,8 +34,8 @@ import (
 var icon []byte
 
 // dataDir is the library's folder. A release build (mygo build, Trie.app)
-// opens the library the Electron app keeps, ~/Library/Application
-// Support/Trie, unless TRIE_DATA_DIR names another. Run from
+// opens the real library, ~/Library/Application Support/Trie, unless
+// TRIE_DATA_DIR names another. Run from
 // source, the app opens only TRIE_DATA_DIR, which must be absolute and
 // must not be that library: development works on copies.
 func dataDir(env string, home string, release bool) (string, error) {
@@ -56,20 +56,14 @@ func dataDir(env string, home string, release bool) (string, error) {
 	return dir, nil
 }
 
-// errElectron and errHeld are why a library stays closed: another app has
-// it open (lockLibrary).
-var (
-	errElectron = errors.New("the Electron app has the library open")
-	errHeld     = errors.New("another window of this app has the library open")
-)
+// errHeld is why a library stays closed: another window of this app has it
+// open (lockLibrary).
+var errHeld = errors.New("another window of this app has the library open")
 
 // refuse says in a dialog why the library stays closed, and quits.
 func refuse(err error) {
 	title, detail := "资料库打不开", err.Error()
-	switch {
-	case errors.Is(err, errElectron):
-		title, detail = "旧版正在使用资料库", "请先退出旧版，再打开 Trie。"
-	case errors.Is(err, errHeld):
+	if errors.Is(err, errHeld) {
 		title, detail = "资料库已经在另一个 Trie 里打开", "同一个资料库一次只能在一个 Trie 里打开。"
 	}
 	mygo.App.SetName("Trie")
@@ -135,8 +129,8 @@ func main() {
 		}
 	}
 	var a *app.App
-	// Explore names and draws the sources subscribed from it (main/index.ts):
-	// the catalog's name for a feed, the catalog's icon for a site.
+	// Explore names and draws the sources subscribed from it: the catalog's
+	// name for a feed, the catalog's icon for a site.
 	var ex *explore.Service
 	reader := reading.New(store, nil, reading.Worker)
 	subs := subscription.New(store, nil, func(home string) *string { return ex.IconFor(home) },
@@ -176,7 +170,7 @@ func main() {
 			w := mygo.NewWindow(mygo.WindowOptions{
 				Title: "Trie", Width: 1280, Height: 850, MinWidth: 1100, MinHeight: 700,
 				BackgroundColor: "#141414",
-				// The page fills the window under the traffic lights (main/index.ts).
+				// The page fills the window under the traffic lights.
 				TitleBarStyle:        mygo.TitleBarHiddenInset,
 				TrafficLightPosition: &mygo.Point{X: 16, Y: 13},
 				Content:              ui.View(a.View),
@@ -219,8 +213,8 @@ func main() {
 	}
 }
 
-// keepOpen keeps the app running with its window closed, in the Dock, as the Electron app did on macOS
-// (window-all-closed): a click on its icon brings the window back (activate: reopen), whatever the hidden windows
+// keepOpen keeps the app running with its window closed, in the Dock, as Mac apps do: a click on its icon
+// brings the window back (activate: reopen), whatever the hidden windows
 // that capture sites for Explore are doing. Quitting, as ⌘Q does, stops the captures under way first (stop), which
 // close their windows at once rather than keep the app until they are done.
 func keepOpen(reopen func(), stop func()) {

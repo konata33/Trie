@@ -10,10 +10,9 @@ import (
 	"testing"
 )
 
-// Ports of apps/desktop/src/main/store.test.ts. Each test names the
-// TypeScript test it ports.
+// Store cases. The comment over each test starts with the case's name.
 
-// fixture is the bundled verified sample (apps/desktop/resources/verified-snapshot.json); each test gets its own copy.
+// fixture is the bundled verified sample (testdata/verified-snapshot.json); each test gets its own copy.
 func fixture(t *testing.T) Snapshot {
 	t.Helper()
 	data, err := os.ReadFile("testdata/verified-snapshot.json")
@@ -73,7 +72,7 @@ func fails(t *testing.T, err error, want string) {
 	}
 }
 
-// raw opens the file without the store, as the TypeScript tests use DatabaseSync.
+// raw opens the file without the store.
 func raw(t *testing.T, path string) *sql.DB {
 	t.Helper()
 	db, err := sql.Open("sqlite", path)
@@ -176,9 +175,9 @@ type unsupported struct{}
 
 func (unsupported) action() string { return "delete-source" }
 
-// invalid runtime mutations preserve every row and revision. Values the
-// TypeScript sends with the wrong JSON type (read: 1, name: 7, ids: 'not an
-// array') cannot be written as Go actions; the rest are here.
+// invalid runtime mutations preserve every row and revision. Values with the
+// wrong JSON type (read: 1, name: 7, ids: 'not an array') cannot be written
+// as Go actions; the rest are here.
 func TestInvalidMutationsPreserveRows(t *testing.T) {
 	snapshot := fixture(t)
 	s := mustOpen(t, libraryPath(t), snapshot)
@@ -270,7 +269,8 @@ func TestUnsupportedSchema(t *testing.T) {
 	fails(t, err, "Unsupported library schema")
 }
 
-// The tables, pragmas and schema text are store.ts's, so either app opens the other's file.
+// The tables, pragmas and schema text are those of libraries written by earlier versions, so either version opens the
+// other's file.
 func TestSchemaAndPragmas(t *testing.T) {
 	path := libraryPath(t)
 	s := mustOpen(t, path, fixture(t))

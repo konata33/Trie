@@ -35,7 +35,7 @@ type picture struct {
 //go:embed picture.svg
 var pictureSVG []byte
 
-// missingArt is DESIGN.md's picture pictogram (ui/pictograms.tsx), its
+// missingArt is DESIGN.md's picture pictogram, its
 // first frame: a picture that did not load shows it over 重试.
 var missingArt = ui.MustParseSVG(pictureSVG)
 
@@ -113,7 +113,7 @@ func (p *picture) decode() error {
 }
 
 // WebP is the picture of data when it is a lossy WebP, in the colours
-// libwebp, and so Chromium, gives it; nil for anything else. A lossy WebP
+// libwebp, and so a browser, gives it; nil for anything else. A lossy WebP
 // keeps BT.601 YCbCr in studio range (luma 16 to 235), which package
 // x/image/webp hands over as an image.YCbCr, whose colour model takes it
 // for JFIF's full range: white would show as 235 and black as 16. Its

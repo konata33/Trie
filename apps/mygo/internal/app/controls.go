@@ -11,7 +11,7 @@ import (
 	"trie/internal/theme"
 )
 
-// Controls (ui/controls.tsx): one look per kind of button, every state
+// Controls: one look per kind of button, every state
 // drawn. Keyboard focus shows at once, in the focus colour.
 
 // press shrinks what the pointer presses, from the press on (DESIGN.md 按下就有反应).
@@ -199,7 +199,7 @@ func (a *App) iconBtn(c *ui.Context, key any, o iconOpt) ui.Element {
 	return b
 }
 
-// tip is the app's tooltip (Tooltip.tsx): a label, not a panel, below the
+// tip is the app's tooltip: a label, not a panel, below the
 // element, or beside it in the sidebar; the first waits 550 ms.
 func (a *App) tip(c *ui.Context, e ui.Element, text string, beside bool) {
 	ui.TooltipBase(c, e, func(t ui.Element) {
@@ -328,7 +328,7 @@ func (a *App) stepper(c *ui.Context, key any, label string, value *float32, lo, 
 	})
 }
 
-// count is HomeList's Count: digits that roll to their new value, each
+// count is a number whose digits roll to their new value, each
 // place a one-line window onto 0–9 that slides over 300 ms. lineH is the
 // line's height.
 func (a *App) count(c *ui.Context, n int, lineH float32) ui.Element {

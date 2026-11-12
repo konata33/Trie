@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// The cases of apps/desktop/src/main/extract-content.test.ts and gallery-page.test.ts, one Go test each.
+// Extraction and gallery-page cases, one Go test each.
 
 const (
 	tsBase  = "https://example.com/posts/story"
@@ -47,7 +47,7 @@ func TestKeepsStructureCodeTablesImages(t *testing.T) {
 }
 
 func TestStripsUnsafeContent(t *testing.T) {
-	// The TS case also checks that the page's script never ran; nothing here runs scripts.
+	// Extraction runs no scripts, so the page's script cannot have run.
 	r := ExtractPage(tsPageHTML(`<script>globalThis.extractExecuted = true</script><p onclick="alert(1)" style="color:red" class="noise">Visible words</p><svg><text>SVG secret</text></svg><iframe src="https://evil.example"></iframe><a href="javascript&#58;alert(1)">Bad</a><img src="data:image/png;base64,AAAA"><a href="http://0x7f000001/private">Loopback</a><img src="https://[::ffff:127.0.0.1]/a"><img src="https://user:pass@example.com/a"><a href="http://internal.local/a">Local</a><a href="https://%6cocalhost/a">Encoded host</a>`), tsBase, false)
 	must(t, r.Status == "ready", "status %s", r.Status)
 	must(t, !match(`(?i)script|onclick|style=|noise|svg|iframe|javascript:|data:|127\.0\.0\.1|0x7f|localhost|internal\.local|user:pass|SVG secret`, r.HTML), "%s", r.HTML)
@@ -272,7 +272,7 @@ func TestSyndicationNotice(t *testing.T) {
 	must(t, strings.Contains(ExtractFeedBody(`<p>By the river from dawn I watched the boats, as https://writer.example/boats describes.</p><p>`+prose3+`</p>`, "https://writer.example/?p=2", "body").HTML, "By the river"), "a first paragraph that mentions a source stays")
 }
 
-// gallery-page.test.ts
+// Gallery pages
 
 func cdn(trim string, w int) string {
 	return fmt.Sprintf("https://assets.example/cdn-cgi/image/trim=%s,width=%d,height=351,fit=cover,format=jpg/shot.jpg", trim, w)
@@ -325,7 +325,7 @@ func TestTeaser(t *testing.T) {
 
 // TestFeedLeadInPageIsWork is the extraction half of "a cached feed lead-in is read again from the page behind it": the
 // lead-in reads as a summary and the entry page as a work. Re-reading a cached body and saving the media belong to
-// reader-service, ported with it.
+// internal/reading, tested there.
 func TestFeedLeadInPageIsWork(t *testing.T) {
 	teaser := `<p>A brand strategist's site.</p><p><a href="https://onepagelove.example/pete-sena">Full Review</a></p>`
 	must(t, IsTeaser(teaser) && ExtractFeedBody(teaser, "https://onepagelove.example/pete-sena", "body").Status == "summary", "the lead-in")
@@ -399,7 +399,7 @@ func TestAwwwardsAdapter(t *testing.T) {
 }
 
 // TestAwwwardsEntryPage is the extraction half of "an Awwwards feed item, one sentence under a picture, is read from
-// its entry page"; choosing the page over the feed item and caching its media belong to reader-service.
+// its entry page"; choosing the page over the feed item and caching its media belong to internal/reading.
 func TestAwwwardsEntryPage(t *testing.T) {
 	p := ExtractPage(awardPage, awardURL, true)
 	must(t, p.Status == "ready" && p.Work != nil && p.Work.Facts[0].Values[0] == "Site of the Day · 2026-11-05" && *p.Work.Poster == "https://assets.awwwards.example/awards/submissions/2026/09/agrumea.jpg" && p.Work.Video == nil, "%+v", p.Work)

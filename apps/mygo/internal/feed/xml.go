@@ -11,9 +11,9 @@ import (
 	"trie/internal/web"
 )
 
-// parseFeed reads a feed into a DOM with jsdom's text/xml parser (saxes, XML
-// 1.0, namespaces on), which refuses any document that is not well-formed.
-// Here encoding/xml tokenizes, and the checks it leaves out are made on top:
+// Parse reads a feed into a DOM as jsdom's text/xml parser does (saxes, XML
+// 1.0, namespaces on), refusing any document that is not well-formed.
+// encoding/xml tokenizes, and the checks it leaves out are made on top:
 // one root, no text outside it, matching tags, bound prefixes, no duplicate
 // attributes. innerXML is innerHTML in an XML document (w3c-xmlserializer).
 

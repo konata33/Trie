@@ -15,7 +15,7 @@ go tool mygo build -skip-dmg                # 打包到 build/darwin-arm64/Trie.
 
 ```text
 main.go             入口：选资料库目录、加锁、组装各模块、开窗口
-lock_*.go           资料库互斥锁
+lock_*.go           资料库锁：同一个资料库一次只能被一个窗口打开
 internal/
   app/              窗口与各页：外壳、首页、探索、收藏、摘录、作者页、阅读器、作品页
   reader/           把清理后的正文画成原生元素：段落、代码、表格、图片、摘录
@@ -31,7 +31,6 @@ internal/
   video/            作品页录屏解码（macOS AVFoundation）
   web/              URL 解析、HTML 实体等网页文本工具
 resources/          应用图标和探索目录（catalog.json、seed.json、站点图标）
-cmd/                开发用的独立演示程序
 ```
 
 ## 数据

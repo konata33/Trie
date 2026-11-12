@@ -1,9 +1,10 @@
-// Package extract is Trie's reading of a fetched page or feed body into the reader's article, ported from
-// apps/desktop/src/main: extract-content.ts (extract.go, with sanitize.go, css.go, feed.go), gallery-page.ts (gallery.go),
-// svg-image.ts and image-type.ts (svg.go), whiteboard.ts (whiteboard.go on rough.go), reader-format.ts (format.go) and
-// reader-document.ts (document.go). The Readability layer is codeberg.org/readeck/go-readability/v2 standing in for
-// @mozilla/readability 0.6.0 (this file, chosen in .context/mygo/extract-spike); the bench in bench_test.go compares the
-// whole output with the TS one (.context/mygo/extract-port).
+// Package extract is Trie's reading of a fetched page or feed body into the reader's article: the article found and
+// cleaned (extract.go, with sanitize.go, css.go, feed.go), design-gallery cards (gallery.go), SVG pictures and image
+// types (svg.go), whiteboard scenes drawn as pictures (whiteboard.go on rough.go), the article laid out for the reader
+// (format.go) and the reader's structured document (document.go). The Readability layer is
+// codeberg.org/readeck/go-readability/v2 standing in for @mozilla/readability 0.6.0 (this file, chosen in
+// .context/mygo/extract-spike); the bench in bench_test.go compares the whole output with reference outputs recorded from
+// the previous implementation (.context/mygo/extract-port).
 package extract
 
 import (
@@ -14,7 +15,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-// Article is what a Readability implementation returns for one page, in the shape the TS bench writes.
+// Article is what a Readability implementation returns for one page, in the shape the bench's reference outputs use.
 type Article struct {
 	OK          bool    `json:"ok"`
 	Error       string  `json:"error,omitempty"`
@@ -28,14 +29,14 @@ type Article struct {
 	MS          float64 `json:"ms"`
 }
 
-// The options extract-content.ts passes to Readability.
+// The options the reader passes to Readability.
 const (
 	maxElems      = 20_000
 	charThreshold = 120
 )
 
 // Readeck runs codeberg.org/readeck/go-readability/v2 on an already decoded page. The page is parsed here rather than by the
-// library's own reader, which guesses a charset (chardet) and NFC-normalises: the TS side decodes by Content-Type and does neither.
+// library's own reader, which guesses a charset (chardet) and NFC-normalises: pages are decoded by Content-Type and not normalised.
 func Readeck(page string, base *url.URL) Article {
 	doc, err := html.Parse(strings.NewReader(page))
 	if err != nil {

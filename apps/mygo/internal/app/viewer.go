@@ -12,8 +12,7 @@ import (
 	"trie/internal/theme"
 )
 
-// The picture viewer (ui/overlays.tsx ImageViewer; ArticleReader.tsx
-// openImage, WorkPage.tsx WorkShots): one picture large over the shade.
+// The picture viewer: one picture large over the shade.
 // Opened by the pointer, the picture travels out of its place on the page
 // into the middle of the window and, closed, back into that place while it
 // is in the window; it stays solid all the way, only the shade and the
@@ -141,8 +140,7 @@ func (a *App) viewerView(c *ui.Context) {
 	if first && twin.W <= 0 {
 		twin = p.Box // the page has not left it empty yet
 	}
-	// Anywhere in the window (overlays.tsx onScreen), as a shot past the
-	// strip's edge.
+	// Anywhere in the window, as a shot past the strip's edge.
 	back := !still && twin.W > 0 && twin.H > 0 && twin.Y < h && twin.Y+twin.H > 0 && twin.X < w && twin.X+twin.W > 0
 	if first {
 		v.travel = back && !v.instant
@@ -158,7 +156,7 @@ func (a *App) viewerView(c *ui.Context) {
 	fade := ui.ElementTransition{Duration: in, Ease: motion.Ease, ExitDuration: out, ExitEase: motion.Ease, Colors: true,
 		Enter: &ui.Motion{}, Exit: &ui.Motion{}}
 	// The picture flies between its place and the middle as one move and
-	// one scale (overlays.tsx fly), or comes into focus where it shows.
+	// one scale, or comes into focus where it shows.
 	flight := func(r ui.Rect) *ui.Motion {
 		s := min(r.W/pw, r.H/ph)
 		return &ui.Motion{X: r.X + r.W/2 - (box.X + pw/2), Y: r.Y + r.H/2 - (box.Y + ph/2), Scale: s, Opacity: 1}
@@ -172,8 +170,7 @@ func (a *App) viewerView(c *ui.Context) {
 		pt.Enter = flight(twin)
 	}
 	if !v.swapAt.IsZero() {
-		// A step's picture settles in where it shows, out of a 2 DIP blur
-		// (overlays.tsx settle).
+		// A step's picture settles in where it shows, out of a 2 DIP blur.
 		pt.Duration, pt.Enter = motion.SwapIn, &ui.Motion{Blur: 2}
 	}
 	if back {
@@ -192,7 +189,7 @@ func (a *App) viewerView(c *ui.Context) {
 		}
 		v.step += by
 		// By the pointer the picture shown stays a moment, letting go where
-		// it is (overlays.tsx step's copy).
+		// it is.
 		v.gone, v.goneBox = 0, box
 		if !a.kbd {
 			v.gone = v.shot
@@ -260,7 +257,7 @@ func (a *App) viewerView(c *ui.Context) {
 		img := picture(fmt.Sprint("viewer-pic:", v.run, ":", v.shot), p, box).Transition(pt)
 		img.Clicked() // a click on the picture is not one beside it
 		// The picture stepped from by the pointer lets go where it was, over
-		// the next, as the old app's copy does.
+		// the next.
 		// ponytail: one at a time; a step within SwapOut of the last drops its copy at once.
 		if g := v.gone; g > 0 && g <= shots && g != v.shot && v.step == 0 && now.Sub(v.swapAt) < motion.SwapOut {
 			k := motion.Ease(float32(now.Sub(v.swapAt)) / float32(motion.SwapOut))
@@ -293,7 +290,7 @@ func (a *App) viewerView(c *ui.Context) {
 }
 
 // roundButton is the viewer's: 40 across and round, on a faint ground of
-// its own, so that it reads on the shade (overlays.tsx round).
+// its own, so that it reads on the shade.
 func (a *App) roundButton(c *ui.Context, key, icon, label, tip string) ui.Element {
 	b := ui.ButtonBase(c.Key(key)).Label(label).Size(40, 40).Radius(20).Center().FocusRing(false)
 	ground, ink := theme.Selected, theme.Text2

@@ -16,9 +16,9 @@ import (
 	"trie/internal/library"
 )
 
-// The service parts of subscription-service.test.ts; what the store does
-// with an imported feed is in library/feed_test.go. Feeds are parsed by the
-// real parser, as the TS tests parse them.
+// The service parts of the subscription cases; what the store does with an
+// imported feed is in library/feed_test.go. Feeds are parsed by the real
+// parser.
 
 var empty = library.Snapshot{Version: 1, AsOf: "2026-11-01", Sources: []library.SourceSnapshot{}, Articles: []library.ArticleSnapshot{}, ReviewItems: []library.ReviewItem{}}
 
@@ -74,7 +74,7 @@ func add(t *testing.T, s *Service, input string) library.SubscriptionResult {
 }
 
 // empty library -> typed feed URL -> preview -> persisted articles -> real source body, no sample whitelist
-// (the read of that body through the reader waits for reader-service; here the feed body is checked in the store)
+// (the read of that body through the reader is in internal/reading; here the feed body is checked in the store)
 func TestPreviewAddPersist(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "db.sqlite")
 	store := open(t, path, empty)
@@ -337,7 +337,7 @@ func TestTransientReset(t *testing.T) {
 	if p := preview(t, s, "https://writer.example/feed"); p.ArticleCount != 2 || calls != 2 || len(state(t, store).Articles) != 0 {
 		t.Fatalf("%+v after %d reads", p, calls)
 	}
-	// Beyond the TS case: a second network failure reads as a dropped connection, and other failures are not retried.
+	// A second network failure reads as a dropped connection, and other failures are not retried.
 	calls = 0
 	s = New(store, reply(reset, &fetch.NetError{Err: errors.New("read: connection reset by peer")}), nil, nil)
 	if _, err := s.Preview(context.Background(), "https://writer.example/feed"); err == nil || err.Error() != "连接被中断，请稍后重试" || calls != 2 {
@@ -403,8 +403,8 @@ func TestSlowFeed(t *testing.T) {
 	}
 }
 
-// Beyond the TS cases: a refresh of a source already being read waits for
-// that read; a preview keeps at most five feeds.
+// A refresh of a source already being read waits for that read; a preview
+// keeps at most five feeds.
 func TestSharedRefreshAndPreviewLimit(t *testing.T) {
 	store := open(t, ":memory:", empty)
 	var reads, mu = 0, sync.Mutex{}

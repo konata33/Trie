@@ -16,7 +16,7 @@ import (
 	"trie/internal/web"
 )
 
-// The reader (ArticleReader.tsx, ReaderBar.tsx, reader.styles.ts): the bar
+// The reader: the bar
 // at the top, the headline and the byline, the body internal/reader shows,
 // the author's sign-off and the end mark; the outline in the left margin,
 // and the bar that clips a selection.
@@ -168,8 +168,8 @@ func (a *App) restore(rp *readerPage) {
 	}
 }
 
-// keepPosition measures where the reader is, as useReadingSession does,
-// and saves it half a second after it stops changing.
+// keepPosition measures where the reader is and saves it half a second
+// after it stops changing.
 func (a *App) keepPosition(c *ui.Context, rp *readerPage) {
 	r := rp.r
 	if r == nil {
@@ -209,7 +209,7 @@ func (a *App) savePosition(rp *readerPage) {
 				a.say(rp, "阅读位置保存失败；本次会话仍可继续阅读")
 				return
 			}
-			// The lists see it at once (main.tsx rememberPosition).
+			// The lists see it at once.
 			if art := a.article(in.ArticleID); art != nil {
 				art.ReadingPosition = &library.ReadingPosition{ReadingPositionInput: in, UpdatedAt: web.Now()}
 			}
@@ -249,15 +249,15 @@ func (a *App) readerPage(c *ui.Context, id string, from []page, live bool) {
 	if rp == nil {
 		rp = a.reading(id)
 	}
-	// Back on the page, the bar starts over, there at once (ReaderBar
-	// mounting); while the page is left it stays as it was.
+	// Back on the page, the bar starts over, there at once; while the page
+	// is left it stays as it was.
 	fresh := live && rp.left
 	if fresh {
 		rp.left, rp.away, rp.run, rp.focus = false, false, 0, true
 		rp.lit, rp.swipe = litOf(art), backSwipe{}
 	}
 	// Arrived, the reader takes the focus, so that the keys scrolling it
-	// are the keyboard's (main.tsx data-input) wherever the pointer is.
+	// are the keyboard's wherever the pointer is.
 	if live && rp.focus && rp.r != nil {
 		rp.r.Focus, rp.focus = true, false
 	}
@@ -280,7 +280,7 @@ func (a *App) readerPage(c *ui.Context, id string, from []page, live bool) {
 			}
 			r.Above = func() float32 { return a.readerHead(c, rp, art, src, p) }
 			r.Below = func() { a.readerFoot(c, rp, art, src) }
-			// A work's facts go before the body's first h2, or after it (ArticleBody insert).
+			// A work's facts go before the body's first h2, or after it.
 			r.Insert = nil
 			if w := rp.work; w != nil && hasWorkFacts(w) {
 				r.Insert = func() (float32, float32) { return a.workFacts(c, w) }
@@ -337,7 +337,7 @@ func (a *App) marksOf(id string) []reader.Mark {
 	return out
 }
 
-// trackBar follows the scroll for the bar (ReaderBar): reading down past 200
+// trackBar follows the scroll for the bar: reading down past 200
 // sends it up and away, scrolling up brings it back, by more than 6 a
 // scroll either way; a move the reader was sent on (the saved place, a
 // heading) is not reading down. Past 4 it lifts off the page; once the
@@ -368,8 +368,8 @@ func (a *App) trackBar(c *ui.Context, rp *readerPage) {
 	}
 }
 
-// scrollGap is how long a scroll may pause and stay one scroll (ReaderBar's
-// swipe reads its gestures so).
+// scrollGap is how long a scroll may pause and stay one scroll (the swipe
+// back reads its gestures so).
 const scrollGap = 160 * time.Millisecond
 
 // readerHead is the column above the body: the headline, the byline, and
@@ -396,7 +396,7 @@ func (a *App) readerHead(c *ui.Context, rp *readerPage, art *library.Article, sr
 			default:
 				ui.Text(c, "未提供日期")
 			}
-			// The reading time is the library's (article-preview.ts), not counted again.
+			// The reading time is the library's, not counted again.
 			if m := art.Preview; m != nil && m.Minutes != nil && rp.work == nil && rp.hasBody() {
 				ui.Text(c, "·").AccessHidden(true)
 				ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
@@ -478,7 +478,7 @@ func notice(c *library.ArticleContent) string {
 }
 
 // pending is the space below the title holding the waiting or failed state,
-// centred (styles.css .reader-pending).
+// centred.
 func (a *App) pending(c *ui.Context, fn func(), reason *string) {
 	_, h := c.Size()
 	p := ui.Column(c.Key("pending")).FillWidth().Margin(36, 0, 0, 0).MinHeight(max(260, h-420)).Padding(0, 0, 40, 0).AlignItems(ui.Center).Justify(ui.Center)
@@ -637,16 +637,15 @@ func (rp *readerPage) reached(r *reader.Reader) bool {
 	return s.MaxY <= 0 || s.Y/s.MaxY >= 0.97
 }
 
-// readerBar is the bar at the top of the reader (ReaderBar): back, how far
+// readerBar is the bar at the top of the reader: back, how far
 // the article has been read, the title once it has scrolled under, and the
 // tools. Reading down sends it away.
 func (a *App) readerBar(c *ui.Context, rp *readerPage, art *library.Article, from []page, fresh bool) {
 	// The bar is the column's first child, 8 past it either side, held at
-	// the top of the scrolled page (styles.css .reader-bar: sticky), 32
-	// over the title.
+	// the top of the scrolled page, 32 over the title.
 	bar := ui.Row(c.Key("bar")).Sticky().Top(0).ZIndex(4).Height(52).Margin(0, -8, 32, -8).Padding(14, 0, 6, 0).Gap(4).
 		AlignItems(ui.Center).Background(theme.Window).Role(ui.RoleToolbar).Label("阅读操作")
-	// Sent away (.away): up by its height and a pixel, faded, out of the
+	// Sent away: up by its height and a pixel, faded, out of the
 	// pointer's way; it stays while a control in it has the focus or its
 	// panel is open. Under less motion it fades where it is; from the
 	// keyboard it is simply there or gone.
@@ -674,7 +673,7 @@ func (a *App) readerBar(c *ui.Context, rp *readerPage, art *library.Article, fro
 	if away {
 		bar.IgnoreInput(true)
 	}
-	// Lifted (.lifted): a hairline under it once the page has moved.
+	// Lifted: a hairline under it once the page has moved.
 	lift := theme.LineSoft
 	if !rp.lifted {
 		lift = ui.Transparent
@@ -718,7 +717,7 @@ func (a *App) readerBar(c *ui.Context, rp *readerPage, art *library.Article, fro
 				}
 			})
 		}
-		// The title, once the headline has passed under the bar (.bar-title).
+		// The title, once the headline has passed under the bar.
 		on := rp.titled && rp.r != nil
 		k := b.AnimateTo("title", map[bool]float32{true: 1, false: 0}[on], a.ease(motion.BarTitle))
 		if k > 0.001 {
@@ -753,7 +752,7 @@ func (a *App) readerBar(c *ui.Context, rp *readerPage, art *library.Article, fro
 	})
 }
 
-// backLabel names the page the reader goes back to (main.tsx backLabel).
+// backLabel names the page the reader goes back to.
 func backLabel(a *App, p page) string {
 	switch p.kind {
 	case "author":
@@ -932,7 +931,7 @@ func (a *App) outline(c *ui.Context, rp *readerPage) {
 	})
 }
 
-// clipBar floats over the selection (reader.styles clipBar): 摘录 ⌘E, or 取消摘录
+// clipBar floats over the selection: 摘录 ⌘E, or 取消摘录
 // for a passage already clipped. It shows once the selection settles.
 func (a *App) clipBar(c *ui.Context, rp *readerPage, art *library.Article) {
 	r := rp.r
@@ -1059,8 +1058,8 @@ func (a *App) unclip(rp *readerPage, id string) {
 	})
 }
 
-// feedbackView is the reader's quiet status line at the window's corner
-// (reader.styles feedback), for three seconds.
+// feedbackView is the reader's quiet status line at the window's corner,
+// for three seconds.
 func (a *App) feedbackView(c *ui.Context, rp *readerPage) {
 	now := c.Now()
 	if rp.feedbackAt.IsZero() {

@@ -14,10 +14,10 @@ import (
 	"golang.org/x/net/html"
 )
 
-// gallery-page.ts: design-gallery entries (One Page Love and the like) are cards, not articles: a screen recording, the
+// Gallery pages: design-gallery entries (One Page Love and the like) are cards, not articles: a screen recording, the
 // real site, a few labelled facts and section screenshots. The card is read into a work the reader lays out itself.
 
-// Work is shared/types.ts GalleryWork as extraction leaves it: poster, video and section images are page addresses.
+// Work is a gallery work as extraction leaves it: poster, video and section images are page addresses.
 type Work struct {
 	Name      string  `json:"name"`
 	Designer  *string `json:"designer"`
@@ -512,7 +512,7 @@ var (
 	anchor      = regexp.MustCompile(`(?i)<a\b[^>]*>([\s\S]*?)</a` + sp + `*>`)
 )
 
-// IsTeaser is gallery-page.ts isTeaser(): a feed body that is only a lead-in, a short text ending in a link to the full
+// IsTeaser is whether page is a feed body that is only a lead-in, a short text ending in a link to the full
 // piece ("Full Review", "Read more", 阅读全文). Design galleries publish entries this way.
 func IsTeaser(page string) bool {
 	text := collapse(anyEntity.ReplaceAllString(anyTag.ReplaceAllString(scriptBlock.ReplaceAllString(page, " "), " "), " "))

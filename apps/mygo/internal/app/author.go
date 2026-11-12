@@ -13,7 +13,7 @@ import (
 	"trie/internal/theme"
 )
 
-// An author's page (AuthorPage.tsx, author.css): the page band, a card for
+// An author's page: the page band, a card for
 // the person, then their chronology by year, each article a row with a
 // tear-off date.
 
@@ -290,7 +290,7 @@ func (a *App) authorCard(c *ui.Context, au *author, p page, live bool) {
 	})
 }
 
-// introOf is an author's introduction (AuthorPage.tsx intro): their own
+// introOf is an author's introduction: their own
 // words from the feed first; when it says nothing useful, the line Explore
 // has about their site, looked up once.
 func (a *App) introOf(src *library.Source) string {
@@ -318,7 +318,7 @@ func sep(c *ui.Context) {
 }
 
 // face is a round author face: the site icon toned for the dark interface,
-// or an empty disc, never a letter (HomeList Face).
+// or an empty disc, never a letter.
 func (a *App) face(c *ui.Context, ic *siteIcon, key string, size float32) ui.Element {
 	box := ui.Box(c.Key(key)).Size(size, size).Radius(size/2).Background(theme.Selected).ClipX().ClipY().Shrink(0).
 		InsetShadow(0, 0, 0, 1, theme.LineSoft).AccessHidden(true)
@@ -334,7 +334,7 @@ func (a *App) face(c *ui.Context, ic *siteIcon, key string, size float32) ui.Ele
 	})
 }
 
-// articleRow is a row of the chronology (author.css .arow): the date, the
+// articleRow is a row of the chronology: the date, the
 // moon of an article being read, the title and what the list can say of
 // it, its picture. The pointer lays no ground over it; the keyboard's
 // cursor takes the selected ground and a 1.5 amber line inside it.
@@ -429,7 +429,7 @@ func (a *App) articleRow(c *ui.Context, l *listState, p page, art *library.Artic
 		})
 		// Resting on a row reads its article and lays it out, unseen (warm.go):
 		// only an article already in the library, so the pointer alone never
-		// fetches a page, as in Electron, where nothing is read before the click.
+		// fetches a page: nothing is read before the click.
 		if row.Hovered() && !a.kbd && live {
 			if a.hover != art.ID {
 				a.hover, a.hoverAt = art.ID, c.Now()
@@ -484,15 +484,15 @@ func (a *App) toggleFav(art *library.Article) {
 	a.mutate(library.ToggleFavorite{ID: art.ID}, nil)
 }
 
-// moon is reading progress (HomeList Moon): a ring and what is left to
+// moon is reading progress: a ring and what is left to
 // read, lit on the left; an empty ring at the end.
 func (a *App) moon(c *ui.Context, size, lit float32, label string) ui.Element {
 	return drawMoon(ui.Box(c), size, lit, label)
 }
 
 // moonBack is a list's moon of the article whose reader was just left: it
-// goes from where it was as the article was opened to where it was left
-// (main.tsx returning, HomeList tweenMoon), once its row is built.
+// goes from where it was as the article was opened to where it was left,
+// once its row is built.
 type moonBack struct {
 	id      string
 	from    float32
@@ -531,7 +531,7 @@ func drawMoon(box ui.Element, size, lit float32, label string) ui.Element {
 	})
 }
 
-// moonPath is HomeList's moonPath, waning: the left limb, and the
+// moonPath is the moon's outline, waning: the left limb, and the
 // terminator, an ellipse half rx wide, bulging right past half lit.
 func moonPath(cx, cy, r, lit float32) *ui.Path {
 	var p ui.Path
@@ -555,7 +555,7 @@ func moonPath(cx, cy, r, lit float32) *ui.Path {
 	return p.Close()
 }
 
-// orbit is the favourite (HomeList Orbit): a centre and an arc not closed;
+// orbit is the favourite: a centre and an arc not closed;
 // kept, the arc closes, the satellite comes round to the top and it all
 // lights amber (460 ms; its glow over 200).
 func (a *App) orbit(c *ui.Context, key string, size float32, kept bool) ui.Element {

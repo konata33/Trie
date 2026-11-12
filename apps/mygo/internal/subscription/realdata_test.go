@@ -13,7 +13,8 @@ import (
 )
 
 // FEED_PORT_DIR (.context/mygo/feed-port, run.sh): the Go side of the feed
-// equivalence check, the counterpart of ts/replay.mjs. Every stored read goes
+// equivalence check against reference outputs recorded from the previous
+// implementation (by ts/replay.mjs). Every stored read goes
 // through FetchFeed with a fetch that replays it, every synthetic case
 // through Parse, DiscoverFeeds and DiscoverIcons; out/go.json is written in
 // the shape of out/ts.json.

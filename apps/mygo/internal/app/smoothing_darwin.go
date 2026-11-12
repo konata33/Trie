@@ -9,8 +9,8 @@ import (
 	"github.com/ebitengine/purego/objc"
 )
 
-// The Electron app draws its text with -webkit-font-smoothing: antialiased
-// (styles.css body): glyphs without Core Text's font smoothing, which
+// The app draws its text as -webkit-font-smoothing: antialiased does:
+// glyphs without Core Text's font smoothing, which
 // emboldens light text on a dark ground. MyGo smooths its text while the
 // user leaves smoothing on, as AppKit does, and reads that from
 // AppleFontSmoothing in the standard user defaults; registering 0 for this

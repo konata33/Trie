@@ -14,7 +14,8 @@ import (
 	"unicode/utf8"
 )
 
-// TestSpike runs the candidates over the bench's page corpus and compares them with the TS outputs (ts-run.ts):
+// TestSpike runs the candidates over the bench's page corpus and compares them with reference outputs recorded from
+// the previous implementation (by .context/mygo/extract-spike/ts-run.ts):
 //
 //	EXTRACT_SPIKE=$PWD/../../.context/mygo/extract-spike go test ./internal/extract -run TestSpike -v
 //

@@ -167,7 +167,7 @@ note('size', [innerWidth, innerHeight, devicePixelRatio].join('x'));
 note('visibility', document.visibilityState);
 </script></body></html>`
 
-// Every isolation site-shots.ts asks of a capture's window, in a real one: see TestShotWindowIsolated for the list.
+// Every isolation a capture's window is given, in a real one: see TestShotWindowIsolated for the list.
 func TestLiveIsolation(t *testing.T) {
 	live(t)
 	var hits atomic.Int32

@@ -17,9 +17,9 @@ import (
 	"golang.org/x/net/html"
 )
 
-// extract-content.ts: a fetched page (or a feed's body) read into the reader's cleaned HTML.
+// Extraction: a fetched page (or a feed's body) read into the reader's cleaned HTML.
 
-// Extracted is extract-content.ts's Extracted.
+// Extracted is the result of reading a page or a feed's body.
 type Extracted struct {
 	Status     string   `json:"status"` // ready, summary, restricted or unavailable
 	HTML       string   `json:"html"`
@@ -65,7 +65,7 @@ var specialRanges = func() []netip.Prefix {
 	return out
 }()
 
-// publicURL is extract-content.ts publicURL(): an http(s) address without credentials on a public host, resolved against
+// publicURL is an http(s) address without credentials on a public host, resolved against
 // base ("" for none), or "". It validates addresses, not DNS.
 func publicURL(value, base string) string {
 	trimmed := web.JSTrim(value)
@@ -209,7 +209,7 @@ func embeddedImage(value string) string {
 	return ""
 }
 
-// sanitizer is extract-content.ts sanitize(): before caching (imageData nil) pictures keep their addresses; once cached
+// sanitizer is the extracted HTML's sanitizer: before caching (imageData nil) pictures keep their addresses; once cached
 // every picture is a data: URL from imageData or has no source.
 func sanitizer(base string, imageData map[string]string) *policy {
 	schemes, imgSchemes := []string{"http", "https"}, []string{"http", "https", "data"}
@@ -414,7 +414,7 @@ func resolveReactSegments(doc *html.Node) {
 
 // lastTail is where the run of placement calls ending the script starts, or -1. RE2 has no back-references, so the
 // pattern takes either quote and each call of a run is checked to pair its own; a run holding one that does not starts
-// again after it, as the TS pattern's leftmost match would.
+// again after it, as a back-referencing pattern's leftmost match would.
 func lastTail(source string) int {
 	for offset := 0; ; {
 		loc := placementTail.FindStringIndex(source[offset:])
@@ -804,7 +804,7 @@ var (
 	loginAsk = regexp.MustCompile(`(?i)(?:sign in|log in|subscribe|登录|订阅).{0,40}(?:read|continue|阅读|继续)`)
 )
 
-// ExtractPage is extract-content.ts extractPage(): the article of a fetched page. trustedArticle is a page a feed links
+// ExtractPage reads the article of a fetched page. trustedArticle is a page a feed links
 // to as an article, which may be read without semantic article markup.
 func ExtractPage(page, pageURL string, trustedArticle bool) (result Extracted) {
 	base := publicURL(pageURL, "")
@@ -940,7 +940,7 @@ func ExtractPage(page, pageURL string, trustedArticle bool) (result Extracted) {
 
 // articleRoot is the page's one <article>, or with none its one <main>, when it holds the page's text.
 //
-// Intended difference from extract-content.ts (2026-11-09): a root with under a tenth of the body's text is a box in a
+// Intended difference from the bench's reference outputs (2026-11-09): a root with under a tenth of the body's text is a box in a
 // longer page, not the article (lea.verou.me's <article class="note">: 158 of 24,088 characters), and the page is read
 // whole instead. On the bench's 193 pages such roots hold 0 to 2.8% of the text and real ones from 22.9% up (short pages
 // whose chrome outweighs the post), so a tenth leaves every other page as it was; half would change ten more.
@@ -964,10 +964,11 @@ func articleRoot(doc *html.Node) *html.Node {
 
 func truncateUnits(u []uint16, n int) []uint16 { return u[:min(len(u), n)] }
 
-// rulesOff switches rules off for the bench's progress table (ablate.ts's patches, by name); nil in the app.
+// rulesOff switches rules off for the bench's progress table (the patches of .context/mygo/extract-spike/ablate.ts, by
+// name); nil in the app.
 var rulesOff map[string]bool
 
-// parseArticle is the Readability layer; the bench swaps in Mozilla's own output to tell its differences from the port's.
+// parseArticle is the Readability layer; the bench swaps in Mozilla's own output to tell its differences from readeck's.
 var parseArticle = readability
 
 // readability is new Readability(clone, { maxElemsToParse, charThreshold: 120, keepClasses: true }).parse(): the
@@ -989,7 +990,7 @@ func readability(doc *html.Node, base string) (string, string) {
 	return outerHTML(a.Node), a.Title()
 }
 
-// CacheImages is extract-content.ts cacheImages(): the extracted HTML with each picture's address replaced by its saved
+// CacheImages returns the extracted HTML with each picture's address replaced by its saved
 // copy (a data: URL, SVG sanitized again), or left without a source.
 func CacheImages(page string, imageData map[string]string) string {
 	if len(page) > maxBytes {
@@ -1022,7 +1023,7 @@ var (
 	syndication = regexp.MustCompile(`(?i)^by` + sp + `+[^\t\n\v\f\r \x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}\x{feff}]+` + sp + `+from` + sp + `+https?://[^\t\n\v\f\r \x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}\x{feff}]+`)
 )
 
-// ExtractFeedBody is extract-content.ts extractFeedBody(): a body a feed carries, read like a page's. kind is "body" or
+// ExtractFeedBody reads a body a feed carries, read like a page's. kind is "body" or
 // "summary".
 func ExtractFeedBody(page, base, kind string) Extracted {
 	u := publicURL(base, "")
@@ -1075,8 +1076,8 @@ func articleKey(value, base string) string {
 	return key
 }
 
-// ExtractFeed is extract-content.ts extractFeed(): the body a publisher's feed carries for one of the article's
-// addresses. ok is false where the TS returns null.
+// ExtractFeed returns the body a publisher's feed carries for one of the article's addresses. ok is false when the
+// feed is refused or unreadable, or carries no body for them.
 func ExtractFeed(xml, feedURL string, articleURLs []string) (result Extracted, ok bool) {
 	base := publicURL(feedURL, "")
 	if base == "" || xml == "" || len(xml) > maxBytes || doctypeOrEntity.MatchString(xml) {

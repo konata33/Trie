@@ -1,5 +1,3 @@
-// Code generated from apps/desktop/src/renderer/src/tech-icons.ts; DO NOT EDIT.
-
 package app
 
 // techPaths are the brand marks of the technologies galleries name (Simple Icons v16.36.0, CC0,

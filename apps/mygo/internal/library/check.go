@@ -11,9 +11,9 @@ import (
 	"trie/internal/web"
 )
 
-// The checks store.ts, policy.ts and reader-document.ts make. Stored JSON is
+// The checks on stored rows, actions and reader documents. Stored JSON is
 // decoded to `any` (objects, []any, string, json.Number, bool, nil) and read
-// field by field as the TypeScript does, so a row Electron accepts is accepted
+// field by field as earlier versions read it, so a row they accept is accepted
 // here and a damaged one is refused or skipped the same way.
 
 type object = map[string]any
@@ -32,7 +32,7 @@ func parseJSON(text string) (any, error) {
 	return v, nil
 }
 
-// objectJSON is store.ts's objectJSON: stored text holding a JSON object.
+// objectJSON is stored text holding a JSON object.
 func objectJSON(value any) (object, error) {
 	text, ok := value.(string)
 	if !ok {
@@ -49,8 +49,8 @@ func objectJSON(value any) (object, error) {
 	return o, nil
 }
 
-// fields reads values as store.ts's string(), number(), nullableString() and
-// strings() do, keeping the first error.
+// fields reads strings, nullable strings, counts and string arrays, keeping
+// the first error.
 type fields struct {
 	err error
 }
@@ -199,7 +199,7 @@ func clipID(s string) bool { return uuid.MatchString(s) }
 // dateOK is Number.isFinite(Date.parse(s)).
 func dateOK(s string) bool { _, ok := web.JSDateParse(s); return ok }
 
-// checkClip is policy.ts's parseClipInput for a typed clip.
+// checkClip checks a typed clip.
 func checkClip(c ClipInput) error {
 	switch {
 	case !clipID(c.ID):
@@ -286,7 +286,7 @@ func clipJSON(value, articleID any) *Clip {
 	return clip
 }
 
-// checkPosition is policy.ts's parseReadingPosition for a typed position.
+// checkPosition checks a typed reading position.
 func checkPosition(p ReadingPositionInput) error {
 	bounded := func(s string, max int) bool {
 		return s != "" && web.JSLen(s) <= max && strings.IndexFunc(s, control) < 0
@@ -428,8 +428,8 @@ func formattedJSON(v map[string]any) (version int, headings []Heading, blocks []
 }
 
 // sourceSnapshotJSON is a cached body's source snapshot, or nil when invalid.
-// ponytail: TypeScript passes a provenance of ['source'] (String() matches)
-// through as an array; here it becomes the string.
+// ponytail: a provenance of ['source'] passes the check (String() matches)
+// and is read back as the string, not the array.
 func sourceSnapshotJSON(value any) *ReaderSourceSnapshot {
 	v, ok := value.(object)
 	if !ok {
@@ -521,7 +521,7 @@ func readerImage(v any) bool {
 
 func text(v any, max int) bool { s, ok := v.(string); return ok && web.JSLen(s) <= max }
 
-// isGalleryWork is reader-document.ts's check of a cached work page.
+// isGalleryWork is the check of a cached work page.
 func isGalleryWork(value any) bool {
 	v, ok := value.(object)
 	optional := func(key string) bool { return v[key] == nil && has(v, key) || text(v[key], 512) }
@@ -587,7 +587,7 @@ func set(items ...string) map[string]bool {
 }
 
 // IsReaderDocument is isReaderDocument for a document still in its JSON text,
-// as reader-document.ts checks a document it has just built.
+// such as one just built.
 func IsReaderDocument(doc []byte) bool {
 	passed.Lock()
 	same := len(doc) > 0 && passed.doc == string(doc)
@@ -612,7 +612,7 @@ var passed struct {
 	doc string
 }
 
-// isReaderDocument is reader-document.ts's check of a stored document before it reaches the reader.
+// isReaderDocument is the check of a stored document before it reaches the reader.
 func isReaderDocument(value any) bool {
 	v, ok := value.(object)
 	if !ok {

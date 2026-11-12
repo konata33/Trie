@@ -12,7 +12,7 @@ import (
 	"golang.org/x/net/html/atom"
 )
 
-// SimpleClean (the selection bench's baseline, kept for TestSpike) is the allowlist half of extract-content.ts sanitize(): the tags and attributes the reader keeps, public links, and a
+// SimpleClean (the selection bench's baseline, kept for TestSpike) is the allowlist half of the reader's sanitizer: the tags and attributes the reader keeps, public links, and a
 // picture's address picked from srcset like simpleSrcset(). None of the app's page rules (hidden parts, paywalls, repeated header,
 // table of contents, gallery adapters, whiteboards, React segments) and no formatting: the bench measures how far this alone gets.
 // It returns the cleaned HTML and the picture addresses still to fetch.
@@ -146,7 +146,7 @@ func cleanAttrs(n *html.Node, base *url.URL) []html.Attribute {
 	return out
 }
 
-// publicURL is extract-content.ts simplePublicURL(): an absolute http(s) address without credentials on a public host, or "".
+// simplePublicURL is an absolute http(s) address without credentials on a public host, or "".
 func simplePublicURL(value string, base *url.URL) string {
 	value = strings.TrimSpace(value)
 	if value == "" || len(value) > 8192 || strings.IndexFunc(value, func(r rune) bool { return r <= ' ' || r == 0x7f }) >= 0 {
@@ -167,7 +167,7 @@ func simplePublicURL(value string, base *url.URL) string {
 	return u.String()
 }
 
-// simpleSrcset picks the smallest candidate at least 1600 wide, else the largest (extract-content.ts fromSrcset).
+// simpleSrcset picks the smallest candidate at least 1600 wide, else the largest.
 func simpleSrcset(srcset string, base *url.URL) string {
 	type candidate struct {
 		url   string

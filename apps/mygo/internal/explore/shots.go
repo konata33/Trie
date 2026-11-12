@@ -33,7 +33,7 @@ const (
 var unsafeName = regexp.MustCompile(`[^\w.-]+`)
 
 // ShotFile is where a site's captured first screen is kept, at a width the page draws it: 1280 for the stage, 400 for
-// lists. The Electron app names them so too, and both read one explore-shots folder.
+// lists. Earlier versions name them so too, and read the same explore-shots folder.
 func ShotFile(dir, site string, width int) string {
 	return filepath.Join(dir, unsafeName.ReplaceAllString(site, "-")+"-"+strconv.Itoa(width)+".jpg")
 }
@@ -98,7 +98,7 @@ func (s *Shots) Capture(site string, urls []string, first bool) (wait func(ctx c
 		s.waiting = slices.Insert(slices.Delete(s.waiting, i, i+1), 0, j)
 		j.first = true
 	}
-	// Also for a capture moved up: the place kept free is its to take (site-shots.ts waited for a running one to end).
+	// Also for a capture moved up: the place kept free is its to take.
 	s.next()
 	return func(ctx context.Context) bool {
 		select {
@@ -162,7 +162,7 @@ func (s *Shots) ended() bool {
 	}
 }
 
-// try is take, failing on a panic rather than ending the app: the capture is not taken, as when take throws in TS.
+// try is take, failing on a panic rather than ending the app: the capture is not taken.
 func (s *Shots) try(site, url string) (taken bool) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -176,8 +176,8 @@ func (s *Shots) try(site, url string) (taken bool) {
 var (
 	// A bot check standing in front of the site is not the site.
 	botCheck = regexp.MustCompile(ci("just a moment") + `|` + ci("attention required") + `|` + ci("access denied") + `|` + ci("verify you are human") + `|` + ci("captcha"))
-	// MyGo does not tell a page's HTTP status, which site-shots.ts held below 400; an error page tells it in its
-	// title instead: "404 Not Found", "example.com | 522: Connection timed out", "404: NOT_FOUND".
+	// MyGo does not tell a page's HTTP status, which must be below 400; an error page tells it in its title
+	// instead: "404 Not Found", "example.com | 522: Connection timed out", "404: NOT_FOUND".
 	errorPage = regexp.MustCompile(`(?:^|\| *)[45][0-9][0-9]\b|` + ci("not found") + `|` + ci("forbidden") + `|` + ci("bad gateway") + `|` + ci("service unavailable") + `|` + ci("temporarily unavailable"))
 )
 
@@ -312,7 +312,7 @@ func (s *Shots) keep(site string, img image.Image) error {
 }
 
 // place is where a capture's window goes: on the display that draws finest, at the zoom that captures the page's
-// 1440 × 900 CSS pixels 2880 × 1800, as Electron captures them on a Retina screen, or as many as fit: the window
+// 1440 × 900 CSS pixels 2880 × 1800, as a Retina screen draws them, or as many as fit: the window
 // stays within the display's work area, as AppKit keeps a window that answers as shown (seen), cutting it otherwise.
 // WebKit captures a window at its size times its display's scale, and a window never shown is on the display it
 // overlaps most.
@@ -390,7 +390,7 @@ func webOnly(e *mygo.NavigateEvent) {
 
 // quiet keeps the page's alert, confirm, prompt and print from showing anything, in every frame: MyGo shows a hidden
 // window's dialogs as app-modal panels, which bring the app to the front. And it lets the page run as it would on
-// screen, as Electron's hidden windows kept from throttling run theirs: WebKit gives a hidden window's page no
+// screen: WebKit gives a hidden window's page no
 // rendering updates and tells it it is hidden, so a first screen that animates in would be taken blank. Animation
 // frames come from a timer, and the page is told it is visible. Its animation timeline stands still too, which
 // leaves every CSS animation and transition at its first frame (rauno.me, catk.de, vendredi-society.fr: their
@@ -415,9 +415,9 @@ const quiet = `(() => {
 
 // privatePatterns are what a captured page may not load (url-filter, WebKit's syntax): an address with credentials or
 // a port, one naming localhost or a .local machine, a name of one label, an IP address. That is publicURL's refusal,
-// which site-shots.ts asked of every request.
+// asked of every request.
 // ponytail: every IP address is refused, public ones too, which publicURL lets through; a public name that resolves to
-// a private address is let through, as in site-shots.ts. A request hook would tell both apart; MyGo has none.
+// a private address is let through. A request hook would tell both apart; MyGo has none.
 var privatePatterns = []string{
 	`^[^:]+://[^/?#]*@`,
 	`^[^:]+://[^/?#]*:[0-9]`,

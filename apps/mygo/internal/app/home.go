@@ -19,7 +19,7 @@ import (
 	"trie/internal/web"
 )
 
-// 首页 (Home.tsx, home.styles.ts): an overview that scrolls. Today's design
+// 首页: an overview that scrolls. Today's design
 // example first, large; then what the aggregators rank highest, as a
 // ranking; then the newest piece of each author followed, three across;
 // then a few writers not followed yet, passing by slowly, one sentence
@@ -92,8 +92,8 @@ func localMidnight(t time.Time) time.Time {
 	return time.Date(y, m, d, 0, 0, 0, 0, t.Location())
 }
 
-// daysAgo is Home.tsx ago: whole days between the day it is dated and today,
-// here; -1 for no date.
+// daysAgo is the whole days between the day it is dated and today, here;
+// -1 for no date.
 func daysAgo(v *string, now time.Time) int {
 	if v == nil || *v == "" {
 		return -1
@@ -106,7 +106,7 @@ func daysAgo(v *string, now time.Time) int {
 	return max(0, int(math.Round(d.Hours()/24)))
 }
 
-// homeWhen is Home.tsx when: 今天, 昨天, 3 天前, then the date.
+// homeWhen writes a date as 首页 does: 今天, 昨天, 3 天前, then the date.
 func homeWhen(v *string, now time.Time) string {
 	switch d := daysAgo(v, now); {
 	case d == 0:
@@ -262,8 +262,8 @@ func trendingOf(entries []explore.Entry) []homeItem {
 	return out
 }
 
-// seeded is Home.tsx seeded (FNV-1a over UTF-16 units): the day's draw stays
-// put all day.
+// seeded is FNV-1a over the text's UTF-16 units: the day's draw stays put
+// all day.
 func seeded(text string) uint32 {
 	h := uint32(2166136261)
 	for _, r := range text {
@@ -447,7 +447,7 @@ func (a *App) homePage(c *ui.Context, live bool) {
 			})
 		}, func() {
 			if !searching {
-				a.resume(c, follows, now, live) // Home's items are the follows (main.tsx homeOrder)
+				a.resume(c, follows, now, live) // Home's items are the follows
 			}
 			a.searchField(c, &hs.query, &hs.search, "搜索订阅的文章", "搜索标题、作者")
 		})
@@ -1186,7 +1186,7 @@ func (a *App) stranger(c *ui.Context, it *homeItem, now time.Time, real, live bo
 	})
 }
 
-// homeKeys are 首页's (main.tsx keys on a list): J, K and the arrows walk
+// homeKeys are 首页's keys: J, K and the arrows walk
 // the people followed (a search, its matches), the first press from outside
 // them only bringing the focus to where it was; Enter opens and S keeps what
 // it is on, the first of them before any; Esc clears the search.

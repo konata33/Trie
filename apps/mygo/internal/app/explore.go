@@ -19,10 +19,9 @@ import (
 	"trie/internal/web"
 )
 
-// Explore (Explore.tsx, explore.css): two rooms side by side, design on the
-// left and writing on the right. Each room's front page fills the window
-// and chooses: the newest works in turn with the galleries' frames, the
-// writers' front page. Below it every source of the room runs on in one
+// Explore: two rooms side by side, design on the left and writing on the
+// right. Each room's front page fills the window and chooses: the newest
+// works in turn with the galleries' frames, the writers' front page. Below it every source of the room runs on in one
 // stream, freshest first, the next few coming in as the end nears. A card
 // opens its author's panel, its picture flying into the panel's thumbnail.
 // A sideways swipe drags the rooms; letting go far enough crosses on a
@@ -31,7 +30,7 @@ import (
 const (
 	exPeek, exGap          = 96, 32 // the other room's edge, and the gutter between the rooms
 	exShift                = exPeek + exGap
-	exPad                  = 32 // .issue's sides
+	exPad                  = 32 // the page's sides
 	exTop, exFoot          = 46, 64
 	exPart                 = 64 // a stream below its front page
 	siteBatch              = 9  // design sites a batch
@@ -39,7 +38,7 @@ const (
 	leadHold               = 7 * time.Second
 	pickTurn               = 1800 * time.Millisecond
 	restBeforeRead         = 250 * time.Millisecond                         // a post the pointer rests on starts reading
-	loaderWait, loaderStay = 400 * time.Millisecond, 600 * time.Millisecond // useLoader
+	loaderWait, loaderStay = 400 * time.Millisecond, 600 * time.Millisecond // the loading plane
 )
 
 const (
@@ -93,7 +92,7 @@ type exOpen struct {
 }
 
 // roomMove is the rooms on their spring, from where they were toward room
-// to, at the fingers' speed (Explore.tsx glide).
+// to, at the fingers' speed.
 type roomMove struct {
 	from, to   int
 	x0, x1     float32
@@ -103,7 +102,7 @@ type roomMove struct {
 	started    bool
 }
 
-// swipe is a two-finger sideways swipe (Explore.tsx onWheel).
+// swipe is a two-finger sideways swipe.
 type swipe struct {
 	x       float32
 	last    time.Time
@@ -119,8 +118,8 @@ type swipeMove struct {
 	dx float32
 }
 
-// exploreState is what Explore keeps while the app runs: Explore.tsx's
-// cached list and kept place, and its page's state.
+// exploreState is what Explore keeps while the app runs: its cached list
+// and kept place, and its page's state.
 type exploreState struct {
 	entries []explore.Entry
 	loaded  bool // a list came at least once
@@ -130,7 +129,7 @@ type exploreState struct {
 	askedAt time.Time
 	shownAt time.Time // the loader, since it showed
 	// The page's first arrival: the front pages come into focus, the far
-	// room last (.issue.enter).
+	// room last.
 	enter   bool
 	enterAt time.Time
 	run     uint64
@@ -296,7 +295,7 @@ func newest(e *explore.Entry) float64 {
 	return exTime(at)
 }
 
-// derive works out what the page shows (ExploreView's render).
+// derive works out what the page shows.
 func (ex *exploreState) derive() {
 	ex.sites, ex.writers, ex.index = nil, nil, nil
 	for i := range ex.entries {
@@ -503,7 +502,7 @@ func decodeData(data string) image.Image {
 
 // picture is a picture Explore loads on first sight (a gallery's work, a
 // site's capture, a writer's latest picture): load gives its data URL, ""
-// for none. Works come four at a time, as Explore.tsx's queue lets them.
+// for none. Works come four at a time.
 func (a *App) picture(key string, queued bool, load func() string) *exPic {
 	ex := a.ex
 	if p := ex.pics[key]; p != nil || a.warming {
@@ -589,7 +588,7 @@ func (a *App) arrived(c *ui.Context, p *exPic, d time.Duration) float32 {
 }
 
 // mainColours is three colours of a picture, so its palette reads before it is
-// opened (Explore.tsx palette): the most common of a 24-square sampling.
+// opened: the most common of a 24-square sampling.
 func mainColours(img image.Image) []ui.Color {
 	small := squash(img, 24)
 	b := small.Bounds()
@@ -620,8 +619,8 @@ func squash(img image.Image, n int) image.Image {
 	return out
 }
 
-// hues is an avatar's two most saturated colours, for its halo (Explore.tsx
-// hues): a colourless one glows a faint amber.
+// hues is an avatar's two most saturated colours, for its halo: a
+// colourless one glows a faint amber.
 func hues(img image.Image) [2]ui.Color {
 	small := squash(img, 32)
 	b := small.Bounds()
@@ -658,14 +657,14 @@ func hues(img image.Image) [2]ui.Color {
 	return [2]ui.Color{at(order[0]), at(second)}
 }
 
-// The halos of a colourless avatar, and of a writer with none (Explore.tsx AMBER, GREY).
+// The halos of a colourless avatar, and of a writer with none.
 var (
 	amber = [2]ui.Color{theme.HaloAmber, theme.HaloAmberDeep}
 	grey  = [2]ui.Color{theme.HaloGrey, theme.HaloGreyDeep}
 )
 
 // glow is how bright a writer's name is: as recent as their latest post, in
-// the sidebar's four steps (Explore.tsx glow).
+// the sidebar's four steps.
 func glow(e *explore.Entry) ui.Color {
 	t := newest(e)
 	days := math.Inf(1)
@@ -686,7 +685,7 @@ func glow(e *explore.Entry) ui.Color {
 // isPress tells a publication, which shows a square mark among the writers.
 func isPress(e *explore.Entry) bool { return strings.HasPrefix(e.Section, "设计写作") }
 
-// dateLabel is HomeList's dateLabel: 11月4日 this year, 2025年11月4日 before.
+// dateLabel is a list's date: 11月4日 this year, 2025年11月4日 before.
 func dateLabel(v *string) string {
 	if v == nil || *v == "" {
 		return "未提供日期"
@@ -741,8 +740,8 @@ func atoi(s string) int {
 
 // --- The page.
 
-// exGeometry is the page's measures at the content area's width: .issue's
-// content box (cw), a room (w), the front pages' height.
+// exGeometry is the page's measures at the content area's width: the
+// page's content box (cw), a room (w), the front pages' height.
 type exGeometry struct {
 	cw, w, front float32
 }
@@ -814,7 +813,7 @@ func (a *App) explorePage(c *ui.Context, live bool) {
 }
 
 // exploreWaiting is the page while the list is on its way, or could not be
-// read: the plane in flight after 400 ms (useLoader), or landed, with 重试.
+// read: the plane in flight after 400 ms, or landed, with 重试.
 func (a *App) exploreWaiting(c *ui.Context) {
 	ex := a.ex
 	ui.Column(c.Key("issue-waiting")).Fill().Padding(exTop, exPad, exFoot, exPad).Children(func() {

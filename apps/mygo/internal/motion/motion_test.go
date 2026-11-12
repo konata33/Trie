@@ -29,9 +29,9 @@ func sprung(t *testing.T, a ui.Animation, at []time.Duration) []float32 {
 	return out
 }
 
-// The travel spring is styles.css --travel-ease: MyGo's spring passes
-// through the stops of its linear() within half a percent, the last stop
-// (where linear() jumps the 0.6% still to go) included.
+// The travel spring is travelStops: MyGo's spring passes through the stops
+// within half a percent, the last stop (where the stops jump the 0.6% still
+// to go) included.
 func TestTravelFollowsTravelEase(t *testing.T) {
 	for _, d := range []time.Duration{600 * time.Millisecond, 460 * time.Millisecond} {
 		n := len(travelStops) - 1
@@ -45,17 +45,17 @@ func TestTravelFollowsTravelEase(t *testing.T) {
 			diff := math.Abs(float64(got[k] - want))
 			worst = max(worst, diff)
 			if diff > 0.006 {
-				t.Errorf("Travel(%v) at %v: %.4f, --travel-ease %.4f", d, at[k], got[k], want)
+				t.Errorf("Travel(%v) at %v: %.4f, travelStops %.4f", d, at[k], got[k], want)
 			}
 			if e := TravelEase(float32(k) / float32(n)); math.Abs(float64(e-want)) > 1e-6 {
 				t.Errorf("TravelEase(%d/%d) = %.4f, want %.4f", k, n, e, want)
 			}
 		}
-		t.Logf("Travel(%v), a spring of %v: at most %.4f from --travel-ease's stops", d, Travel(d).Spring.Duration.Round(time.Millisecond/10), worst)
+		t.Logf("Travel(%v), a spring of %v: at most %.4f from travelStops", d, Travel(d).Spring.Duration.Round(time.Millisecond/10), worst)
 	}
 }
 
-// Follow is motion/react's {duration: 0.3, bounce: 0}: about halfway at a
+// Follow is a spring of duration 0.3, bounce 0: about halfway at a
 // sixth of it, and within 0.001 of its target at 300 ms.
 func TestFollowSettlesAs300msMotionSpring(t *testing.T) {
 	got := sprung(t, Follow, []time.Duration{50 * time.Millisecond, 300 * time.Millisecond})

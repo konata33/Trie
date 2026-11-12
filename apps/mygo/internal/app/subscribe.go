@@ -12,7 +12,7 @@ import (
 	"trie/internal/theme"
 )
 
-// subscribeForm is 订阅一个博客 (SubscriptionForm.tsx): an address, read
+// subscribeForm is 订阅一个博客: an address, read
 // (识别) into a preview, then saved (确认订阅).
 type subscribeForm struct {
 	url     string
@@ -161,7 +161,7 @@ func (a *App) subscribeView(c *ui.Context, f *subscribeForm) {
 }
 
 // said is the service's own sentence, or the fallback for a bare runtime
-// error (SubscriptionForm.tsx said).
+// error.
 func said(err error, fallback string) string {
 	text := err.Error()
 	if strings.Contains(text, "Invalid URL") {

@@ -12,8 +12,9 @@ import (
 	"golang.org/x/text/encoding/htmlindex"
 )
 
-// testdata/decode.json is reader-service.ts decode() in Node, TextDecoder or
-// Buffer.toString, for 47 byte strings under 30 labels (.context/mygo/feed-port/ts/decode.mjs).
+// testdata/decode.json is reference output recorded from the previous
+// implementation (TextDecoder or Buffer.toString in Node), for 47 byte
+// strings under 30 labels (.context/mygo/feed-port/ts/decode.mjs).
 func TestDecodeMatchesTextDecoder(t *testing.T) {
 	data, err := os.ReadFile("testdata/decode.json")
 	if err != nil {
@@ -26,7 +27,7 @@ func TestDecodeMatchesTextDecoder(t *testing.T) {
 	bad, skipped := map[string]int{}, 0
 	for _, c := range cases {
 		body, _ := hex.DecodeString(c.Hex)
-		// Node's ICU decoders read invalid and user-defined multi-byte sequences their own way (see Decode); only clean decodes count.
+		// ICU's decoders read invalid and user-defined multi-byte sequences their own way (see Decode); only clean decodes count.
 		if e, err := htmlindex.Get(c.Label); err == nil && multiByte[must(htmlindex.Name(e))] && strings.ContainsFunc(c.Text, func(r rune) bool {
 			return r == utf8.RuneError || r >= 0x80 && r <= 0x9f || r >= 0xe000 && r <= 0xf8ff
 		}) {

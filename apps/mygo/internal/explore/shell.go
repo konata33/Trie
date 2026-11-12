@@ -29,7 +29,7 @@ import (
 	"trie/internal/subscription"
 )
 
-// shell is what index.ts's Explore handlers keep: the pictures fetched for Explore, recent previews, and the links
+// shell is what the app's Explore handlers keep: the pictures fetched for Explore, recent previews, and the links
 // those previews showed.
 type shell struct {
 	pmu          sync.Mutex
@@ -57,7 +57,7 @@ func (sh *shell) init() {
 	sh.previewLinks = map[string]bool{}
 }
 
-// Open is Explore as index.ts wires it in the app: the catalog in resources (resources/explore), the cache and the
+// Open is Explore as the app wires it: the catalog in resources (resources/explore), the cache and the
 // pictures in the library's folder dir, feeds read as subscriptions read them, recommended posts' pages read as the
 // reader previews them, sites' first screens taken in hidden windows. changed is Options.Changed.
 func Open(resources, dir string, store *library.Store, subscriptions *subscription.Service, reader *reading.Service, changed func()) *Service {
@@ -88,7 +88,7 @@ func Open(resources, dir string, store *library.Store, subscriptions *subscripti
 }
 
 // Start captures, five seconds on, the first screens of the design room's sites that have none or an old one, behind
-// anything Explore asks for, so a first visit already has them (index.ts at launch).
+// anything Explore asks for, so a first visit already has them.
 func (s *Service) Start() {
 	if s.o.Shots == nil {
 		return
@@ -327,8 +327,8 @@ func (s *Service) fetchPicture(file, src string, minWidth int) string {
 	if err != nil || res.Status < 200 || res.Status >= 300 {
 		return ""
 	}
-	// What nativeImage reads is PNG and JPEG; a WebP, GIF or AVIF picture (I/O 3000) goes to the page as it came, as
-	// Chromium shows it. The file keeps its name; its bytes say what it is. The native window cannot decode AVIF: such
+	// What decodeNative reads is PNG and JPEG; a WebP, GIF or AVIF picture (I/O 3000) goes to the page as it came.
+	// The file keeps its name; its bytes say what it is. The native window cannot decode AVIF: such
 	// a picture goes as macOS's sips converts it, as the reader's do (PNG with transparency, else JPEG).
 	data, mime := res.Body, extract.ImageType(res.Body)
 	if mime == "image/avif" {
@@ -355,7 +355,7 @@ func (s *Service) fetchPicture(file, src string, minWidth int) string {
 	return dataURL(mime, data)
 }
 
-// decodeNative is a picture as nativeImage.createFromBuffer reads it: PNG and JPEG only; nil for anything else.
+// decodeNative is a picture decoded for shrinking: PNG and JPEG only; nil for anything else.
 func decodeNative(body []byte) image.Image {
 	var img image.Image
 	var err error
@@ -373,7 +373,7 @@ func decodeNative(body []byte) image.Image {
 	return img
 }
 
-// shrink is nativeImage's resize({ width, quality: 'good' }) for a picture wider than width; others stay as they are.
+// shrink scales a picture wider than width down to that width; others stay as they are.
 func shrink(img image.Image, width int) image.Image {
 	w, h := img.Bounds().Dx(), img.Bounds().Dy()
 	if w <= width {
@@ -386,7 +386,7 @@ func shrink(img image.Image, width int) image.Image {
 
 var htmlType = regexp.MustCompile(`(?i)html`)
 
-// FindIcon is index.ts findIcon: a site's icon, read from its home page and drawn at most 96px wide like the catalog's
+// FindIcon is a site's icon, read from its home page and drawn at most 96px wide like the catalog's
 // icons, as a data URL. Nil when the site answered but offers no icon the page can draw; an error when a connection
 // failed, so the site is asked again next launch.
 func FindIcon(ctx context.Context, homeURL string) (*string, error) {
@@ -425,7 +425,7 @@ func findIcon(ctx context.Context, get fetch.Fetch, homeURL string) (*string, er
 				return &icon, nil
 			}
 		}
-		// What nativeImage cannot read, WebP and the ICO most favicons are, goes to the page as it came.
+		// What decodeNative cannot read, WebP and the ICO most favicons are, goes to the page as it came.
 		mime := extract.ImageType(res.Body)
 		if mime == "" && len(res.Body) > 4 && binary.BigEndian.Uint32(res.Body) == 0x00000100 {
 			mime = "image/x-icon"

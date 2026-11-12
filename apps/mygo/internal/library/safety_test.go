@@ -10,8 +10,8 @@ import (
 
 // Every path that rewrites a row keeps the JSON keys this package does not
 // model, at the top level and (for a clip, whose note is patched in place)
-// inside nested objects; keys it does model follow store.ts, so a body read
-// again without a work page loses its old one.
+// inside nested objects; keys it does model are written as earlier versions
+// write them, so a body read again without a work page loses its old one.
 func TestRewritesKeepUnknownKeys(t *testing.T) {
 	path := libraryPath(t)
 	s := mustOpen(t, path, previewSnapshot())
@@ -83,7 +83,7 @@ func TestRewritesKeepUnknownKeys(t *testing.T) {
 	equal(t, missing, 0, "rows that lost a key")
 }
 
-// A damaged row is overwritten as store.ts overwrites it: there is nothing readable to keep.
+// A damaged row is overwritten: there is nothing readable to keep.
 func TestDamagedRowIsOverwritten(t *testing.T) {
 	path, seed := libraryPath(t), fixture(t)
 	mustOpen(t, path, seed).Close()

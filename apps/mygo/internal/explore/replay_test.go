@@ -33,10 +33,11 @@ import (
 	"trie/internal/subscription"
 )
 
-// TestReplay is the Go side of .context/mygo/explore-port's equivalence check (ts.mjs is the TS side): Service wired
-// as Open wires it, from the tape the TS side recorded, the clock fixed at the recording's start, in an empty data
-// folder over a copy of the library; the same flow as ts.mjs, written to out/go/. When out/ts holds the TS side's icons,
-// out/icons.json compares them by their pixels. run.sh runs it:
+// TestReplay is the Go side of .context/mygo/explore-port's equivalence check against reference outputs recorded from
+// the previous implementation (by ts.mjs): Service wired as Open wires it, from the tape recorded with the previous
+// implementation, the clock fixed at the recording's start, in an empty data folder over a copy of the library; the
+// same flow as ts.mjs, written to out/go/. When out/ts holds the reference icons, out/icons.json compares them by their
+// pixels. run.sh runs it:
 //
 //	EXPLORE_PORT=<absolute path of .context/mygo/explore-port> go test -run TestReplay -count=1 ./internal/explore
 func TestReplay(t *testing.T) {
@@ -319,8 +320,8 @@ func shortBodies(targets any) any {
 	return v
 }
 
-// compareIcons compares the icons both sides drew, by their pixels: nativeImage and Go encode PNGs and shrink pictures
-// differently. An icon that goes as it came is compared by its bytes.
+// compareIcons compares the icons both sides drew, by their pixels: the previous implementation and Go encode PNGs and
+// shrink pictures differently. An icon that goes as it came is compared by its bytes.
 func compareIcons(t *testing.T, dir string) {
 	tsDir, goDir := filepath.Join(dir, "out", "ts", "icons"), filepath.Join(dir, "out", "go", "icons")
 	names := map[string]bool{}

@@ -15,10 +15,10 @@ import (
 	"trie/internal/web"
 )
 
-// reader-document.ts createReaderDocument(): the formatted body as the reader's structured document (a hast tree of the
-// reader's tags whose blocks carry unit IDs), with digests over JSON.stringify exactly as the TS computes them, so unit IDs
-// and revisions agree with what Electron stored. Stored documents are checked by internal/library's isReaderDocument when
-// saved (see the report: it is not exported, so this package cannot run it itself).
+// Reader document: the formatted body as the reader's structured document (a hast tree of the reader's tags whose
+// blocks carry unit IDs), with digests over exactly what JSON.stringify writes, so unit IDs and revisions agree with the
+// documents in libraries written by earlier versions. Stored documents are checked by internal/library when saved
+// (IsReaderDocument).
 
 var (
 	errUnits         = errors.New("阅读单元超出处理限制")
@@ -221,7 +221,7 @@ func directText(n *hnode) string {
 
 func hasUnit(n *hnode) bool { v, ok := n.prop("dataReaderUnit"); _, s := v.(string); return ok && s }
 
-// documentCodeText is reader-document.ts codeText(): text, a <br> a line break, line wrappers ending their line.
+// documentCodeText is a code block's text: text, a <br> a line break, line wrappers ending their line.
 func documentCodeText(n *hnode) string {
 	var b strings.Builder
 	for i, c := range n.children {
@@ -346,7 +346,7 @@ func (d *docBuilder) addUnit(n *hnode, kind, value string) error {
 	return nil
 }
 
-// readerLink is shared/reader-document.ts readerLink(): an http(s) address without credentials, or a #fragment.
+// readerLink is a link the reader keeps: an http(s) address without credentials, or a #fragment.
 func readerLink(v any) string {
 	s, ok := v.(string)
 	if !ok || web.JSLen(s) > 8192 {
@@ -573,7 +573,7 @@ func (d *docBuilder) pre(n, result *hnode, names []string) (*hnode, error) {
 	}
 	result.children = []*hnode{code}
 	// A block the formatter made is coloured by the reader (MyGo's highlighting), so it stores no presentation tokens;
-	// any other pre keeps its text as one plain token, as the TS does.
+	// any other pre keeps its text as one plain token.
 	if !(paired && original != nil) {
 		if _, seen := d.tokens[id]; !seen {
 			d.tokenIDs = append(d.tokenIDs, id)
@@ -608,7 +608,7 @@ func (d *docBuilder) convertChildren(children []*hnode, depth int) ([]*hnode, er
 	return out, nil
 }
 
-// createReaderDocument builds the document and returns it as the JSON the TS stores.
+// createReaderDocument builds the document and returns it as the JSON the library stores.
 func createReaderDocument(root *hnode, codeBlocks []library.CodeBlock, provenance string, sourceRoot *hnode) ([]byte, error) {
 	d := &docBuilder{codeByID: map[string]library.CodeBlock{}, tokens: map[string][]codeToken{}, occurrences: map[string]int{}, usedAnchors: map[string]bool{}, codeSeen: map[string]int{}}
 	for _, b := range codeBlocks {
@@ -731,7 +731,7 @@ func createReaderDocument(root *hnode, codeBlocks []library.CodeBlock, provenanc
 	}
 	b.WriteString("}}")
 	doc := []byte(b.String())
-	// reader-document.ts refuses its own output when it fails the reader's check, before anything is saved.
+	// The document is refused when it fails the reader's check, before anything is saved.
 	if !library.IsReaderDocument(doc) {
 		return nil, errors.New("阅读文档未通过结构校验")
 	}

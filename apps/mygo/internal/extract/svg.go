@@ -11,7 +11,7 @@ import (
 	"trie/internal/web"
 )
 
-// svg-image.ts: a picture's SVG reduced to static geometry, local references and text. The source is parsed as XML the
+// SVG pictures: a picture's SVG reduced to static geometry, local references and text. The source is parsed as XML the
 // way jsdom's parser (saxes) takes it, namespaces bound or refused, and the copy written as XMLSerializer writes it.
 
 const (
@@ -190,7 +190,7 @@ func normalizeAttr(s string) string {
 	}, s)
 }
 
-// SanitizeSVG is svg-image.ts sanitizeSVG(): the SVG rebuilt from the elements and attributes it allows, or "" when the
+// SanitizeSVG returns the SVG rebuilt from the elements and attributes it allows, or "" when the
 // source is refused.
 func SanitizeSVG(source string) (out string) {
 	if source == "" || len(source) > 256*1024 || refused.MatchString(xmlDecl.ReplaceAllString(source, "")) {
@@ -419,7 +419,7 @@ func serializeXML(b *strings.Builder, n *xmlNode, inherited string) {
 	b.WriteString("</" + n.local + ">")
 }
 
-// ImageType is image-type.ts imageType(): what a picture really is from its first bytes, or "" for a kind the reader
+// ImageType is what a picture really is from its first bytes, or "" for a kind the reader
 // does not keep.
 func ImageType(body []byte) string {
 	switch {

@@ -163,7 +163,7 @@ func newShotAppOn(t *testing.T, folder string) *App {
 }
 
 // TestFavClipsLook writes 收藏 and 摘录 as they show, the same states the
-// Electron captures show (.context/mygo/app-v1/favclips/tools/electron.mjs):
+// previous implementation's captures show (.context/mygo/app-v1/favclips/tools/electron.mjs):
 // LOOK=dir go test -run FavClipsLook.
 func TestFavClipsLook(t *testing.T) {
 	dir := os.Getenv("LOOK")

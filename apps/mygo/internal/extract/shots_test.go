@@ -15,8 +15,8 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// TestReaderShots shows three corpus articles, extracted and formatted here, in internal/reader without a window, as
-// cmd/reader-spike/shots.go does: EXTRACT_PORT=… EXTRACT_PORT_SHOTS=1 go test ./internal/extract -run TestReaderShots.
+// TestReaderShots shows three corpus articles, extracted and formatted here, in internal/reader without a window:
+// EXTRACT_PORT=… EXTRACT_PORT_SHOTS=1 go test ./internal/extract -run TestReaderShots.
 // Pictures are not fetched offline, so only those the page carries itself show; the others show as not loaded.
 func TestReaderShots(t *testing.T) {
 	dir := portDir(t, "EXTRACT_PORT_SHOTS")

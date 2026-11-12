@@ -11,7 +11,7 @@ import (
 	"golang.org/x/net/html/atom"
 )
 
-// The DOM the TS code works on is jsdom's; here it is golang.org/x/net/html's tree, read the way jsdom reads its own:
+// The DOM is golang.org/x/net/html's tree, read the way jsdom reads its own:
 // parsed with scripting off (jsdom's default, so <noscript> holds markup), serialized as parse5 does for innerHTML, and
 // with a <template>'s content outside the tree (x/net/html keeps it as children; jsdom in a separate fragment).
 

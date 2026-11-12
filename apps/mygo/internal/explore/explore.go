@@ -1,12 +1,9 @@
-// Package explore is apps/desktop/src/main/explore.ts, explore-upstreams.ts, site-shots.ts and shared/icon-tone.ts,
-// with index.ts's wiring of them (shell.go): Explore's catalog and the seed shipped with it, the writers upstream feeds
-// recommend, the websites design galleries feature, their icons, the pictures that stand behind entries, and the
-// first screens of design sites, captured in hidden windows (shots.go).
+// Package explore is Explore, with the app's wiring of it (shell.go): Explore's catalog and the seed shipped with it,
+// the writers upstream feeds recommend, the websites design galleries feature, their icons, the pictures that stand
+// behind entries, and the first screens of design sites, captured in hidden windows (shots.go).
 //
-// What the window calls, after the preload API: List (loadExplore), Options.Changed (onExploreChanged), Work
-// (loadExploreWork), Shot (loadExploreShot), Read (readExplorePost), SourceShot (loadSourceShot); Intro is the line an
-// author page shows. IconFor and NameFor go to subscription.New and library.Store.AdoptNames. The app builds it with
-// Open:
+// What the window calls: List, Options.Changed, Work, Shot, Read, SourceShot; Intro is the line an author page shows.
+// IconFor and NameFor go to subscription.New and library.Store.AdoptNames. The app builds it with Open:
 //
 //	var ex *explore.Service
 //	subs := subscription.New(store, nil, func(home string) *string { return ex.IconFor(home) },
@@ -65,7 +62,7 @@ func nowMS() int64 { return now().UnixMilli() }
 
 var errNotListed = errors.New("推荐里没有这篇文章")
 
-// catalogEntry is explore.ts CatalogEntry, a site of catalog.json.
+// catalogEntry is a site of catalog.json.
 type catalogEntry struct {
 	ID      string  `json:"id"`
 	Name    string  `json:"name"`
@@ -122,7 +119,7 @@ type Entry struct {
 	Works []Post `json:"works"`
 }
 
-// siteInfo is explore.ts site(): what stands behind an entry. A design site shows its own first screen, captured from
+// siteInfo is what stands behind an entry. A design site shows its own first screen, captured from
 // HomeURL; a writer the pictures of their latest post, best first (possibly none), never their site.
 type siteInfo struct {
 	HomeURL, Host string
@@ -130,7 +127,7 @@ type siteInfo struct {
 	Pictures      []string
 }
 
-// Options are what Explore runs on: ExploreService's constructor arguments, then what index.ts's handlers use.
+// Options are what Explore runs on: what the service reads with, then what the app's handlers (shell.go) use.
 type Options struct {
 	// Resources holds catalog.json, seed.json and icons/<id>.png (resources/explore).
 	Resources string
@@ -139,8 +136,8 @@ type Options struct {
 	FetchFeed func(ctx context.Context, url string) (library.ParsedFeed, error)
 	// Sources are the library's sources, for the entries already subscribed to.
 	Sources func() []library.Source
-	// Changed is told that Explore was read again in the background, so an open Explore page reads the list again
-	// (onExploreChanged). It is called on a goroutine of its own; nil tells nobody.
+	// Changed is told that Explore was read again in the background, so an open Explore page reads the list again.
+	// It is called on a goroutine of its own; nil tells nobody.
 	Changed func()
 	// Upstreams are feeds recommending posts by writers outside the catalog.
 	Upstreams []Upstream
@@ -161,7 +158,7 @@ type Options struct {
 	Fetch fetch.Fetch
 }
 
-// Service is ExploreService, with index.ts's handlers (shell.go). Its methods may be called from any goroutine.
+// Service is Explore, with the app's handlers (shell.go). Its methods may be called from any goroutine.
 type Service struct {
 	o                             Options
 	iconsPath, shotsDir, worksDir string
@@ -196,8 +193,7 @@ type capture struct {
 	data string
 }
 
-// New is new ExploreService(dir, cachePath, fetchFeed, sources, changed, upstreams, findIcon, readPage), with the
-// shell's own options.
+// New makes a Service from o, the shell's own options included.
 func New(o Options) *Service {
 	dir := filepath.Dir(o.Cache)
 	s := &Service{o: o, iconsPath: filepath.Join(dir, "explore-icons.json"), shotsDir: filepath.Join(dir, "explore-shots"), worksDir: filepath.Join(dir, "explore-works"),
@@ -924,7 +920,7 @@ func (s *Service) List(ctx context.Context) ([]Entry, error) {
 	sources := s.subscribed()
 	s.mu.Lock()
 	// Stale feeds are read again behind the list, upstreams first: their writers lead the writing room. They are in
-	// flight from here on, and land once the list is made from what was known before, as in TS.
+	// flight from here on, and land once the list is made from what was known before.
 	var behind *batch
 	if len(stale) > 0 || len(upstream) > 0 {
 		b := s.claim(append(upstream, stale...))
@@ -1138,7 +1134,7 @@ func (s *Service) features(catalog []catalogEntry) ([]Entry, [][2]string) {
 }
 
 // Intro is the line Explore has about a source's site, for its author page when the source's feed says nothing about
-// itself (AuthorPage.tsx): that of the first entry, as List orders them, on the source's host; "" when there is none.
+// itself: that of the first entry, as List orders them, on the source's host; "" when there is none.
 // It reads only what is known already.
 func (s *Service) Intro(source library.Source) string {
 	s.mu.Lock()

@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// whiteboard.test.ts: a scene draws into a picture that keeps its shapes, fills and words through the SVG sanitizer.
+// A scene draws into a picture that keeps its shapes, fills and words through the SVG sanitizer.
 func TestWhiteboardDrawsScene(t *testing.T) {
 	scene := func(elements string) string {
 		return `{"type":"excalidraw","version":2,"elements":[` + elements + `],"appState":{"viewBackgroundColor":"#ffffff"}}`
@@ -35,8 +35,8 @@ func TestWhiteboardDrawsScene(t *testing.T) {
 
 var svgNumber = regexp.MustCompile(`-?\d+(?:\.\d+)?(?:e[-+]?\d+)?`)
 
-// TestWhiteboardMatchesTS draws the scenes ts-whiteboard.ts drew with the TS renderer (EXTRACT_PORT/whiteboard/scenes.json)
-// and compares the SVG text; numbers that differ are counted with their largest difference.
+// TestWhiteboardMatchesTS draws the scenes in EXTRACT_PORT/whiteboard/scenes.json, reference outputs recorded from the
+// previous implementation, and compares the SVG text; numbers that differ are counted with their largest difference.
 func TestWhiteboardMatchesTS(t *testing.T) {
 	dir := portDir(t)
 	var scenes []struct{ Name, Source, Svg string }

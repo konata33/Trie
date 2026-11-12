@@ -22,13 +22,14 @@ import (
 )
 
 // TestReplay is the Go side of .context/mygo/reading-port's equivalence check: every case of cases.json read through
-// Service with Worker's extraction, from the tape the TS side recorded, on a copy of the library with its bodies
-// removed; out/go/<case>.json is what compare.py compares with ts.ts's out/ts/. run.sh runs it:
+// Service with Worker's extraction, from the tape recorded with the previous implementation, on a copy of the library
+// with its bodies removed; out/go/<case>.json is what compare.py compares with out/ts/, the reference outputs recorded
+// from the previous implementation (by ts.ts). run.sh runs it:
 //
 //	READING_PORT=<absolute path of .context/mygo/reading-port> go test -run TestReplay -count=1 ./internal/reading
 //
 // The tape is replayed as ts.ts replays it: each recorded redirect hop asked of the reader's scope and counted against
-// the read's budget of 160, a recorded failure returned as the error ReaderHTTP gave (ECONNRESET and EAI_AGAIN as
+// the read's budget of 160, a recorded failure returned as the error fetch.Client gives (ECONNRESET and EAI_AGAIN as
 // transient), a request not on the tape failed and listed.
 func TestReplay(t *testing.T) {
 	dir := os.Getenv("READING_PORT")
@@ -188,7 +189,7 @@ func plainJSON(t *testing.T, v any) json.RawMessage {
 
 var dataURLs = regexp.MustCompile(`data:([\w/+.-]+);base64,([A-Za-z0-9+/=]+)`)
 
-// digestData is ts.ts's digestData: each data: URL as its type and a digest of its text.
+// digestData is each data: URL as its type and a digest of its text, as ts.ts writes them.
 func digestData(text json.RawMessage) json.RawMessage {
 	return dataURLs.ReplaceAllFunc(text, func(m []byte) []byte {
 		parts := dataURLs.FindSubmatch(m)

@@ -5,8 +5,8 @@ package theme
 
 import "github.com/egoist/mygo/ui"
 
-// The app's own colours, named as styles.css names them (--window is Window,
-// --text-2 is Text2, --accent-soft is AccentSoft, and so on).
+// The app's own colours, named as DESIGN.md names them (window is Window,
+// text-2 is Text2, accent-soft is AccentSoft, and so on).
 var (
 	Window     = ui.Hex("#141414")
 	Sidebar    = ui.Hex("#101010")
@@ -48,16 +48,15 @@ var (
 	ShadowShot   = ui.RGBA(0, 0, 0, 0.8)  // 0 16px 32px -16px: other people's pages
 )
 
-// Controls' own (ui/icons.tsx rest, ui/controls.tsx Switch): an icon's
-// accent shape at rest, a switch's track off and pointed at.
+// Controls' own: an icon's accent shape at rest, a switch's track off and
+// pointed at.
 var (
 	IconRest    = ui.RGBA(255, 255, 255, 0.16)
 	SwitchTrack = ui.RGBA(255, 255, 255, 0.14)
 	SwitchHover = ui.RGBA(255, 255, 255, 0.2)
 )
 
-// The reader's own (ui/overlays.tsx ImageViewer round, styles.css
-// .swipe-back.armed): the picture viewer's round buttons pointed at, and the
+// The reader's own: the picture viewer's round buttons pointed at, and the
 // swipe's back mark armed, elevated lit by 6% white, on a brighter edge.
 var (
 	ViewerHover    = ui.RGBA(255, 255, 255, 0.1)
@@ -65,7 +64,7 @@ var (
 	SwipeArmedEdge = ui.RGBA(255, 255, 255, 0.16)
 )
 
-// The scrollbar's scale (ui/scrollbar.tsx, DESIGN.md Scrollbar): its marks
+// The scrollbar's scale (DESIGN.md Scrollbar): its marks
 // are this white at the alphas the scale gives them; the needle.
 var (
 	RulerInk   = ui.Hex("#FFFFFF")
@@ -74,8 +73,7 @@ var (
 )
 
 // Reading content (DESIGN.md Reading Content): colours that mark what a
-// piece of an article is, not the interface (reader-body.styles.ts,
-// shared/reader-format.ts CODE_TOKEN_CSS).
+// piece of an article is, not the interface.
 var (
 	CodeBackground = ui.Hex("#171717")
 	LinkUnderline  = ui.RGBA(255, 255, 255, 0.32)
@@ -85,7 +83,7 @@ var (
 	CalloutTip       = ui.Hex("#9CC69B")
 	CalloutImportant = ui.Hex("#B7A3EA")
 	CalloutWarning   = ui.Hex("#D7B46A")
-	// Code tokens by role (CODE_TOKEN_ROLES, reader-token-1 to -8).
+	// Code tokens by role (reader-token-1 to -8).
 	CodeString      = ui.Hex("#D9B98C")
 	CodeNumber      = ui.Hex("#A9BCD0")
 	CodeKeyword     = ui.Hex("#B9B9B9")
@@ -97,7 +95,7 @@ var (
 	// ChipLight is the disc behind a site's icon in the reader's byline.
 	ChipLight = ui.Hex("#EDEDED")
 	// Swatches are a gallery's colour tags drawn as the colour the word
-	// names (WorkPage.tsx swatches, DESIGN.md 作品页色名).
+	// names (DESIGN.md 作品页色名).
 	Swatches = map[string]ui.Color{
 		"black": ui.Hex("#0B0B0B"), "white": ui.Hex("#F4F4F2"), "grey": ui.Hex("#8A8A8A"), "gray": ui.Hex("#8A8A8A"), "red": ui.Hex("#E5484D"),
 		"orange": ui.Hex("#F76B15"), "yellow": ui.Hex("#FFC53D"), "green": ui.Hex("#30A46C"), "blue": ui.Hex("#0090FF"), "purple": ui.Hex("#8E4EC6"),
@@ -142,7 +140,7 @@ const (
 	ReaderWide   = 840
 )
 
-// Explore's own (explore.css, Explore.tsx): the halo of a colourless avatar
+// Explore's own: the halo of a colourless avatar
 // (amber) and of a writer with none (grey); a palette dot's ring; a link's
 // underline on a picture's band; the subscribe pill pointed at once on.
 var (
@@ -158,7 +156,7 @@ var (
 	Darken = ui.RGB(0, 0, 0)
 )
 
-// 收藏 and 摘录's own (favorites.styles.ts, clips.styles.ts): the hairline
+// 收藏 and 摘录's own: the hairline
 // between an author's latest keeps on their picture, the ··· disc's glass at
 // rest and pointed at, a page of words pointed at, a card's inner hairline
 // pointed at, and the ground of a search's hit.
@@ -171,11 +169,11 @@ var (
 	Hit             = ui.RGBA(255, 255, 255, 0.14)
 )
 
-// 首页's own (home.styles.ts): the 接着读 control's ground pointed at.
+// 首页's own: the 接着读 control's ground pointed at.
 var ResumeHover = ui.RGBA(255, 255, 255, 0.09)
 
 // UI is MyGo's dark theme in the app's colours, for MyGo's own widgets.
-// Fields with no counterpart in styles.css keep MyGo's dark values.
+// Fields with no counterpart among the app's colours keep MyGo's dark values.
 func UI() *ui.Theme {
 	t := ui.DarkTheme()
 	t.Background = Window

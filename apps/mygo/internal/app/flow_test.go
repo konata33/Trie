@@ -313,7 +313,7 @@ func TestClip(t *testing.T) {
 	}
 }
 
-// Resting the pointer touches no site, as in Electron, where nothing is read before the click: a row is read ahead only
+// Resting the pointer touches no site, nothing being read before the click: a row is read ahead only
 // when its article is already in the library, and a page laid out unseen asks for no pictures.
 func TestRestingFetchesNothing(t *testing.T) {
 	a, store := newTestApp(t)

@@ -2,7 +2,7 @@ package explore
 
 import "testing"
 
-// icon-tone.test.ts.
+// IconTone cases.
 
 const toneSize = 16
 

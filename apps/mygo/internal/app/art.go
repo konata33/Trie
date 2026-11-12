@@ -16,9 +16,8 @@ import (
 	"trie/internal/theme"
 )
 
-// The Electron app's drawings, carried over as they are (art/, written from
-// ui/icons.tsx, ui/pictograms.tsx, ui/loading-mark.tsx and ui/button-ink.ts by
-// .context/mygo/app-v1/tools/svgs.py): the same paths and transforms.
+// The app's drawings in art/, recorded from the previous implementation by
+// .context/mygo/app-v1/tools/svgs.py.
 //
 //go:embed art
 var artFiles embed.FS
@@ -49,7 +48,7 @@ var glyphs = sync.OnceValue(func() map[string]glyph {
 })
 
 // icon builds icon name at size, its accent lit amber when lit: the accent
-// eases over 250 ms as icons.tsx's fill does, at once after a key.
+// eases over 250 ms, at once after a key.
 func (a *App) icon(c *ui.Context, name string, size float32, lit bool) ui.Element {
 	g := glyphs()[name]
 	box := ui.Box(c).Size(size, size).Shrink(0)
@@ -71,7 +70,7 @@ func (a *App) icon(c *ui.Context, name string, size float32, lit bool) ui.Elemen
 
 // The pictograms (DESIGN.md Illustration): 168 wide, grey ink and one amber
 // part, boiling at 12 fps through three outlines, each the drawing displaced
-// by the noise pictograms.tsx's filters make (feTurbulence fractalNoise,
+// by the noise of an SVG filter (feTurbulence fractalNoise,
 // baseFrequency 0.035, seeds 11, 29 and 47; feDisplacementMap scale 2.8),
 // applied to the outline's points rather than its pixels. Loading plays its
 // four drawings over a second. Less motion shows the first drawing still.
@@ -128,7 +127,7 @@ func (a *App) pictogram(c *ui.Context, name string) ui.Element {
 	return box.Children(func() { ui.Image(c, svg).Fill() })
 }
 
-// The loading mark (ui/loading-mark.tsx): one stroke going round, 1.1 s a
+// The loading mark: one stroke going round, 1.1 s a
 // turn; under less motion it holds still and breathes.
 var loadingMark = sync.OnceValue(func() *ui.SVG { return artSVG("loading-mark") })
 
@@ -143,7 +142,7 @@ func (a *App) loading(c *ui.Context, size float32) ui.Element {
 // breathe is a slow rise and fall over a loop: 0 → 1 → 0, eased.
 func breathe(t float32) float32 { return float32(0.5 - 0.5*math.Cos(2*math.Pi*float64(t))) }
 
-// The button loops (ui/button-ink.ts, 一笔圈出): short, middle and long, in the
+// The button loops (一笔圈出): short, middle and long, in the
 // colour of the text, stretched to the button.
 var inkLoops = sync.OnceValue(func() [3]*ui.SVG {
 	var out [3]*ui.SVG

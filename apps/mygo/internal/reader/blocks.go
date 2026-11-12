@@ -53,8 +53,8 @@ type run struct {
 	href  string // an http(s) URL or a #fragment
 }
 
-// block is a block of the body. Margins are in ems of the body's text, as
-// reader-body.styles.ts gives them; the view collapses them as CSS does.
+// block is a block of the body. Margins are in ems of the body's text; the
+// view collapses them as CSS does.
 type block struct {
 	kind        Kind
 	level       int // a heading's 1–6; a list's depth, from 0
@@ -95,9 +95,8 @@ type Body struct {
 }
 
 // skipped are the tags whose content never shows: the HTML of articles
-// stored without a document may still hold them (the Electron reader's
-// frame hides them with reader-content.css), and the copy buttons the old
-// formatter put in code headers, which the view draws itself.
+// stored without a document may still hold them, and the copy buttons an
+// earlier formatter put in code headers, which the view draws itself.
 var skipped = map[string]bool{
 	"script": true, "style": true, "template": true, "noscript": true, "head": true, "title": true,
 	"iframe": true, "form": true, "input": true, "select": true, "textarea": true, "button": true,
@@ -122,8 +121,7 @@ type builder struct {
 	depth  int
 }
 
-// Prepare makes the blocks of c: from its document, as the Electron reader
-// does, or else from its HTML. It decodes the pictures, so call it off the
+// Prepare makes the blocks of c: from its document, or else from its HTML. It decodes the pictures, so call it off the
 // UI thread.
 func Prepare(c *Content) *Body {
 	b := &builder{codes: map[string]CodeBlock{}}
@@ -194,8 +192,8 @@ func (f *flow) flush() {
 	}
 }
 
-// done ends the flow of a container: as reader-body.styles.ts has it, its
-// last paragraph leaves the container's own padding to close it.
+// done ends the flow of a container: its last paragraph leaves the
+// container's own padding to close it.
 func (f *flow) done() []*block {
 	f.flush()
 	if n := len(f.out); n > 0 && f.out[n-1].kind == Paragraph {
@@ -308,8 +306,7 @@ func (f *flow) node(n *node, st style, href string) {
 		start := len(f.out)
 		sub(f.tmpl)
 		// A paragraph that is its container's last child leaves no margin
-		// under it (reader-body.styles.ts p:last-child), nor does the
-		// container, which has none of its own.
+		// under it, nor does the container, which has none of its own.
 		if last := lastElement(n); last != nil && last.Tag == "p" && len(f.out) > start && f.out[len(f.out)-1].kind == Paragraph {
 			f.out[len(f.out)-1].bottom = 0
 		}
@@ -546,8 +543,8 @@ func parseHTML(s string) []*node {
 	return root.Children
 }
 
-// scripts cuts runs where Chinese and Japanese text meets other text. The
-// Electron reader's font list, -apple-system then PingFang SC, draws what
+// scripts cuts runs where Chinese and Japanese text meets other text. A
+// font list of -apple-system then PingFang SC draws what
 // the system face lacks in PingFang SC at the size given; MyGo's cascade
 // draws it a little larger and its punctuation half wide (Core Text sizes
 // the system face's fallbacks to it), so those runs name PingFang SC
@@ -623,8 +620,8 @@ func narrow(r rune) bool {
 }
 
 // closing is the punctuation whose space is after it: before more
-// punctuation it is set half wide (PingFang SC's halt feature), as the
-// Electron reader's text-spacing-trim: normal collapses the space between
+// punctuation it is set half wide (PingFang SC's halt feature), as CSS's
+// text-spacing-trim: normal collapses the space between
 // them. A closing mark squeezed half wide at the end of a line, which
 // normal also allows, is not done: the line breaks are Core Text's.
 const closing = "，。、．：；！？）」』》〉】〕〗〙〛｝］"

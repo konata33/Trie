@@ -1,7 +1,7 @@
-// Package library is Trie's library database, a port of LibraryStore in
-// apps/desktop/src/main/store.ts. It opens the SQLite file the Electron app
-// writes, with the same tables, pragmas and checks, and keeps every field a
-// row holds when it rewrites the row, including JSON keys it does not model.
+// Package library is Trie's library database. It opens the SQLite file
+// earlier versions wrote, with the same tables, pragmas and checks, and keeps
+// every field a row holds when it rewrites the row, including JSON keys it
+// does not model.
 package library
 
 import (
@@ -23,7 +23,7 @@ import (
 )
 
 // Store is an open library. Its methods may be called from any goroutine and
-// run one at a time, as store.ts's do on Electron's main thread.
+// run one at a time.
 type Store struct {
 	mu   sync.Mutex
 	db   *sql.DB
@@ -450,8 +450,7 @@ func (s *Store) library() (LibraryState, error) {
 }
 
 // Mutate applies an action as one transaction and returns the library after
-// it. The action is checked first, as the Electron main process checks one
-// from the renderer.
+// it. The action is checked first.
 func (s *Store) Mutate(action LibraryAction) (LibraryState, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -470,7 +469,7 @@ func (s *Store) Mutate(action LibraryAction) (LibraryState, error) {
 	return s.library()
 }
 
-// checkAction is policy.ts's parseAction for a typed action.
+// checkAction checks a typed action.
 func checkAction(action LibraryAction) error {
 	id := func(id string) error {
 		if id == "" || web.JSLen(id) > 4096 {
@@ -657,8 +656,8 @@ func (s *Store) apply(action LibraryAction) error {
 		if web.JSLen(a.Note) > 4000 {
 			return errors.New("Clip note must contain at most 4000 characters")
 		}
-		// The stored clip with its note and time replaced: what store.ts writes,
-		// with any field this package does not know kept.
+		// The stored clip with its note and time replaced, with any field this
+		// package does not know kept.
 		return s.exec("UPDATE clips SET data = json_set(?, '$.note', ?, '$.updatedAt', ?) WHERE id = ?", row[1], a.Note, web.Now(), clip.ID)
 	case DeleteClip:
 		result, err := s.conn.ExecContext(bg, "DELETE FROM clips WHERE id = ?", a.ID)

@@ -197,7 +197,7 @@ func (a *App) sheetHead(c *ui.Context, e *explore.Entry, o *exOpen, site bool) {
 		who := ui.Column(c.Key("who")).Grow(1).Shrink(1).MinWidth(0).Gap(8).Padding(4, 0, 0, 0)
 		a.sheetWords(c, who, o, 120*time.Millisecond)
 		who.Children(func() {
-			// The face over the name, each a block of its own (explore.css .sheet-who .name).
+			// The face over the name, each a block of its own.
 			ui.Column(c.Key("name")).AlignItems(ui.Start).Children(func() {
 				a.exFace(c, e, 40, false, 11)
 				ui.Text(c, e.Name).FontSize(theme.Subtitle).LineHeight(28.0 / 20).FontWeight(650).LetterSpacing(-0.01 * 20).TextColor(theme.Text).
@@ -230,7 +230,7 @@ func (a *App) sheetHead(c *ui.Context, e *explore.Entry, o *exOpen, site bool) {
 	})
 }
 
-// shotOf is what a site looks like (useShot): its small capture, or for a
+// shotOf is what a site looks like: its small capture, or for a
 // gallery without one, its newest work.
 func (a *App) shotOf(e *explore.Entry) *exPic {
 	if p := a.ex.pics["thumb:"+e.ID]; p != nil && p.bmp != nil {
@@ -273,7 +273,7 @@ func (a *App) sheetList(c *ui.Context, e *explore.Entry) {
 	case len(e.Posts) > 0:
 		heading("最近的文章")
 		// A hairline over each row but the first; gone over the row pointed at,
-		// and over the one before it (explore.css .sheet-posts).
+		// and over the one before it.
 		hov := -1
 		for i, p := range e.Posts {
 			if p.URL == ex.hoverPost {
@@ -568,7 +568,7 @@ func (a *App) followFailed(id string, err error) {
 }
 
 // faceFlight is an author's face travelling from one place to another
-// along a gentle arc (Explore.tsx flight): the place it heads for is read
+// along a gentle arc: the place it heads for is read
 // every frame, so a sidebar row still growing, or a pill still changing
 // shape, is met where it is; that place stays hidden until the face lands,
 // then lights once. The farther it goes, the longer: 600 ms for a short

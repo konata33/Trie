@@ -11,7 +11,7 @@ import (
 )
 
 // The part of rough.js 4.6.6 (with hachure-fill 0.5.2, path-data-parser 0.1.0, points-on-curve 0.2.0 and points-on-path
-// 0.2.1) that whiteboard.ts draws with: lines, linear paths, polygons, rectangles, ellipses, curves and paths, solid and
+// 0.2.1) that whiteboards are drawn with: lines, linear paths, polygons, rectangles, ellipses, curves and paths, solid and
 // hachure, cross-hatch and zigzag fills, each from its seed as Excalidraw draws them. Every product that feeds a sum is
 // rounded on its own (float64(a*b)): Go may fuse a*b+c into one instruction on arm64, which V8 never does.
 // ponytail: the dots, dashed and zigzag-line fills (which Excalidraw never writes) draw as hachure, and paths read only
@@ -362,7 +362,7 @@ func parsePath(d string) []pathSegment {
 			i++
 		}
 		if i+count > len(tokens) {
-			return segments // "Path data ended short" throws in the TS; whiteboard.go writes complete paths
+			return segments // path data that ends short is cut there; whiteboard.go writes complete paths
 		}
 		data := make([]float64, count)
 		for k := range count {

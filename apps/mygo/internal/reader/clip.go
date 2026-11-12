@@ -14,8 +14,8 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// Clip is a passage kept from the body: ClipInput in shared/types.ts,
-// which the store's add-clip takes (policy.ts parseClipInput).
+// Clip is a passage kept from the body: library.ClipInput, which the
+// store's add-clip takes.
 type Clip struct {
 	ID              string  `json:"id"`
 	ArticleID       string  `json:"articleID"`
@@ -62,7 +62,7 @@ func (r *Reader) Selection() (Clip, bool) {
 }
 
 // Keep makes a clip of the selection and keeps it in memory, marked in the
-// body, as the Electron reader's ⌘E does; it lets go of the selection.
+// body, as ⌘E does; it lets go of the selection.
 // Nothing is written to the library.
 func (r *Reader) Keep(now time.Time) (Clip, bool) {
 	cl, ok := r.Selection()
@@ -131,8 +131,8 @@ func uuid() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
-// Position is a reading position: ReadingPositionInput in shared/types.ts,
-// which saveReadingPosition stores.
+// Position is a reading position: library.ReadingPositionInput, which
+// SaveReadingPosition stores.
 type Position struct {
 	ArticleID      string  `json:"articleID"`
 	ContentVersion string  `json:"contentVersion"`
@@ -156,7 +156,7 @@ func (r *Reader) ContentVersion() string {
 	return v[:min(len(v), 256)]
 }
 
-// Position measures where the reader is as useReadingSession does: the
+// Position measures where the reader is: the
 // unit at a guide 110 DIPs below the top, how far into it, and how far
 // through the body, as of the last frame.
 func (r *Reader) Position() Position {
@@ -218,7 +218,7 @@ func (r *Reader) restoreNow(c *ui.Context) {
 
 func urlUnescape(s string) (string, error) { return url.PathUnescape(s) }
 
-// Mark is a clip the library keeps (shared/types.ts Clip): its words and
+// Mark is a clip the library keeps (library.Clip): its words and
 // the unit its selection began in.
 type Mark struct {
 	ID     string
@@ -227,7 +227,7 @@ type Mark struct {
 }
 
 // SetMarks draws the library's clips of the article where their words are
-// still found (ArticleBody.tsx clipHits): white space ignored, at the unit
+// still found: white space ignored, at the unit
 // they began in when the words occur more than once, else at the first;
 // one whose words are gone is left out. Clips kept in this session that
 // the library now holds give way to it.

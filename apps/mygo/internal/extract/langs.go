@@ -1,6 +1,6 @@
 package extract
 
-// shikiLanguages are the keys of shiki 4.5.0's bundledLanguages (names and aliases): reader-format.ts keeps a code
+// shikiLanguages are the keys of shiki 4.5.0's bundledLanguages (names and aliases): the reader format keeps a code
 // block's requested language when it is one of them and calls it "text" otherwise.
 var shikiLanguages = set(`abap actionscript-3 ada ahk ahk2 angular-html angular-ts apache apex apl applescript ara asciidoc asm astro awk
 ballerina bat beancount berry bibtex bicep bird2 blade bsl c c3 cadence cairo chapel clarity clojure cmake cobol

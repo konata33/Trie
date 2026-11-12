@@ -120,8 +120,8 @@ func TestBarStaysForSentMoves(t *testing.T) {
 	}
 }
 
-// Left while it was away, the bar is there again, at once, on coming back
-// (ReaderBar mounts afresh), and the saved place restored does not send it.
+// Left while it was away, the bar is there again, at once, on coming back,
+// and the saved place restored does not send it.
 func TestBarStartsOver(t *testing.T) {
 	a, tt, rp := openLobehub(t)
 	scrollBy(tt, 600)
@@ -261,7 +261,8 @@ func barProgress(tt *ui.Tester) []string {
 	return out
 }
 
-// TestBarRecord writes the bar beside the Electron copy's (electron/bar.mjs):
+// TestBarRecord writes the bar beside the previous implementation's capture
+// (.context/mygo/app-v1/electron/bar.mjs):
 // LobeHub scrolled to 0, 150, 700 (the bar sent away) and back up to 600,
 // and a GIF of reading down and scrolling up, in real time:
 // BAR=dir go test -run BarRecord.

@@ -11,7 +11,7 @@ import (
 	"trie/internal/theme"
 )
 
-// The sidebar (Sidebar.tsx, styles.css .side): the tabs, the authors, and
+// The sidebar: the tabs, the authors, and
 // the tools at the foot. It changes in place as the pages cross.
 
 var magColors = [5]ui.Color{theme.Text2, theme.Mag1, theme.Mag2, theme.Mag3, theme.Mag4}
@@ -20,7 +20,7 @@ func (a *App) sidebar(c *ui.Context) {
 	side := ui.Column(c.Key("side")).Width(232).Shrink(0).FillHeight().Background(theme.Sidebar).BorderWidth(0, 1, 0, 0).
 		BorderColor(theme.LineSoft).Padding(46, 12, 12, 12).ClipX().Role(ui.RoleNavigation).Label("侧栏")
 	// 专注阅读: the sidebar slides out to the left as the content area
-	// widens, in one motion (styles.css .reader-focused).
+	// widens, in one motion.
 	shut := float32(0)
 	if a.focused && a.page.kind == "reader" {
 		shut = 1
@@ -152,7 +152,7 @@ func (a *App) tabButton(c *ui.Context, kind, label, icon string, on, ground bool
 		a.tip(c, b, label, true)
 	}
 	// Explore becoming current: the compass swings out a little and settles
-	// back upright, damped (Sidebar.tsx), not from the keys, nor under less motion.
+	// back upright, damped, not from the keys, nor under less motion.
 	var turn float32
 	if kind == "explore" {
 		if on && !a.kbd && !a.still(c) {
@@ -169,7 +169,7 @@ func (a *App) tabButton(c *ui.Context, kind, label, icon string, on, ground bool
 			ic.TransformOrigin(0.5, 0.5).Rotate(turn)
 		}
 		// The label opens as the tab becomes current: 220 ms, its words
-		// fading in over 160 (styles.css .tab .tl).
+		// fading in over 160.
 		open := float32(0)
 		if on {
 			open = 1
@@ -382,8 +382,7 @@ func (a *App) rename(src *library.Source, name string) {
 
 // refreshButton is the foot's refresh: its icon turns only while a refresh
 // runs, and when it ends keeps its speed until a little short of upright,
-// then slows evenly to rest there (useTurning: 900 ms a turn, 100° of
-// braking). Under less motion it stays still, its accent lit.
+// then slows evenly to rest there (900 ms a turn, 100° of braking). Under less motion it stays still, its accent lit.
 func (a *App) refreshButton(c *ui.Context) {
 	r := &a.refresh
 	label := "刷新"

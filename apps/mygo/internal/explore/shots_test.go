@@ -21,8 +21,8 @@ import (
 	"trie/internal/fetch"
 )
 
-// site-shots.ts has no tests of its own; these hold its queue rules, its file names and sizes, and the isolation of
-// the hidden windows (live_test.go sees the same in real windows).
+// The captures' queue rules, their file names and sizes, and the isolation of the hidden windows (live_darwin_test.go sees
+// the same in real windows).
 
 // gated is a Shots whose captures wait for the test to release them, site by site.
 type gated struct {
@@ -183,7 +183,7 @@ func TestShotQueue(t *testing.T) {
 	if !slices.Equal(urls[len(urls)-2:], []string{"f1", "f2"}) || most > atOnce {
 		t.Fatalf("urls %v, at most %d at once", urls, most)
 	}
-	// A capture moved up takes the place kept free at once (site-shots.ts waited for a running one to end).
+	// A capture moved up takes the place kept free at once.
 	g.Capture("x", []string{"x1"}, false)
 	g.Capture("y", []string{"y1"}, false)
 	g.Capture("z", []string{"z1"}, false)
@@ -202,7 +202,7 @@ func TestShotQueue(t *testing.T) {
 	g.gate("w") <- true
 }
 
-// A capture is taken again after 30 days; the files are named as the Electron app names them.
+// A capture is taken again after 30 days; the files are named as earlier versions name them.
 func TestShotStale(t *testing.T) {
 	dir := t.TempDir()
 	s := NewShots(dir)
@@ -244,7 +244,7 @@ func TestShotKeep(t *testing.T) {
 	}
 }
 
-// The isolation site-shots.ts asks of its windows, as the window's options and handlers say it:
+// The isolation a capture's window is given, as the window's options and handlers say it:
 //   - a session of its own, in memory, for each capture: no cookies or storage kept;
 //   - an untrusted page: it calls no Go method (and trusts no origin);
 //   - no permission, no window, no download, no sound, no sign-in prompt, no dialog; no scheme but the web's;

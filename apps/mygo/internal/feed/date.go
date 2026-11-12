@@ -10,8 +10,8 @@ import (
 )
 
 // Feeds write dates in every shape (RFC 822 with or without a weekday, zone
-// names, "2026-11-07 10:00:00 +0800"), and parseFeed reads them with
-// Date.parse. jsDate is V8's DateParser (src/date/dateparser*.{h,cc},
+// names, "2026-11-07 10:00:00 +0800"), and Parse reads them as
+// Date.parse does. jsDate is V8's DateParser (src/date/dateparser*.{h,cc},
 // builtins-date.cc ParseDateTimeString), ported line for line: the ES date time
 // string format first, then the legacy rules for whatever is left.
 
@@ -546,7 +546,7 @@ var (
 	dateStart = regexp.MustCompile(`^(\d{4})-(\d{2})-(\d{2})`)
 )
 
-// feedDate is subscription-feed.ts date(): a feed's date as the store keeps
+// feedDate is a feed's date as the store keeps
 // it, nil when there is none or it is not a real date.
 func feedDate(value string) *string {
 	value = web.JSTrim(value)

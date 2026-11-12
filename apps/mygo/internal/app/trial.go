@@ -11,7 +11,7 @@ import (
 	"trie/internal/motion"
 )
 
-// A post from Explore read in place, before subscribing (main.tsx trial):
+// A post from Explore read in place, before subscribing:
 // not in the library, so nothing is saved, clipped or kept; the reader's bar
 // offers the author's pill where the favourite would be, and the pill signs
 // the article.
@@ -25,7 +25,7 @@ type trial struct {
 	src   library.Source
 }
 
-// trialID is the reader's ID of an Explore post (main.tsx trialArticle).
+// trialID is the reader's ID of an Explore post.
 func trialID(url string) string { return "explore:" + url }
 
 func isTrial(id string) bool { return strings.HasPrefix(id, "explore:") }

@@ -8,7 +8,7 @@ import (
 	"trie/internal/web"
 )
 
-// Pick is explore-upstreams.ts Pick: a post an upstream recommends, pointing at the writer's own site.
+// Pick is a post an upstream recommends, pointing at the writer's own site.
 type Pick struct {
 	URL, Title, Author, HomeURL string
 	PublishedAt                 *string
@@ -49,7 +49,7 @@ func origin(value string) (string, bool) {
 	return "null", true
 }
 
-// pick makes a Pick of entry; ok is false for an address with no origin, where TS throws and the upstream's read fails.
+// pick makes a Pick of entry; ok is false for an address with no origin, which is left out.
 func pick(entry library.FeedEntry, url, title, author string) (Pick, bool) {
 	home, ok := origin(url)
 	if !ok {

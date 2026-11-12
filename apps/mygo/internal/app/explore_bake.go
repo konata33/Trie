@@ -23,7 +23,7 @@ const bakeScale = 0.5
 // bandKey is the geometry a band is baked for (band).
 type bandKey struct{ w, h, top, rise, y, ph float32 }
 
-// bandRise is the words' band rising from clear (explore.css --ease-rise):
+// bandRise is the words' band rising from clear:
 // how much of it shows, at fractions of its rise.
 var bandRise = [][2]float32{{0, 0}, {0.3, 0.12}, {0.6, 0.45}, {0.85, 0.85}, {1, 1}}
 
@@ -103,8 +103,8 @@ func ColorEffect(pos vec2, color vec4) vec4 {
 }
 `)
 
-// The openings of a front-page story (explore.css .story .ex) and of a
-// cover (.cover .ex) running to the foot of their space.
+// The openings of a front-page story and of a cover running to the foot of
+// their space.
 var (
 	storyFade = fade.Effect(shader.Options{Uniforms: map[string]any{"From": 0.5, "To": 0.9}})
 	coverFade = fade.Effect(shader.Options{Uniforms: map[string]any{"From": 0.4, "To": 0.95}})

@@ -44,7 +44,7 @@ func showPicture(t *testing.T, tt *ui.Tester, rp *readerPage, name string) ui.Re
 
 func center(r ui.Rect) (float32, float32) { return r.X + r.W/2, r.Y + r.H/2 }
 
-// The picture viewer (ImageViewer): a picture of the body clicked flies out
+// The picture viewer: a picture of the body clicked flies out
 // of its place, which stays empty, into the middle; clicked beside, it
 // flies back and its place shows it again as it lands, the focus back on
 // it. From the keys it is simply there and gone; under less motion it fades
@@ -126,7 +126,7 @@ func pull(tt *ui.Tester, n int, dx float32, gap time.Duration) {
 	}
 }
 
-// The swipe back (ReaderBar.tsx): a short pull holds the mark and settles
+// The swipe back: a short pull holds the mark and settles
 // back; up and down scrolls; past the arm, letting go goes back; a flick
 // goes back; fast past the arm it goes at once, and the rest of the swipe
 // does not reach the page it lands on.
@@ -302,7 +302,7 @@ func samePlace(t *testing.T, before, after reader.Position, k float32) {
 	}
 }
 
-// A new size crosses over in place (ArticleReader.tsx settle): the old
+// A new size crosses over in place: the old
 // text lets go where it was, the scroll waiting for it, while the new comes
 // in as far up as keeps the paragraph being read where it was; then the
 // scroll takes the shift. The wider measure likewise.
@@ -374,7 +374,7 @@ func TestReflowAtOnce(t *testing.T) {
 }
 
 // Back from an article by the pointer, its row's moon goes from where it was
-// as the article was opened to where the reader left it (tweenMoon), under
+// as the article was opened to where the reader left it, under
 // less motion too; from the keys it is simply there.
 func TestMoonWanes(t *testing.T) {
 	for _, k := range []struct {
@@ -424,7 +424,8 @@ func TestLeftoverFrames(t *testing.T) {
 	os.MkdirAll(dir, 0o755)
 	const step = 40 * time.Millisecond
 	// record plays act and the span after it a step at a time, keeping the
-	// frames at keep whole, to set beside the Electron app's.
+	// frames at keep whole, to set beside the previous implementation's
+	// captures.
 	record := func(name string, tt *ui.Tester, span time.Duration, act func(), keep ...int) {
 		act()
 		var frames []*image.RGBA
@@ -526,8 +527,8 @@ func zoom(m *image.RGBA, r image.Rectangle, k int) *image.RGBA {
 }
 
 // TestPictureTone writes the same picture of the body, on the page and
-// large, to set beside the Electron app's: TONE=label LEFTOVERS=dir go test
-// -run PictureTone.
+// large, to set beside the previous implementation's capture: TONE=label
+// LEFTOVERS=dir go test -run PictureTone.
 func TestPictureTone(t *testing.T) {
 	dir, label := os.Getenv("LEFTOVERS"), os.Getenv("TONE")
 	if dir == "" || label == "" {
@@ -546,9 +547,9 @@ func TestPictureTone(t *testing.T) {
 }
 
 // TestShotFrames writes a work's shots in the viewer, opened and stepped by
-// the pointer, to set beside the Electron app's: SHOTWORK=work.json
-// LEFTOVERS=dir go test -run ShotFrames, the work as the Electron app keeps
-// Extrafazant once it has fetched its shots.
+// the pointer, to set beside the previous implementation's capture:
+// SHOTWORK=work.json LEFTOVERS=dir go test -run ShotFrames, the work as the
+// app keeps Extrafazant once it has fetched its shots.
 func TestShotFrames(t *testing.T) {
 	dir, path := os.Getenv("LEFTOVERS"), os.Getenv("SHOTWORK")
 	if dir == "" || path == "" {
@@ -569,7 +570,7 @@ func TestShotFrames(t *testing.T) {
 	a.Press("open:" + id)
 	settle(tt)
 	rp := a.readers[id]
-	for range 3 { // the strip 200 below the top of the window, as the Electron capture has it
+	for range 3 { // the strip 200 below the top of the window, as the recorded capture has it
 		b, ok := tt.Find("Extrafazant 的页面截图")
 		if !ok {
 			t.Fatal("no strip of shots")
@@ -602,7 +603,7 @@ func TestShotFrames(t *testing.T) {
 }
 
 // TestWorkRest writes Extrafazant's work page at rest, its strip 200 below
-// the top of the window as the Electron capture has it, and a normal
+// the top of the window as the recorded capture has it, and a normal
 // article at the top, each labelled to set the code's before beside its
 // after: SHOTWORK=work.json REST=label LEFTOVERS=dir go test -run WorkRest -v.
 func TestWorkRest(t *testing.T) {

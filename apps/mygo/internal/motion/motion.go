@@ -14,10 +14,10 @@ import (
 )
 
 // Ease is the one easing: Material 3's standard curve, a smooth
-// deceleration (motion.stylex.ts ease, styles.css --ease-out).
+// deceleration.
 var Ease = ui.CubicBezier(0.2, 0, 0, 1)
 
-// The ladder (motion.stylex.ts, DESIGN.md Motion 时长): small things
+// The ladder (DESIGN.md Motion 时长): small things
 // 150–200 ms, medium 250–300, large 400–450; a way out takes about 0.6 of
 // the way in.
 const (
@@ -36,14 +36,13 @@ const (
 	Breathe = 1400 * time.Millisecond // a placeholder breathing while its content loads
 )
 
-// How far a press shrinks what it presses (DESIGN.md 按下就有反应;
-// styles.css .tab:active).
+// How far a press shrinks what it presses (DESIGN.md 按下就有反应).
 const (
 	Pressed    = 0.97
 	PressedTab = 0.96
 )
 
-// Special curves, named so no one writes their own (motion.stylex.ts).
+// Special curves, named so no one writes their own.
 var (
 	// Flight is a long flight across the window, as an avatar into its
 	// new sidebar row: it leaves gently, carries through, long damped tail.
@@ -56,24 +55,24 @@ var (
 	Brake = ui.CubicBezier(0.333, 0.667, 0.667, 1)
 )
 
-// CSS's ease-out and ease-in-out keywords, which main.tsx's lay and spread
-// give the ground's lighting up and melting.
+// CSS's ease-out and ease-in-out keywords, which the ground lights up and
+// melts along.
 var (
 	cssEaseOut   = ui.CubicBezier(0, 0, 0.58, 1)
 	cssEaseInOut = ui.CubicBezier(0.42, 0, 0.58, 1)
 )
 
-// travelRate is styles.css --travel-ease: a critically damped spring
-// sampled as linear(), 1 − (1 + 7.4t)·e^(−7.4t) over the travel's length,
-// which gives its 25 stops within 5e-5.
+// travelRate is the travel spring's rate: a critically damped spring,
+// 1 − (1 + 7.4t)·e^(−7.4t) over the travel's length, which gives the 25
+// travelStops within 5e-5.
 const travelRate = 7.4
 
-// travelStops is styles.css --travel-ease as written, linear() over 24
-// equal steps.
+// travelStops is the travel spring sampled over 24 equal steps, joined by
+// straight lines.
 var travelStops = [...]float32{0, 0.0388, 0.1274, 0.2367, 0.3494, 0.456, 0.5519, 0.6352, 0.7058, 0.7646, 0.813,
 	0.8522, 0.8838, 0.909, 0.9291, 0.9449, 0.9573, 0.967, 0.9745, 0.9804, 0.985, 0.9885, 0.9912, 0.9933, 1}
 
-// TravelEase is styles.css --travel-ease as an easing, for what is timed
+// TravelEase is the travel spring as an easing, for what is timed
 // along it rather than sprung, as the words' crossfade within their travel.
 func TravelEase(t float32) float32 {
 	if t <= 0 {
@@ -87,13 +86,13 @@ func TravelEase(t float32) float32 {
 	return travelStops[i] + (travelStops[i+1]-travelStops[i])*(t*n-float32(i))
 }
 
-// settleRate is how a motion/react spring of a duration without bounce
+// settleRate is how a spring of a duration without bounce
 // settles: within 0.001 of its target at the end, (1 + x)·e^(−x) = 0.001.
 const settleRate = 9.2348
 
 // Travel is how something goes a long way over d, a title, a face, a name
-// or an article's ground: styles.css --travel-ease, a spring that does not
-// bounce. MyGo's spring Duration is the period of the undamped spring, as
+// or an article's ground: the travel spring, which does not bounce
+// (DESIGN.md 走远路的弹簧). MyGo's spring Duration is the period of the undamped spring, as
 // SwiftUI's, 2π/ω, so the same curve over d is a spring of d·2π/7.4; it
 // gets within 0.6% of the way at d and settles after.
 func Travel(d time.Duration) ui.Animation {
@@ -101,8 +100,8 @@ func Travel(d time.Duration) ui.Animation {
 }
 
 // Follow is how an interruptible move goes, one that follows the pointer or
-// the selection as it slides between items (ui/motion.ts spring, Motion's
-// {duration: 0.3, bounce: 0}, which settles in 300 ms).
+// the selection as it slides between items (DESIGN.md 跟手的弹簧: duration
+// 0.3, bounce 0, which settles in 300 ms).
 var Follow = spring(300*time.Millisecond, settleRate)
 
 func spring(d time.Duration, rate float64) ui.Animation {
@@ -110,12 +109,11 @@ func spring(d time.Duration, rate float64) ui.Animation {
 }
 
 // Card is a card's surface growing into its author's panel and landing back
-// into the card (Explore.tsx MotionConfig: {type: 'spring', duration: 0.4,
-// bounce: 0}), the dialog's rung.
+// into the card: a spring of 0.4 s without bounce, the dialog's rung.
 var Card = spring(DialogIn, settleRate)
 
 // EaseOut is CSS's ease-out keyword, which the author panel's shade fades
-// along (Explore.tsx: ease 'easeOut').
+// along.
 var EaseOut = cssEaseOut
 
 // Fade is how a value that moves nothing goes over d, as an opacity or a
@@ -124,7 +122,7 @@ func Fade(d time.Duration) ui.Animation {
 	return ui.Animation{Duration: d, Ease: Ease, NonMotion: true}
 }
 
-// Depth is which way the content area changes page (main.tsx pageFade).
+// Depth is which way the content area changes page.
 type Depth uint8
 
 const (
@@ -133,14 +131,13 @@ const (
 	Back              // out of one
 )
 
-// Defocus is how far a page crossing blurs, at most (styles.css page-out
-// and page-in; DESIGN.md 移焦的分寸).
+// Defocus is how far a page crossing blurs, at most (DESIGN.md 移焦的分寸).
 const Defocus = 3
 
-// Crossing is how the content area changes page, 移焦 (styles.css
-// :root.page-fade): the page left lets go out of focus over Out, scaling to
-// To; the next comes into focus over In, Wait after, from From; what both
-// show travels for Travel. Only the content area takes part.
+// Crossing is how the content area changes page, 移焦: the page left lets
+// go out of focus over Out, scaling to To; the next comes into focus over
+// In, Wait after, from From; what both show travels for Travel. Only the
+// content area takes part.
 type Crossing struct {
 	Out, In, Wait, Travel time.Duration
 	To, From              float32
@@ -185,7 +182,7 @@ func (x Crossing) Shared(match any) ui.ElementTransition {
 	return ui.ElementTransition{Animation: &a, Match: match, Fly: true}
 }
 
-// Layers come and go over In and Out along Ease (ui/motion.ts).
+// Layers come and go over In and Out along Ease.
 func layer(in, out time.Duration, enter, exit ui.Motion) ui.ElementTransition {
 	return ui.ElementTransition{Duration: in, Ease: Ease, ExitDuration: out, ExitEase: Ease, Enter: &enter, Exit: &exit}
 }
@@ -193,52 +190,49 @@ func layer(in, out time.Duration, enter, exit ui.Motion) ui.ElementTransition {
 var (
 	// grown: opened from a button, a layer grows out of it, from 0.75 and
 	// 3px of blur around the button's centre, and shrinks back into it
-	// (motion.ts pop.grown; put its TransformOrigin on the button, Origin).
+	// (put its TransformOrigin on the button, Origin).
 	grown = ui.Motion{Blur: 3, Scale: 0.75}
-	// away: a layer where it shows comes into focus from 0.97 and 2px
-	// (motion.ts pop.away).
+	// away: a layer where it shows comes into focus from 0.97 and 2px.
 	away = ui.Motion{Blur: 2, Scale: 0.97}
 	// lift: lines of small text, which a blur only smudges, grow from 0.96
-	// out of their trigger and leave by fading where they are (menuMotion).
+	// out of their trigger and leave by fading where they are.
 	lift = ui.Motion{Scale: 0.96}
 )
 
-// Dialog is a dialog grown out of the button that opened it (dialogMotion).
+// Dialog is a dialog grown out of the button that opened it.
 func Dialog() ui.ElementTransition { return layer(DialogIn, DialogOut, grown, grown) }
 
-// Sheet is the shortcut sheet, grown out of its button (popupMotion
-// medium, grown).
+// Sheet is the shortcut sheet, grown out of its button.
 func Sheet() ui.ElementTransition { return layer(PopIn, PopOut, grown, grown) }
 
-// Popover is a popover beside its trigger, from AttachedOrigin (popupMotion
-// medium).
+// Popover is a popover beside its trigger, from AttachedOrigin.
 func Popover() ui.ElementTransition { return layer(PopIn, PopOut, away, away) }
 
-// Menu is a menu out of its trigger, from AttachedOrigin (menuMotion).
+// Menu is a menu out of its trigger, from AttachedOrigin.
 func Menu() ui.ElementTransition { return layer(MenuIn, MenuOut, lift, ui.Motion{}) }
 
-// Tip is a tooltip, as a menu on the small rung (menuMotion small).
+// Tip is a tooltip, as a menu on the small rung.
 func Tip() ui.ElementTransition { return layer(TipIn, TipOut, lift, ui.Motion{}) }
 
 // Toast is a notice at the foot of the window: up from 8 below, coming into
-// focus; it leaves 4 down, out of focus (Toast.tsx rising, leaving).
+// focus; it leaves 4 down, out of focus.
 func Toast() ui.ElementTransition {
 	return layer(ToastIn, ToastOut, ui.Motion{Blur: 2, Y: 8}, ui.Motion{Blur: 2, Y: 4})
 }
 
 // Shade is the shade behind a centred layer: a fade on exactly the layer's
-// timing both ways, so the two read as one (shadeMotion).
+// timing both ways, so the two read as one.
 func Shade(in, out time.Duration) ui.ElementTransition {
 	return layer(in, out, ui.Motion{}, ui.Motion{})
 }
 
 // Behind is how far the page behind a dialog goes out of focus while it
-// shows (Dialog.tsx backdrop-filter; DESIGN.md: a mask).
+// shows (DESIGN.md 移焦的分寸: a mask).
 const Behind = 2
 
 // Origin returns the TransformOrigin, in fractions of box, at the centre of
 // from: a layer grows out of the button that opened it and shrinks back
-// into it (motion.ts originAt). It may lie outside the box.
+// into it. It may lie outside the box.
 func Origin(box, from ui.Rect) (x, y float32) {
 	if box.W <= 0 || box.H <= 0 || from.W <= 0 && from.H <= 0 {
 		return 0.5, 0.5
@@ -270,7 +264,7 @@ func still(m *ui.Motion) *ui.Motion {
 	return &ui.Motion{Opacity: m.Opacity, Blur: m.Blur}
 }
 
-// Ground is 底色先动's timing (main.tsx lay and spread): the ground lights up
+// Ground is 底色先动's timing: the ground lights up
 // over Light where it starts, travels over Travel, Wait after, and melts
 // into the window over Melt, from meltEarly before it arrives.
 type Ground struct{ Light, Wait, Travel, Melt time.Duration }
@@ -286,9 +280,9 @@ var (
 
 const meltEarly = 40 * time.Millisecond
 
-// Ground's look: the selected tint with 10px corners (styles.css
-// .page-ground), and the page it spreads into, PaperMargin wider than the
-// reading column on each side (main.tsx paperBox).
+// Ground's look: the selected tint with 10px corners, and the page it
+// spreads into, PaperMargin wider than the reading column on each side
+// (DESIGN.md 底色先动).
 const (
 	GroundRadius = 10
 	PaperMargin  = 24
@@ -315,7 +309,7 @@ func Paper(col ui.Rect) ui.Rect {
 	return ui.Rect{X: col.X - PaperMargin, Y: col.Y, W: col.W + 2*PaperMargin, H: col.H}
 }
 
-// Lay is a ground on its way (main.tsx lay and spread): it lights up at
+// Lay is a ground on its way: it lights up at
 // From, travels to To and melts. Leave To zero until it is known, as the
 // row that a page going back returns to, which shows a frame later; with
 // To still zero when it should travel, it stays where it lit up. Window
@@ -364,8 +358,7 @@ func (l *Lay) View(c *ui.Context, origin ui.Point) bool {
 }
 
 // Words carries a text both pages show, an article's title or an author's
-// name, from one page to the other as styles.css's words-out and words-in
-// do: a drawing of each side, at its own size and with its own lines,
+// name, from one page to the other: a drawing of each side, at its own size and with its own lines,
 // rides the top-left corner of the text's box along the travel spring. The
 // one going grows by Ratio, the type size coming over the type size going,
 // and the one coming grows into place from 1/Ratio, so that words scale
@@ -418,15 +411,13 @@ func (w *Words) View(c *ui.Context, key any, old, new func() ui.Element) bool {
 	return k < 0.26 || !box.Settled("p")
 }
 
-// The timings of particular controls and states, as the Electron app gives
-// them where it writes them out (styles.css, author.css, ui/controls.tsx,
-// ui/scrollbar.tsx, ReaderBar.tsx, Sidebar.tsx, Toast.tsx, work.css).
+// The timings of particular controls and states.
 const (
-	TipWait = 550 * time.Millisecond // the first tooltip waits (Tooltip.tsx)
+	TipWait = 550 * time.Millisecond // the first tooltip waits
 
 	InkDraw, InkUndraw = 480 * time.Millisecond, 220 * time.Millisecond // 一笔圈出: the loop sweeping round the words, and back
 	InkGone            = 200 * time.Millisecond                         // the loop drawing in as a button busies
-	Roll               = 300 * time.Millisecond                         // a count's digits rolling (.num-roll-d)
+	Roll               = 300 * time.Millisecond                         // a count's digits rolling
 	Reveal             = 120 * time.Millisecond                         // a row's actions, a ··· trigger, appearing
 	LinkHover          = 140 * time.Millisecond                         // an author's site link
 	SignHover          = 150 * time.Millisecond                         // the sign-off's link
@@ -458,7 +449,7 @@ const (
 
 	NoticeFor, UndoFor = 4 * time.Second, 8 * time.Second // a notice, and one offering 撤销
 
-	// 收藏 and 摘录 (Favorites.tsx, favorites.styles.ts, Clips.tsx, clips.styles.ts).
+	// 收藏 and 摘录.
 	Leave      = 150 * time.Millisecond  // a card leaving fades out of focus before the rest close up
 	PictureIn  = 300 * time.Millisecond  // a picture coming in once read
 	Lean       = 400 * time.Millisecond  // a picture leaning in, or coming up in light, under the pointer
@@ -474,14 +465,14 @@ const (
 	Boil                       = time.Second / 12                                 // the pictograms' line boil, 12 fps
 	LoadingTurn, LoadingBreath = 1100 * time.Millisecond, 1600 * time.Millisecond // the loading mark's turn; its breath under less motion
 
-	// The reader (styles.css .article-reader::view-transition-*, .swipe-back; HomeList.tsx tweenMoon).
+	// The reader.
 	ReflowOut, ReflowIn = 100 * time.Millisecond, 180 * time.Millisecond // the text letting go of its old size or measure, the new coming in
 	SwipeSettle         = 250 * time.Millisecond                         // the swipe's back mark arming, and the mark and the page settling back
 	MoonWane            = 420 * time.Millisecond                         // a list's moon going from where it was to where the reader left it
 )
 
-// Reflow is the reader's text going over to a new type size or measure
-// (ArticleReader.tsx settle): a copy of the old text lets go over ReflowOut
+// Reflow is the reader's text going over to a new type size or measure:
+// a copy of the old text lets go over ReflowOut
 // while the new comes in over ReflowIn, in place, along the one curve; a
 // fade, so less motion keeps it. instant shows the change in the next
 // frame, as the keyboard has it. The element's moves and resizes are not

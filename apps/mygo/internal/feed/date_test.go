@@ -8,7 +8,8 @@ import (
 	_ "time/tzdata"
 )
 
-// testdata/dates.json is Date.parse and date() in Node for about two thousand
+// testdata/dates.json is reference output recorded from the previous
+// implementation (Date.parse and feed dates, in Node) for about two thousand
 // spellings, fixed and generated (.context/mygo/feed-port/ts/dates.mjs), in a
 // zone with daylight saving time.
 func TestDatesMatchV8(t *testing.T) {

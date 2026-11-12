@@ -1,6 +1,5 @@
-// Package subscription is apps/desktop/src/main/subscription-service.ts:
-// reading a typed address into a feed to preview, adding it to the library,
-// and refreshing subscribed feeds a few at a time.
+// Package subscription reads a typed address into a feed to preview, adds it
+// to the library, and refreshes subscribed feeds a few at a time.
 package subscription
 
 import (
@@ -71,7 +70,7 @@ type call struct {
 	err    error
 }
 
-// Service is SubscriptionService.
+// Service previews, adds and refreshes subscriptions.
 type Service struct {
 	store   *library.Store
 	fetcher func() fetch.Fetch
@@ -83,9 +82,8 @@ type Service struct {
 	refreshing map[string]*call
 }
 
-// New is new SubscriptionService(store, fetchFactory, parsers, iconFor,
-// nameFor). A nil fetcher reads with fetch.New(8), a fresh budget for every
-// feed; nil iconFor and nameFor find nothing.
+// New makes a Service on store. A nil fetcher reads with fetch.New(8), a
+// fresh budget for every feed; nil iconFor and nameFor find nothing.
 func New(store *library.Store, fetcher func() fetch.Fetch, iconFor func(homeURL string) *string, nameFor func(feedURL, homeURL string) string) *Service {
 	if fetcher == nil {
 		fetcher = func() fetch.Fetch { return fetch.New(8).Fetch }
@@ -110,8 +108,8 @@ var (
 // lower is toLowerCase for ASCII only, so a lowercase pattern matches as JavaScript's /i does.
 func lower(s string) string { return strings.Map(web.LowerASCII, s) }
 
-// decode is subscription-service.ts decode(): the charset the Content-Type
-// names, else the XML declaration's encoding, else UTF-8.
+// decode reads body with the charset the Content-Type names, else the XML
+// declaration's encoding, else UTF-8.
 func decode(body []byte, contentType string) string {
 	label := fetch.Charset(contentType)
 	if label == "" {
@@ -190,7 +188,7 @@ func homeKey(value string) (string, error) {
 
 // existing is the source the feed already is: the same feed address, or a
 // source without a feed on the feed's own host. The feed's own addresses
-// are public, so only a stored address can fail here, as it throws in TS.
+// are public, so only a stored address can fail here.
 func (s *Service) existing(f library.ParsedFeed) (*string, error) {
 	state, err := s.store.Library()
 	if err != nil {

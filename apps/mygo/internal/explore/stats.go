@@ -22,7 +22,7 @@ type Post struct {
 	Excerpt string `json:"excerpt,omitempty"`
 }
 
-// work is explore.ts Work: a design gallery's latest featured site and the picture its feed shows of it.
+// work is a design gallery's latest featured site and the picture its feed shows of it.
 type work struct {
 	Title       string  `json:"title"`
 	URL         string  `json:"url"`
@@ -52,7 +52,7 @@ type pickRecord struct {
 	Unreadable  bool     `json:"unreadable,omitempty"`
 }
 
-// stats is explore.ts FeedStats, as explore-cache.json and seed.json keep it. A nil slice or map is a field the TS
+// stats is a feed's stats, as explore-cache.json and seed.json keep them. A nil slice or map is a field the stored
 // object does not have (works of stats saved before works were kept), an empty one a field it has empty. Error is set
 // while the latest read failed; the posts are then the last good ones.
 type stats struct {
@@ -124,7 +124,7 @@ func paired(tags ...string) *regexp.Regexp {
 	return regexp.MustCompile(strings.Join(parts, "|"))
 }
 
-// host is explore.ts host(): an address's host without www., lowercase; "" when it is no address.
+// host is an address's host without www., lowercase; "" when it is no address.
 func host(value string) string {
 	u, err := web.ParseURL(value, nil)
 	if err != nil {
@@ -242,8 +242,8 @@ func excerpt(e library.FeedEntry) string {
 	text = numericEntity.ReplaceAllStringFunc(text, func(m string) string {
 		n, err := strconv.ParseUint(m[2:len(m)-1], 10, 32)
 		if err != nil || n > utf8.MaxRune {
-			// ponytail: String.fromCodePoint throws here in TS, which leaves the feed's read unfinished; one
-			// replacement character stands for it instead.
+			// ponytail: a code point past U+10FFFF is no character; one replacement character stands for it
+			// rather than failing the feed's read.
 			return "�"
 		}
 		return string(rune(n))
@@ -337,7 +337,7 @@ func unitsPrefix(text string, n int) int {
 	return len(text)
 }
 
-// plain is html's text with its tags and spacing gone (explore.ts plain).
+// plain is html's text with its tags and spacing gone.
 func plain(html string) string {
 	return web.JSTrim(spaces.ReplaceAllString(strings.ReplaceAll(anyTag.ReplaceAllString(html, " "), "&nbsp;", " "), " "))
 }
@@ -361,7 +361,7 @@ func parse(at *string) float64 {
 	return math.NaN()
 }
 
-// feedStats is explore.ts feedStats: the latest ten posts (an author's page in Explore lists them), how many appeared
+// feedStats is the latest ten posts (an author's page in Explore lists them), how many appeared
 // in the last 90 / 30 days, and the newest entries that carry a picture. Counts are nil when no entry is dated.
 func feedStats(feed library.ParsedFeed, now int64, gallery bool) stats {
 	type item struct {

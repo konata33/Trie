@@ -1,6 +1,6 @@
-// Package reading is apps/desktop/src/main/reader-service.ts: reading an article whole, its page fetched, its body
-// extracted and formatted, its pictures downloaded and kept inside it, and the result kept in the library. Extraction
-// runs as reader-extract.ts and extract-worker.ts run it (worker.go).
+// Package reading reads an article whole: its page fetched, its body extracted and formatted, its pictures downloaded
+// and kept inside it, and the result kept in the library. Extraction runs one job at a time under a time limit
+// (worker.go).
 package reading
 
 import (
@@ -81,7 +81,7 @@ const (
 	Video  Part = -2
 )
 
-// Service is ReaderService.
+// Service reads articles and keeps them in the library.
 type Service struct {
 	store   *library.Store
 	fetcher func() fetch.Fetch
@@ -92,7 +92,7 @@ type Service struct {
 	// Explore previews are not saved, so their work pages keep their sources here for the pictures fetched afterwards.
 	previews map[string]library.ArticleContent
 	order    []string // the previews' keys, oldest first
-	// saving makes each look at the library and the write that follows it one step, as they are on Electron's main thread.
+	// saving makes each look at the library and the write that follows it one step.
 	saving sync.Mutex
 }
 
@@ -102,7 +102,7 @@ type call struct {
 	err     error
 }
 
-// New is new ReaderService(store, fetchFactory, extract). A nil fetcher reads with fetch.New(160), a fresh budget for
+// New makes a Service on store. A nil fetcher reads with fetch.New(160), a fresh budget for
 // every read; the app's extraction is Worker.
 func New(store *library.Store, fetcher func() fetch.Fetch, x Extractors) *Service {
 	if fetcher == nil {

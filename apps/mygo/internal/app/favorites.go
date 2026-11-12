@@ -21,7 +21,7 @@ import (
 	"trie/internal/web"
 )
 
-// 收藏 (Favorites.tsx, favorites.styles.ts): kept by author. Each author is
+// 收藏: kept by author. Each author is
 // a whole picture, their own site's first screen, laid edge to edge down
 // the page, their name and latest keeps written into its lower-left corner.
 // Opening an author, that picture folds up into the head of their page and
@@ -33,7 +33,7 @@ type favState struct {
 	shelves, keeps ui.ScrollState // the authors' page; an author's, from its top on each visit
 	query          string
 	search         bool
-	place          string // the author whose page was open last: the tab goes back to it (Favorites.tsx remembered)
+	place          string // the author whose page was open last: the tab goes back to it
 	lastQuery      string
 	lastCols       int
 	pics           map[string]*favPic
@@ -71,8 +71,8 @@ type favGroup struct {
 	list []*library.Article
 }
 
-// keeperOf is whose a keep is as 收藏 shows it (main.tsx displaySourceID,
-// every source counting): the first of its sources the library knows.
+// keeperOf is whose a keep is as 收藏 shows it, every source counting: the
+// first of its sources the library knows.
 func (a *App) keeperOf(art *library.Article) *library.Source {
 	for _, id := range memberships(art) {
 		if s := a.source(id); s != nil {
@@ -94,7 +94,7 @@ func keptAt(art *library.Article) int64 {
 	return t
 }
 
-// favMatches is main.tsx matches: the title, the names and sites of its
+// favMatches reports whether the title, the names and sites of its
 // sources, or its authors hold what is typed.
 func (a *App) favMatches(art *library.Article, q string) bool {
 	if q == "" {
@@ -150,14 +150,14 @@ func (a *App) anyKept() bool {
 
 // What both sides of an author's crossing show: their picture, folding from
 // the shelf into the head of their page, the line above their name and
-// their name (Favorites.tsx PARTS).
+// their name.
 type (
 	favPicMatch  struct{ id string }
 	favByMatch   struct{ id string }
 	favNameMatch struct{ id string }
 )
 
-// The heights of an author's picture (favorites.styles scene*): the first
+// The heights of an author's picture: the first
 // leaves the next one's top in view, one alone fills the screen, the others
 // are shorter, and the head of their page is the same picture folded.
 type sceneKind uint8
@@ -353,8 +353,8 @@ func (a *App) card(b ui.Element, key, stop string, live bool) {
 	}
 }
 
-// listMove is how a card or an author moves as others come and go
-// (Favorites.tsx MOVES, PRESENCE): the rest close up on the shared spring,
+// listMove is how a card or an author moves as others come and go: the
+// rest close up on the shared spring,
 // once what left has faded (150 ms, out of focus); one coming back rises 4
 // out of a 2 px blur. Quiet changes do none of it.
 func (a *App) listMove(c *ui.Context, quiet bool) ui.ElementTransition {
@@ -642,7 +642,7 @@ func (a *App) progress(c *ui.Context, art *library.Article) {
 	}
 }
 
-// moreMenu is ··· (favorites.styles more): a dark glass disc that reads on
+// moreMenu is ···: a dark glass disc that reads on
 // any picture, shown while what it belongs to is pointed at or has the
 // focus, or while its menu is open; build fills its menu.
 func (a *App) moreMenu(c *ui.Context, key, label string, shown bool, build func(ui.MenuParts)) ui.Element {
@@ -752,7 +752,7 @@ func (a *App) shade(c *ui.Context, w, h, rx, ry float32, stops [][2]float32) ui.
 // --- Pictures.
 
 // favPic is a picture 收藏 shows, on its way, there, or none to be had,
-// with how bright it rests and comes up to (Favorites.tsx toneOf).
+// with how bright it rests and comes up to (toneOf).
 type favPic struct {
 	done      bool
 	bmp       *ui.Bitmap
@@ -822,7 +822,7 @@ func dataImage(data string) image.Image {
 	return decodeAny(raw)
 }
 
-// toneOf is how light a picture is (Favorites.tsx toneOf), so that a white
+// toneOf is how light a picture is, so that a white
 // site rests dimmer than a dark one: the brightness it rests at and comes
 // up to, 0.84 → 1 for a dark site, down to 0.58 → 0.74 for a white one.
 func toneOf(img image.Image) (rest, lit float32) {
@@ -1248,7 +1248,7 @@ func (a *App) opening(id string, ask bool) *favOpening {
 	return o
 }
 
-// openingOf is Favorites.tsx openingOf: the text of the article's
+// openingOf is the text of the article's
 // paragraphs, list items and quotes that hold no paragraph, in order, until
 // a little past 720 characters. Read as data: nothing in it runs or loads.
 func openingOf(htmlText string) []string {
@@ -1435,7 +1435,7 @@ func (fs *favState) handOn(key string) {
 	}
 }
 
-// unkeep lets go of keeps at once (main.tsx letGo); the notice that follows
+// unkeep lets go of keeps at once (letGo); the notice that follows
 // offers 撤销, which puts each back with the time it was kept, so in its old
 // place. Letting go of a shelf (whose), the author's face lifts off the page
 // onto the notice and goes back on 撤销; from the keyboard, or under less
@@ -1491,7 +1491,7 @@ func (a *App) unkeep(c *ui.Context, list []*library.Article, whose *library.Sour
 	})
 }
 
-// favKeys are 收藏's keys (Favorites.tsx onKeyDown): J and K, ← and →, the
+// favKeys are 收藏's keys: J and K, ← and →, the
 // next and last card; ↓ and ↑ the nearest card in the row below or above;
 // ⌫, Delete or S let go of a keep, ⌘⌫ of an author's whole shelf; Esc
 // leaves an author.

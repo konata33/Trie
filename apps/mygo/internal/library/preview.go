@@ -11,12 +11,12 @@ import (
 	"unicode/utf8"
 )
 
-// A port of apps/desktop/src/main/article-preview.ts. Its regexps are
-// JavaScript's: \s is Unicode whitespace, /i folds ASCII only, lengths and
+// Article previews, computed as earlier versions computed them. Their regexps
+// are JavaScript's: \s is Unicode whitespace, /i folds ASCII only, lengths and
 // slices count UTF-16 code units. The patterns below spell that out for RE2.
 
-// previewVersion is PREVIEW_VERSION: stored rows of another version are
-// recomputed when the library opens.
+// previewVersion is the preview rules' version: stored rows of another
+// version are recomputed when the library opens.
 const previewVersion = 3
 
 // storedPreview is an ArticlePreview with the picture sources the list does

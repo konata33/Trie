@@ -7,9 +7,8 @@ import (
 	"trie/internal/web"
 )
 
-// The store parts of explore.test.ts, subscription-service.test.ts,
-// reader-service.test.ts and reader-format.test.ts. Their feeds came from
-// parseFeed; here they are written as the parsed feed the store receives.
+// The store parts of the explore, subscription, reading and reader-format
+// cases. Their feeds are written as the parsed feed the store receives.
 
 var empty = Snapshot{Version: 1, AsOf: "2026-11-01", Sources: []SourceSnapshot{}, Articles: []ArticleSnapshot{}, ReviewItems: []ReviewItem{}}
 
@@ -87,7 +86,7 @@ func TestAdoptNames(t *testing.T) {
 	renamed.FeedURL = "https://www.nngroup.com/feed/rss/"
 	importFeed(t, s, "nng-renamed", renamed)
 	mutate(t, s, RenameSource{ID: "nng-renamed", Name: "UX research"})
-	// ExploreService.nameFor: the catalog's name for a feed, or for a site it lists once.
+	// Explore's NameFor: the catalog's name for a feed, or for a site it lists once.
 	nameFor := func(feedURL *string, homeURL string) string {
 		switch {
 		case strings.Contains(homeURL, "nngroup.com"):
@@ -217,7 +216,7 @@ func TestRecordFeedError(t *testing.T) {
 
 // An entry under another spelling of a kept link (www., case, a fragment, a
 // trailing slash) is the same article. Its link has the article's key, so it
-// is not added as an alias (checked against store.ts).
+// is not added as an alias, as in earlier versions.
 func TestImportMatchesSpellings(t *testing.T) {
 	s := mustOpen(t, ":memory:", empty)
 	importFeed(t, s, "writer", writerFeed("https://writer.example/", post{"one", nil, ""}))

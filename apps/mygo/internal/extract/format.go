@@ -18,14 +18,14 @@ import (
 	"golang.org/x/net/html"
 )
 
-// reader-format.ts: cleaned (and cached) article HTML laid out for the reader: stable heading and code ids, code blocks
+// Reader format: cleaned (and cached) article HTML laid out for the reader: stable heading and code ids, code blocks
 // with their header, callouts, tables in a scroller, and the structured document. Decided 2026-11-09: no Shiki; a code
 // block keeps its language and text, and the reader colours it with MyGo's own highlighting.
 
-// FormatVersion is shared/reader-format.ts READER_FORMAT_VERSION.
+// FormatVersion is the reader format's version, stored with each formatted article.
 const FormatVersion = 4
 
-// Formatted is shared/reader-format.ts FormattedArticle.
+// Formatted is an article laid out for the reader.
 type Formatted struct {
 	HTML            string              `json:"html"`
 	FormatVersion   int                 `json:"formatVersion"`
@@ -85,7 +85,7 @@ func cachedImage(value string) string {
 	return ""
 }
 
-// cleaner is reader-format.ts clean(): a cached picture becomes a reader-image:N token for images; with sourceOnly (the
+// cleaner is the reader format's sanitizer: a cached picture becomes a reader-image:N token for images; with sourceOnly (the
 // source snapshot) an http(s) picture keeps its address.
 func cleaner(images *[]string, sourceOnly bool) *policy {
 	imgSchemes := []string{"reader-image"}
@@ -516,7 +516,7 @@ func jsNumber(f float64) string {
 	return sign + digits[:1] + "." + digits[1:] + exponent
 }
 
-// FormatArticleHTML is reader-format.ts formatArticleHTML(): html is the article's cleaned (and cached) HTML; snapshot,
+// FormatArticleHTML lays an article out for the reader: html is the article's cleaned (and cached) HTML; snapshot,
 // when given, is the HTML its source revision follows.
 func FormatArticleHTML(page string, snapshot *library.ReaderSourceSnapshot) (Formatted, error) {
 	if len(page) > maxHTML || strings.Count(page, "<") > 50_000 {

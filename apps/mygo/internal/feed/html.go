@@ -29,7 +29,7 @@ func units(s string, n int) string {
 	return web.FromUnits(u[:n])
 }
 
-// plain is subscription-feed.ts plain(): the text of an HTML fragment (the
+// plain is the text of an HTML fragment (the
 // first 4000 characters), scripts and styles left out, white space collapsed,
 // at most 300 characters.
 func plain(value string) string {
@@ -136,7 +136,7 @@ var errPageTooBig = errors.New("网页过大，请直接填写 RSS/Atom 地址")
 // letters onto ASCII ones.
 func lower(s string) string { return strings.Map(web.LowerASCII, s) }
 
-// DiscoverFeeds is subscription-feed.ts discoverFeeds: up to three feeds a
+// DiscoverFeeds is up to three feeds a
 // home page declares in its head or links to as "RSS", "Atom", "订阅 RSS"…
 func DiscoverFeeds(page, pageURL string) ([]string, error) {
 	if len(page) > 5*1024*1024 {
@@ -217,7 +217,7 @@ var (
 	iconWord = regexp.MustCompile(`(?:^|[` + web.Space + `])icon(?:[` + web.Space + `]|$)`)
 )
 
-// DiscoverIcons is subscription-feed.ts discoverIcons: a site's own icons,
+// DiscoverIcons is a site's own icons,
 // sharpest first (touch icons, then declared icons by size), then
 // /favicon.ico; SVG is left out, the shell cannot draw it.
 func DiscoverIcons(page, pageURL string) []string {

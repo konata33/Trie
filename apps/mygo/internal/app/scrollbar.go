@@ -10,7 +10,7 @@ import (
 	"trie/internal/theme"
 )
 
-// The app's scrollbar (ui/scrollbar.tsx, DESIGN.md Scrollbar): not there
+// The app's scrollbar (DESIGN.md Scrollbar): not there
 // while you look; scrolling brings up a scale at the content area's right
 // edge standing for the whole page, divided as a ruler is, with a needle
 // where you are and a lamp on it that lights the marks near it and finer

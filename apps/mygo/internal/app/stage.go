@@ -11,9 +11,9 @@ import (
 	"trie/internal/theme"
 )
 
-// The content area and its crossings (main.tsx pageFade; DESIGN.md Motion
-// 移焦): the page left lets go out of focus while the next comes into focus,
-// and what both show travels from one to the other. Sideways for the
+// The content area and its crossings (DESIGN.md Motion 移焦): the page
+// left lets go out of focus while the next comes into focus, and what both
+// show travels from one to the other. Sideways for the
 // sidebar's tabs, deep into an article or an author, back out of one. From
 // the keyboard it just changes; under less motion nothing moves or flies.
 
@@ -77,7 +77,7 @@ func (a *App) current() page {
 	return a.page
 }
 
-// tabOf is the sidebar tab the page is under (main.tsx tab): an author's
+// tabOf is the sidebar tab the page is under: an author's
 // page is Home's.
 func (a *App) tabOf() string {
 	switch p := a.current(); p.kind {
@@ -108,7 +108,7 @@ func (a *App) tab(c *ui.Context, kind string) {
 	a.goTo(c, page{kind: kind}, motion.Side, nil)
 }
 
-// noMotion makes a move show at once (closeReader without pageFade).
+// noMotion makes a move show at once.
 func (m *move) noMotion() {
 	if m != nil {
 		m.kbd = true
@@ -290,8 +290,7 @@ func (a *App) end(e ui.Element, where page, key string) ui.Element {
 }
 
 // paper is the page an article's ground spreads into: the reading column
-// and 24 more on each side, from under the toolbar to the window's foot
-// (main.tsx paperBox).
+// and 24 more on each side, from under the toolbar to the window's foot.
 func (a *App) paper() ui.Rect {
 	w := a.column()
 	col := min(a.area.W, w+80) - 80
@@ -321,7 +320,7 @@ func sideName(c *ui.Context, s string) ui.Element {
 	return ui.Text(c, s).FontSize(theme.Body).LineHeight(20.0 / 13).TextColor(theme.Text2).SingleLine().Ellipsis("…")
 }
 
-// authorName is the head of an author's page (author.css h1), its lines 32
+// authorName is the head of an author's page, its lines 32
 // high as Chrome sets them (reader.Lines), in the room beside the face and
 // the menu.
 func authorName(c *ui.Context, s string) ui.Element {

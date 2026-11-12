@@ -17,8 +17,7 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// TestFrames writes each crossing frame by frame, as motion-spike does: a
-// contact sheet of its frames every 40 ms and a GIF playing them in real
+// TestFrames writes each crossing frame by frame: a contact sheet of its frames every 40 ms and a GIF playing them in real
 // time, and how long the frames took to make in memory:
 // FRAMES=dir go test -run Frames.
 func TestFrames(t *testing.T) {

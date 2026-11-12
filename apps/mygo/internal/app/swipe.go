@@ -11,7 +11,7 @@ import (
 	"trie/internal/theme"
 )
 
-// The reader's two-finger swipe back (ReaderBar.tsx), read as Explore reads
+// The reader's two-finger swipe back, read as Explore reads
 // its rooms: the fingers moving right draw a round back mark in from the
 // content area's left edge and hold the page a little; past swipeArm the
 // mark arms, and letting go there, or flicking, goes back; anything shorter
@@ -151,7 +151,7 @@ func (a *App) swipeBack(c *ui.Context, rp *readerPage) {
 }
 
 // swipeMark is the round back mark the fingers draw in from the content
-// area's left edge (styles.css .swipe-back): 40 across, 16 in from the edge
+// area's left edge: 40 across, 16 in from the edge
 // once it is all in, at the middle of the area's height, faded in and
 // brought in by the pull; armed, it lights and steps 6 further in. Letting
 // go short of the arm, it goes back out.

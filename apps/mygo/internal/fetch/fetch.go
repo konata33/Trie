@@ -1,7 +1,7 @@
-// Package fetch reads public web pages and feeds, as
-// apps/desktop/src/main/reader-http.ts does: every address a name resolves to
-// must be public, the connection goes to the address that was checked,
-// redirects stay in scope and never leave HTTPS, and size and time are bounded.
+// Package fetch reads public web pages and feeds: every address a name
+// resolves to must be public, the connection goes to the address that was
+// checked, redirects stay in scope and never leave HTTPS, and size and time
+// are bounded.
 package fetch
 
 import (
@@ -36,7 +36,7 @@ type Response struct {
 	Body   []byte
 }
 
-// Fetch is ReaderFetch: read url, following redirects scope allows, with a
+// Fetch reads url, following redirects scope allows, with a
 // body of at most maxBytes.
 type Fetch func(ctx context.Context, url string, scope func(string) bool, maxBytes int) (*Response, error)
 
@@ -85,7 +85,7 @@ var (
 	synthetic = netip.MustParsePrefix("198.18.0.0/15")
 )
 
-// PublicAddress is reader-http.ts publicAddress: whether value is a unicast
+// PublicAddress is whether value is a unicast
 // address as ipaddr.js judges it, IPv4-mapped IPv6 read as IPv4. allowSynthetic
 // also passes 198.18.0.0/15, the range fake-IP proxies (Clash, mihomo, Surge)
 // answer every lookup with while they resolve the real host themselves.
@@ -111,7 +111,7 @@ func unbracket(host string) string {
 	return strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
 }
 
-// PublicURL is reader-http.ts publicURL: an http(s) address of a public
+// PublicURL is an http(s) address of a public
 // site with no credentials or port, its fragment dropped.
 func PublicURL(value string) (*web.URL, error) {
 	u, err := web.ParseURL(value, nil)
@@ -145,7 +145,7 @@ func query(u *web.URL) string {
 	return strings.TrimPrefix(strings.TrimPrefix(u.Href(), u.Scheme+"://"+u.Hostname()+u.Pathname()), "?")
 }
 
-// PublisherScope is reader-http.ts publisherScope: where a read of home may
+// PublisherScope is where a read of home may
 // be redirected. The publisher's host, with or without www., or a subdomain
 // of it (baoyu.io/feed.xml moves to s.baoyu.io); HTTP may become HTTPS.
 func PublisherScope(home string) (func(string) bool, error) {
@@ -164,7 +164,7 @@ func PublisherScope(home string) (func(string) bool, error) {
 	}, nil
 }
 
-// Client is ReaderHTTP: one read's worth of requests, redirects included,
+// Client is one read's worth of requests, redirects included,
 // shared by every Fetch on it.
 type Client struct {
 	limit     int
@@ -176,7 +176,7 @@ type Client struct {
 	requests int
 }
 
-// New is new ReaderHTTP(limit): at most limit requests, a 15 s stall timeout
+// New is a Client of at most limit requests, a 15 s stall timeout
 // and the system resolver.
 func New(limit int) *Client {
 	return &Client{limit: limit, timeout: 15 * time.Second, resolve: systemResolve, transport: shared}
@@ -217,7 +217,7 @@ func redirect(status int) bool {
 	return status == 301 || status == 302 || status == 303 || status == 307 || status == 308
 }
 
-// Fetch is ReaderHTTP.fetch.
+// Fetch reads value within the client's request limit.
 func (c *Client) Fetch(ctx context.Context, value string, scope func(string) bool, maxBytes int) (*Response, error) {
 	u, err := PublicURL(value)
 	if err != nil {

@@ -34,7 +34,7 @@ func feedAt() fetch.Fetch {
 	}
 }
 
-// A refresh says it starts and how it ended (main.tsx refreshFeeds).
+// A refresh says it starts and how it ended.
 func TestRefreshAnnouncements(t *testing.T) {
 	a, store := newTestApp(t)
 	tt := ui.NewTester(a.View, 1280, 850)

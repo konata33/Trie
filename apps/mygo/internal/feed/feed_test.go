@@ -8,7 +8,7 @@ import (
 	"trie/internal/library"
 )
 
-// subscription-feed.test.ts
+// Feed parsing and discovery cases.
 
 func rss(items string) string {
 	return `<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/"><channel><title>Writer</title><link>https://writer.example/</link>` + items + `</channel></rss>`

@@ -1,6 +1,5 @@
-// Package reader shows an article's cleaned body (ArticleContent in
-// apps/desktop/src/shared/types.ts) as native MyGo elements, as the Electron
-// reader's ArticleBody.tsx and reader-body.styles.ts draw it.
+// Package reader shows an article's cleaned body (library.ArticleContent)
+// as native MyGo elements.
 package reader
 
 import (
@@ -42,7 +41,7 @@ type CodeBlock struct {
 	Code     string `json:"code"`
 }
 
-// Document is the stored ReaderDocument (shared/reader-document.ts): the
+// Document is the stored reader document (library.IsReaderDocument): the
 // body as a hast tree whose blocks carry reader unit IDs.
 type Document struct {
 	Version         int                    `json:"version"`

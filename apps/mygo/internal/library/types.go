@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 )
 
-// The types of apps/desktop/src/shared/types.ts the store reads and writes,
-// with the same JSON names. A nullable field (`string | null`) is a pointer,
-// an optional one (`field?`) is omitted when empty, and `field?: string | null`
-// is a MaybeString, which keeps all three apart.
+// The types the store reads and writes, with the JSON names libraries written
+// by earlier versions use. A field that may be null is a pointer, one that may
+// be absent is omitted when empty, and a string that may be absent or null is
+// a MaybeString, which keeps all three apart.
 
-// MaybeString is a TypeScript `field?: string | null`.
+// MaybeString is a string field that may be absent or null.
 type MaybeString struct {
 	Set   bool    // false when the field is absent
 	Value *string // nil for null
@@ -178,7 +178,7 @@ type LibraryState struct {
 	Summary     Summary      `json:"summary"`
 }
 
-// LibraryAction is one of the action types below. Its JSON is the renderer's
+// LibraryAction is one of the action types below. Its JSON is a
 // {"type": "toggle-favorite", ...} object.
 type LibraryAction interface{ action() string }
 
@@ -349,7 +349,7 @@ type ReaderSourceSnapshot struct {
 }
 
 // ArticleContent is an article's cached body. Work (a GalleryWork) and
-// Document (shared/reader-document.ts's ReaderDocument) stay as stored JSON,
+// Document (the reader document) stay as stored JSON,
 // so writing content back never drops what this package does not model.
 type ArticleContent struct {
 	Work              json.RawMessage       `json:"work,omitempty"`

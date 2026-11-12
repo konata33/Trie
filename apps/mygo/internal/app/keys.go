@@ -6,7 +6,7 @@ import (
 	"trie/internal/library"
 )
 
-// shortcuts are the window's keys (main.tsx keys, ShortcutSheet.tsx): what
+// shortcuts are the window's keys: what
 // the keyboard does shows at once.
 func (a *App) shortcuts(c *ui.Context) {
 	// ⌘Z presses the notice's 撤销 (outside text fields, which keep their own undo).

@@ -256,8 +256,8 @@ func TestKeepMakesAClip(t *testing.T) {
 	}
 }
 
-// A reading position measured as useReadingSession measures it puts a new
-// reader of the same content where the old one was.
+// A reading position measured in one reader puts a new reader of the same
+// content where the old one was.
 func TestReadingPositionRestores(t *testing.T) {
 	r, tt := open(t, "雨のち晴れ", 724, 820)
 	r.Scroll.Y = 6000
@@ -326,8 +326,8 @@ func TestLineBreaking(t *testing.T) {
 	}
 }
 
-// Chinese is drawn in PingFang SC at the size given, as the Electron
-// reader's font list draws it: pixel for pixel the same as naming it.
+// Chinese is drawn in PingFang SC at the size given: pixel for pixel the
+// same as naming it.
 func TestChineseIsPingFangSC(t *testing.T) {
 	const s = "中文正文，标点。引号「」"
 	render := func(build func(c *ui.Context)) *image.RGBA {

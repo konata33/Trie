@@ -367,7 +367,7 @@ func shotsTester(t *testing.T) (*App, *ui.Tester, *readerPage) {
 }
 
 // A two-finger swipe that starts on the strip of shots while it can still
-// scroll that way is the strip's (ReaderBar.tsx scrollsAside): it scrolls
+// scroll that way is the strip's: it scrolls
 // and the page stays; at the strip's start the swipe goes back.
 func TestWorkShotsSwipe(t *testing.T) {
 	a, tt, rp := shotsTester(t)
@@ -407,14 +407,14 @@ func TestWorkShotsSwipe(t *testing.T) {
 	}
 }
 
-// A shot clicked opens in the viewer (WorkShots, ImageViewer), out of its
+// A shot clicked opens in the viewer, out of its
 // place in the strip, which stays empty while it shows: 截图, its name and
 // its place in the set under it, 上一张 and 下一张 at the sides. ← and →
 // step through the set and round it, the shot that did not load showing
 // as a missing picture; by the pointer the picture shown lets go where it
 // is while the next comes in, from the keys the next is simply there. Esc
-// closes it, the focus back on the shot that opened it, as Base UI gives it
-// back; closed by the pointer, the picture flies back into the place of the
+// closes it, the focus back on the shot that opened it; closed by the
+// pointer, the picture flies back into the place of the
 // one shown, even past the strip's edge, as long as it is in the window.
 func TestWorkShotsViewer(t *testing.T) {
 	a, tt, rp := shotsTester(t)
@@ -553,7 +553,7 @@ func find(t *testing.T, tt *ui.Tester, s string) ui.Rect {
 	return r
 }
 
-// The body sits under the work's last part as work.css has it, their margins
+// The body sits under the work's last part, their margins
 // collapsing: 24 under who made it, nothing under the strip of shots (its
 // 4px of padding) or the first screen, or the first block's own margin when
 // larger; who made it sits 16 under the strip.
@@ -590,7 +590,7 @@ func TestWorkBodyGap(t *testing.T) {
 	}
 }
 
-// The facts go before the body's first h2 (ArticleBody insertAt), else after
+// The facts go before the body's first h2, else after
 // its last block, their margins (40 above, none under) collapsing with the
 // blocks' around them: 40 from the paragraph before them, a heading's 1.8em
 // after them; the sign-off 48 under them.
@@ -719,8 +719,8 @@ func TestWorkCredits(t *testing.T) {
 	}
 }
 
-// A shot that arrives late comes in to where it rests, 0.88 of its colour
-// (work.css work-shot-in), never past it.
+// A shot that arrives late comes in to where it rests, 0.88 of its colour,
+// never past it.
 func TestWorkShotLateIn(t *testing.T) {
 	_, tt, rp := shotsTester(t)
 	first, ok := tt.Access("查看截图：Shot 1")

@@ -10,9 +10,10 @@ import (
 	"unicode/utf16"
 )
 
-// store.ts runs on JavaScript strings, numbers and dates. The helpers here
-// reproduce the parts of their semantics the store relies on, so the Go store
-// accepts, rejects and computes what the Electron store does.
+// Earlier versions checked and computed libraries with JavaScript strings,
+// numbers and dates. The helpers here reproduce the parts of their semantics
+// the store relies on, so the Go store accepts, rejects and computes what
+// earlier versions did.
 
 // JSLen is a string's JavaScript length, in UTF-16 code units.
 func JSLen(s string) int {

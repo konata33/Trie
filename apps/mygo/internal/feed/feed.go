@@ -1,6 +1,5 @@
-// Package feed is apps/desktop/src/main/subscription-feed.ts: it reads an
-// RSS, RDF or Atom document into the ParsedFeed the library imports, and
-// finds the feeds and icons a home page offers.
+// Package feed reads an RSS, RDF or Atom document into the ParsedFeed the
+// library imports, and finds the feeds and icons a home page offers.
 package feed
 
 import (
@@ -162,7 +161,7 @@ var (
 	textEscaped = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
 )
 
-// Parse is parseFeed: the feed at feedURL, whose document is xml.
+// Parse reads the feed at feedURL, whose document is xml.
 func Parse(xml, feedURL string) (library.ParsedFeed, error) {
 	u, err := fetch.PublicURL(feedURL)
 	if err != nil {

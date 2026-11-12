@@ -8,7 +8,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-// sanitize-html 2.18.1 in its discard mode, as extract-content.ts and reader-format.ts configure it. It does not build a
+// sanitize-html 2.18.1 in its discard mode, as extraction and the reader format configure it. It does not build a
 // tree: it echoes what htmlparser2 12 reports, tag by tag, and htmlparser2 closes and opens elements by rules of its own
 // (an <h2> closes an open <p>, "</p>" alone opens one), which the scanner below keeps. Tokens come from x/net/html's
 // tokenizer, which reads serialized HTML (the only input here) as htmlparser2's does.

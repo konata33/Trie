@@ -22,11 +22,12 @@ import (
 	"golang.org/x/net/html"
 )
 
-// TestPortBench runs the port over the selection bench's corpus and compares it with the TS output:
+// TestPortBench runs the Go pipeline over the selection bench's corpus and compares it with reference outputs recorded
+// from the previous implementation:
 //
 //	EXTRACT_PORT=$PWD/../../.context/mygo/extract-port go test ./internal/extract -run TestPortBench -v
 //
-// The corpus is ../extract-spike (pages/, out/ts-full/ from ts-run.ts); out/ts-doc/ (ts-doc.ts) adds the TS documents
+// The corpus is ../extract-spike (pages/, out/ts-full/ from ts-run.ts); out/ts-doc/ (ts-doc.ts) adds the reference documents
 // and code. Where a page differs, Mozilla Readability's own output for the same document (out/readability-ts/, from
 // readability-ts.ts over what EXTRACT_PORT_DUMP=1 writes to out/readability-in/) is fed to the Go pipeline in place of
 // readeck's: if the page then matches, the difference is the Readability layer's. Writes out/go/ and report/.
@@ -81,7 +82,7 @@ func TestPortBench(t *testing.T) {
 			r.Layer = ptr(m.Same())
 			parseArticle = readability
 		}
-		// The intended difference (articleRoot's share of the page): with it off, the page is as the TS has it.
+		// The intended difference (articleRoot's share of the page): with it off, the page is as the reference has it.
 		if !r.Same() {
 			rulesOff = map[string]bool{"root-share": true}
 			m := compareRun(p, ts, doc, runPort(p))
@@ -154,7 +155,7 @@ type tsDoc struct {
 	} `json:"document"`
 }
 
-// portRun is the whole Go pipeline for one page, in reader-service.ts order, with ts-run.ts's stand-in pictures.
+// portRun is the whole Go pipeline for one page, in internal/reading's order, with ts-run.ts's stand-in pictures.
 type portRun struct {
 	Extracted Extracted       `json:"extracted"`
 	Formatted *Formatted      `json:"formatted,omitempty"`
@@ -363,7 +364,7 @@ func benchReport(rows []benchRow) string {
 	return b.String()
 }
 
-// TestPortProgress replays the port rule by rule, in the order they were ported (ablation.md's), and runs the bench at
+// TestPortProgress turns the rules on one by one, in ablation.md's order, and runs the bench at
 // each step: EXTRACT_PORT=… EXTRACT_PORT_STEPS=1 go test ./internal/extract -run TestPortProgress. Writes report/progress.md.
 func TestPortProgress(t *testing.T) {
 	dir := portDir(t, "EXTRACT_PORT_STEPS")

@@ -12,8 +12,7 @@ import (
 	"trie/internal/web"
 )
 
-// The feedStats and postPictures cases of explore.test.ts. Feeds are parsed by the real parser, as the TS tests parse
-// them with parseFeed.
+// The feedStats and postPictures cases. Feeds are parsed by the real parser.
 
 func daysAgo(days int) string {
 	return time.Now().Add(-time.Duration(days) * 24 * time.Hour).UTC().Format(http.TimeFormat)
@@ -93,7 +92,7 @@ func TestPostPictures(t *testing.T) {
 	}
 }
 
-// Beyond the TS cases: the parts of excerpt RE2 cannot say as JavaScript does (the credit's lookahead, a notice near
+// The parts of excerpt RE2 cannot say as JavaScript does (the credit's lookahead, a notice near
 // the start counted in UTF-16 units, the cut at 1200 units), and an entity no code point answers.
 func TestExcerptEdges(t *testing.T) {
 	e := func(html string) string {
@@ -106,7 +105,7 @@ func TestExcerptEdges(t *testing.T) {
 		{"Source: a。b. Rest", "Source: a。b. Rest"},
 		{"License: one。 two", "two"},
 		{"😀 Source: x.", "😀"},
-		{"&#9731; &#99999999; &amp;lt;", "☃ � &lt;"}, // TS throws on the second
+		{"&#9731; &#99999999; &amp;lt;", "☃ � &lt;"}, // the second is past U+10FFFF
 		{"<SCRIPT>x()</script>Kept <pre>code</PRE>text", "Kept text"},
 		{"T", ""},
 	} {

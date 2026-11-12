@@ -25,8 +25,8 @@ import (
 	"trie/internal/web"
 )
 
-// author is a subscribed source as the sidebar shows it (main.tsx authors):
-// newest writer first.
+// author is a subscribed source as the sidebar shows it: newest writer
+// first.
 type author struct {
 	src    *library.Source
 	latest string // the newest article's title
@@ -111,7 +111,7 @@ func articleTime(art *library.Article) (int64, bool) {
 	return web.JSDateParse(*v)
 }
 
-// byDate is main.tsx's byDate: newest first, undated last, then by title.
+// byDate orders articles newest first, undated last, then by title.
 func byDate(x, y *library.Article) int {
 	tx, okx := articleTime(x)
 	ty, oky := articleTime(y)
@@ -160,7 +160,7 @@ func (a *App) article(id string) *library.Article {
 }
 
 // sourceOf is the source an article shows under: the author page's it was
-// opened from, else its first subscribed one (main.tsx displaySourceID).
+// opened from, else its first subscribed one.
 func (a *App) sourceOf(art *library.Article) *library.Source {
 	if t := a.trials[art.ID]; t != nil {
 		return &t.src
@@ -186,7 +186,7 @@ func nameOf(s *library.Source) string {
 	return s.DisplayName
 }
 
-// magnitude is how bright an author's name is (Sidebar.tsx magnitude):
+// magnitude is how bright an author's name is:
 // the more recently they wrote, the brighter.
 func magnitude(days int, fresh bool) int {
 	switch {
@@ -200,7 +200,7 @@ func magnitude(days int, fresh bool) int {
 	return 4
 }
 
-// Reading progress (HomeList.tsx): only what was started and not finished
+// Reading progress: only what was started and not finished
 // shows the moon.
 func progressOf(art *library.Article) float64 {
 	if art.ReadingPosition == nil {
@@ -222,10 +222,10 @@ func litOf(art *library.Article) float32 {
 
 func percentOf(art *library.Article) int { return min(99, int(math.Round(progressOf(art)*100))) }
 
-// Dates, as the Electron pages write them, in local time.
+// Dates, as the pages write them, in local time.
 func local(ms int64) time.Time { return time.UnixMilli(ms).In(time.Local) }
 
-// ago is AuthorPage.tsx's: 今天, 3 天前, 2 个月前, 1 年前.
+// ago is how long ago ms was: 今天, 3 天前, 2 个月前, 1 年前.
 func ago(ms int64) string {
 	days := max(0, int(math.Round(float64(time.Now().UnixMilli()-ms)/864e5)))
 	switch {
@@ -244,7 +244,7 @@ var dateOnly = func(s string) bool {
 }
 
 // dayTime is the moment a date shows as: a date alone is that day's
-// midnight here (new Date(value + 'T00:00:00')), a time is itself.
+// midnight here, a time is itself.
 func dayTime(v string) (time.Time, bool) {
 	if len(v) < 10 || v[4] != '-' || v[7] != '-' {
 		return time.Time{}, false
@@ -299,7 +299,7 @@ func fullDate(v *string) string {
 	return fmt.Sprintf("%d年%d月%d日 %02d:%02d", t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute())
 }
 
-// formatDate is main.tsx's fallback (zh-CN, year, short month, day).
+// formatDate is the dates' fallback (zh-CN, year, short month, day).
 func formatDate(v string) string {
 	ms, ok := web.JSDateParse(v)
 	if !ok {
@@ -326,17 +326,17 @@ func hostOf(u string) string {
 	return strings.TrimPrefix(p.Hostname(), "www.")
 }
 
-// siteIcon is a source's icon as the dark interface shows it (ui/icon-tone.ts):
+// siteIcon is a source's icon as the dark interface shows it:
 // toned once, with a dimmed copy for the sidebar's rows at rest.
 type siteIcon struct {
 	raw   *ui.Bitmap // as drawn: the reader's byline puts it on a light disc
 	toned *ui.Bitmap
 	dim   *ui.Bitmap  // saturate(0.55) brightness(0.92)
 	inset bool        // ink and clear marks keep 12% around them
-	hues  [2]ui.Color // its two strongest colours, for a halo (Explore.tsx hues)
+	hues  [2]ui.Color // its two strongest colours, for a halo
 }
 
-// bundled are the icons of the seeded sources (main.tsx icons).
+// bundled are the icons of the seeded sources.
 var bundled = map[string]string{"innei": "site-innei.png", "antfu": "site-antfu.svg", "velas": "site-velas.png",
 	"innei.in": "site-innei.png", "antfu.me": "site-antfu.svg", "velasx.com": "site-velas.png"}
 
@@ -372,7 +372,7 @@ func (a *App) iconOf(s *library.Source) *siteIcon {
 }
 
 // decodeAny decodes a PNG, JPEG, GIF, WebP, ICO or SVG picture; a lossy
-// WebP in the colours Chromium gives it (reader.WebP).
+// WebP in the colours a browser gives it (reader.WebP).
 func decodeAny(b []byte) image.Image {
 	if img := reader.WebP(b); img != nil {
 		return img
@@ -392,9 +392,8 @@ func decodeAny(b []byte) image.Image {
 	return nil
 }
 
-// decodeICO is the largest picture of a favicon.ico, which Chromium drew
-// for the Electron app: one stored as PNG, or as a 32-bit bitmap with its
-// alpha; nil for older bitmaps.
+// decodeICO is the largest picture of a favicon.ico: one stored as PNG, or
+// as a 32-bit bitmap with its alpha; nil for older bitmaps.
 func decodeICO(b []byte) image.Image {
 	in := b
 	le16 := func(i int) int { return int(in[i]) | int(in[i+1])<<8 }
@@ -453,7 +452,7 @@ func decodeICO(b []byte) image.Image {
 	return img
 }
 
-// toneIcon reads the icon at 32×32 and tones it (shared/icon-tone.ts).
+// toneIcon reads the icon at 32×32 and tones it.
 func toneIcon(img image.Image) *siteIcon {
 	const size = 32
 	small := image.NewNRGBA(image.Rect(0, 0, size, size))

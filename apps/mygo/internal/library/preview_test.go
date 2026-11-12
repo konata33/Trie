@@ -9,7 +9,7 @@ import (
 	"trie/internal/web"
 )
 
-// Ports of article-preview.test.ts.
+// Article preview cases.
 
 const previewBase = "https://writer.example/posts/hello"
 

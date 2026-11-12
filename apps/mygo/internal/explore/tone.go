@@ -1,6 +1,6 @@
 package explore
 
-// IconTone is shared/icon-tone.ts iconTone: how a site icon should sit on the dark interface. Favicons are drawn for
+// IconTone is how a site icon should sit on the dark interface. Favicons are drawn for
 // white browser tabs, so painting all of them on a light disc turns every row into a white dot. Read from the icon's
 // own pixels (RGBA, size × size):
 //   - "ink": a dark, colourless mark on a transparent ground (Innei, Anthony Fu). It would vanish on the dark UI; draw it light.

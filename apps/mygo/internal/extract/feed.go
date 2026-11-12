@@ -16,7 +16,7 @@ import (
 // feedItem is what extractFeed reads of an item: its link, the body (content:encoded, or Atom content as text) and
 // the summary rss-parser calls content.
 type feedItem struct {
-	link       any // string or, for a link element holding markup, an object (on which the TS throws)
+	link       any // string or, for a link element holding markup, an object (which fails the feed's read)
 	body       string
 	bodyObject bool // a body element holding markup: truthy without being text
 	content    *string

@@ -585,7 +585,7 @@ func TestExploreShots(t *testing.T) {
 		}
 		savePNG(t, filepath.Join(out, name+".png"), tt.Image())
 	}
-	// The lead at its first work, a few seconds in, as the Electron app's was taken.
+	// The lead at its first work, a few seconds in, as the recorded capture was taken.
 	ex.lead, ex.leadLeft = 0, 2*time.Second
 	tt.Frame()
 	tt.Advance(400 * time.Millisecond)

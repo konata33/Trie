@@ -15,8 +15,8 @@ var (
 	calloutColors = map[string]ui.Color{
 		"NOTE": theme.CalloutNote, "TIP": theme.CalloutTip, "IMPORTANT": theme.CalloutImportant, "WARNING": theme.CalloutWarning,
 	}
-	// roleColors are those of CODE_TOKEN_ROLES, whose classes reader-token-1
-	// to reader-token-8 the formatter gives code tokens.
+	// roleColors are those of the roles whose classes, reader-token-1 to
+	// reader-token-8, the formatter gives code tokens.
 	roleColors = [...]ui.Color{
 		roleString: theme.CodeString, roleNumber: theme.CodeNumber, roleKeyword: theme.CodeKeyword,
 		roleFunction: theme.CodeFunction, roleKey: theme.CodeKey, roleType: theme.CodeType,
@@ -26,7 +26,7 @@ var (
 
 type role uint8
 
-// The roles in CODE_TOKEN_ROLES order: reader-token-N is role N.
+// The roles in the formatter's order: reader-token-N is role N.
 const (
 	roleText role = iota
 	roleString
@@ -91,10 +91,9 @@ func (b *builder) pre(n *node, unit, id string) *block {
 	return blk
 }
 
-// highlight colors a code block by the roles its stored tokens name, as the
-// Electron reader does, when they spell the code exactly. Tokens of older
-// formats name a light theme's colors, which the Electron reader formats
-// again on open: MyGo's own tokenizers stand in for that here, their kinds
+// highlight colors a code block by the roles its stored tokens name, when
+// they spell the code exactly. Tokens of older formats name a light theme's
+// colors instead: MyGo's own tokenizers color those blocks, their kinds
 // given the same roles and colors.
 func (b *builder) highlight(cb CodeBlock) []ui.Span {
 	if tokens := b.tokens[cb.ID]; b.roles && spells(tokens, cb.Code) {
@@ -147,8 +146,8 @@ func spells(tokens []codeToken, code string) bool {
 	return n == len(code)
 }
 
-// kindRole gives a token kind the role shiki's scopes give it in
-// reader-format.ts roleScopes.
+// kindRole gives a token kind the role that stored tokens of the same
+// scope carry.
 func kindRole(k editor.TokenKind) role {
 	switch k {
 	case editor.TokenKeyword:

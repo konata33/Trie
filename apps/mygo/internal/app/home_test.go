@@ -116,8 +116,7 @@ func passingBy(a *App, now time.Time) []homeItem {
 }
 
 // The page: today's design example, then the ranking, then the people
-// followed, then the writers passing by; each drawn from the catalog as
-// Home.tsx draws it.
+// followed, then the writers passing by; each drawn from the catalog.
 func TestHomePage(t *testing.T) {
 	a, tt, _, _ := newHomeApp(t, ui.Preferences{})
 	if a.page.kind != "home" {
@@ -158,7 +157,7 @@ func TestHomePage(t *testing.T) {
 	if len(strangers) != 10 {
 		t.Errorf("ten writers pass by, got %d", len(strangers))
 	}
-	// The people followed are not on the first screen (Home.tsx as it is).
+	// The people followed are not on the first screen.
 	follows := followsOf(a.homeItems(""))
 	if len(follows) == 0 {
 		t.Fatal("no one followed")
@@ -473,7 +472,7 @@ func countOf(list []string, s string) int {
 }
 
 // homeAt scrolls 首页 so that region starts 120 below the window's top, as
-// the Electron captures do.
+// the previous implementation's captures do.
 func homeAt(t *testing.T, a *App, tt *ui.Tester, region string) {
 	t.Helper()
 	hs := a.homeSt()
@@ -494,9 +493,9 @@ func homeAt(t *testing.T, a *App, tt *ui.Tester, region string) {
 	}
 }
 
-// TestHomeLook writes 首页 as it shows, in the states the Electron captures
-// show (.context/mygo/app-v1/home/tools/electron.mjs), on the folder the
-// Electron copy read: HOMELOOK=dir HOMEDATA=folder go test -run HomeLook.
+// TestHomeLook writes 首页 as it shows, in the states the previous
+// implementation's captures show (.context/mygo/app-v1/home/tools/electron.mjs),
+// on the folder those captures read: HOMELOOK=dir HOMEDATA=folder go test -run HomeLook.
 func TestHomeLook(t *testing.T) {
 	dir, data := os.Getenv("HOMELOOK"), os.Getenv("HOMEDATA")
 	if dir == "" || data == "" {
@@ -509,7 +508,7 @@ func TestHomeLook(t *testing.T) {
 	shot := func(name string) {
 		tt.Move(1270, 840)
 		tt.Advance(2 * time.Second)
-		hs.street = 0 // the passing line at its start, as the Electron capture holds it
+		hs.street = 0 // the passing line at its start, as the recorded capture holds it
 		tt.Frame()
 		savePNG(t, filepath.Join(dir, name+"-mygo.png"), tt.Image())
 	}

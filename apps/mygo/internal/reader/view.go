@@ -21,7 +21,7 @@ import (
 const Column = theme.ReaderColumn
 
 // guide is how far below the top of the reader a reading position is
-// measured, as useReadingSession.ts measures it.
+// measured.
 const guide = 110
 
 // sans is the reading face: the system's, with PingFang SC before the
@@ -43,7 +43,7 @@ type Reader struct {
 	// OnLink opens a link to another page; without it MyGo opens it.
 	OnLink func(href string)
 	// OnRetry is 重试 under a picture that did not load; without it the
-	// button does not show, as in the Electron reader.
+	// button does not show.
 	OnRetry func()
 
 	// Width is the column's width, Column when zero.
@@ -57,15 +57,14 @@ type Reader struct {
 	Bar, Below func()
 	Above      func() float32
 	// Insert builds what the body holds before its first h2, or after its
-	// last block when it has none (ArticleBody's insert: a work's facts),
+	// last block when it has none (a work's facts),
 	// and returns its top and bottom margins, which collapse with those of
 	// the blocks around it.
 	Insert func() (top, bottom float32)
 	// Instant shows a new size or measure in the next frame rather than
 	// crossing over to it, as the keyboard asks.
 	Instant bool
-	// Name is the body's accessible name, as the Electron reader titled
-	// the frame of its body: 「标题 · 正文」.
+	// Name is the body's accessible name: 「标题 · 正文」.
 	Name string
 	// OnPicture shows a picture of the body large, clicked or pressed with
 	// Enter or Space; without it the pictures are not buttons.
@@ -118,7 +117,7 @@ type Reader struct {
 	hidden ui.Rect
 	sides  map[string]*ui.ScrollState // the app's sideways scrollers (Aside), by key
 
-	// A new size or measure (ArticleReader.tsx settle): what the last
+	// A new size or measure: what the last
 	// layout was for, how many each has had (the keys of the text laid out
 	// anew), and the crossing on its way.
 	laidSize, laidWidth float32
@@ -279,8 +278,8 @@ func (r *Reader) View(c *ui.Context) {
 						r.children(c, bs, true, tc, build)
 						return
 					}
-					// ponytail: ArticleBody looks only at the body's top level; the
-					// blocks flatten wrappers, so an h2 inside a div counts here.
+					// ponytail: the blocks flatten wrappers, so an h2 inside a div
+					// counts here, not only one at the body's top level.
 					// Galleries' bodies are one p.
 					at := len(bs)
 					for i, b := range bs {
@@ -900,8 +899,7 @@ func hasLink(segs []segment) bool {
 	return false
 }
 
-// spans styles segments as reader-body.styles.ts styles their tags, in a
-// paragraph of the given size.
+// spans styles segments by their tags, in a paragraph of the given size.
 func spans(segs []segment, size float32) []ui.Span {
 	out := make([]ui.Span, 0, len(segs))
 	for _, sg := range segs {
@@ -1075,8 +1073,7 @@ func (r *Reader) picture(c *ui.Context, b *block) ui.Element {
 	if len(p.texts) > 0 {
 		e.DrawOver(func(pt *ui.Painter, box ui.Rect) { drawSVGTexts(pt, box, p) })
 	}
-	// A button that shows it large (ArticleReader.tsx openImage), whose
-	// place stays empty while it does.
+	// A button that shows it large, whose place stays empty while it does.
 	if r.OnPicture != nil {
 		name := "放大查看图片"
 		if p.alt != "" {
@@ -1149,7 +1146,7 @@ func (r *Reader) HiddenBox() ui.Rect { return r.hidden }
 
 // ScrollsAside reports whether something under the point (x, y) in the
 // window can still scroll sideways by dx, a code block, a wide table or a
-// scroller of the app's (Aside) (ReaderBar.tsx scrollsAside): a swipe that
+// scroller of the app's (Aside): a swipe that
 // starts there is its own.
 func (r *Reader) ScrollsAside(x, y, dx float32) bool {
 	for _, a := range r.asides {

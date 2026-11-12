@@ -168,7 +168,7 @@ func TestCorpus(t *testing.T) {
 		home, _ := PublisherScope(tg.Home)
 		return func(u string) bool { return post != nil && post(u) || home != nil && home(u) }
 	}, func(r read, res *Response) {
-		// reader-service.ts decode(), for HTML only, as the corpus stored it; its length in UTF-16 code units.
+		// Decoded as the reader decodes it, for HTML only, as the corpus stored it; its length in UTF-16 code units.
 		n := 0
 		if strings.Contains(strings.ToLower(res.Type), "html") {
 			n = web.JSLen(Decode(res.Body, Charset(res.Type)))

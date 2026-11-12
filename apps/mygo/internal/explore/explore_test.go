@@ -23,7 +23,7 @@ import (
 	"trie/internal/web"
 )
 
-// The cases of explore.test.ts that are not the store's (those are in library/feed_test.go), and the index.ts handlers.
+// Explore's cases that are not the store's (those are in library/feed_test.go), and the app's handlers.
 
 var empty = library.Snapshot{Version: 1, AsOf: "2026-11-01", Sources: []library.SourceSnapshot{}, Articles: []library.ArticleSnapshot{}, ReviewItems: []library.ReviewItem{}}
 
@@ -177,7 +177,7 @@ func TestPreviewFromFeedBody(t *testing.T) {
 	dir := t.TempDir()
 	store := openStore(t)
 	writeCatalog(t, dir, catalogEntry{ID: "writer", Name: "Writer", Kind: "blog", HomeURL: "https://writer.example", Host: "writer.example", FeedURL: ptr("https://writer.example/feed")})
-	// Long enough to be a whole article (reader-service SHORT_FEED_TEXT); a shorter body is checked against the page.
+	// Long enough to be a whole article (internal/reading's shortFeedText); a shorter body is checked against the page.
 	body := "<p>" + strings.Repeat("A real paragraph from the feed body. ", 50) + "</p>"
 	xml := `<rss xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Writer</title><link>https://writer.example/</link><item><title>Post</title><link>https://writer.example/post/</link><pubDate>` +
 		daysAgo(2) + `</pubDate><content:encoded><![CDATA[` + body + `]]></content:encoded></item></channel></rss>`
@@ -320,8 +320,7 @@ func TestUpstreamPicks(t *testing.T) {
 	cache := filepath.Join(dir, "cache.json")
 	explore := service(t, Options{Resources: dir, Cache: cache, FetchFeed: fetchFeed, Changed: changed, Upstreams: chosen, FindIcon: findIcon, ReadPage: readPage})
 	for id := range list(t, explore) {
-		// The upstreams are read behind the list, which is made from what was known before (as TS's, which cannot
-		// see a read land before it returns).
+		// The upstreams are read behind the list, which is made from what was known before.
 		check(t, !strings.HasPrefix(id, "pick:"), "the first list shows no recommendation", id)
 	}
 	<-refreshed
@@ -398,7 +397,7 @@ func TestUpstreamPicks(t *testing.T) {
 }
 
 // subscriptions take the catalog name; unrenamed sources adopt it once, renamed ones keep theirs
-// (with explore.ts nameFor; the store's part is library/feed_test.go TestAdoptNames)
+// (with NameFor; the store's part is library/feed_test.go TestAdoptNames)
 func TestNameFor(t *testing.T) {
 	dir := t.TempDir()
 	writeCatalog(t, dir,
@@ -535,10 +534,10 @@ func TestFeaturedSites(t *testing.T) {
 	check(t, explore.Intro(library.Source{SourceSnapshot: library.SourceSnapshot{Host: "studio.example", HomeURL: "https://studio.example/"}}) == "Gallery 推荐" &&
 		explore.Intro(library.Source{SourceSnapshot: library.SourceSnapshot{Host: "x", HomeURL: "https://www.known.example/about"}}) == "范例" &&
 		explore.Intro(library.Source{SourceSnapshot: library.SourceSnapshot{Host: "nowhere.example", HomeURL: "https://nowhere.example/"}}) == "",
-		"an author page's intro is the entry's on its site (AuthorPage.tsx)")
+		"an author page's intro is the entry's on its site")
 }
 
-// The cases of explore.test.ts that are subscription-service.ts's: SubscriptionService with explore's iconFor.
+// Explore's cases that belong to subscriptions: subscription.Service with Explore's IconFor.
 
 // subscribing counts only the last 30 days as unread; undated posts stay unread (the subscription part)
 func TestSubscribeLast30DaysUnread(t *testing.T) {

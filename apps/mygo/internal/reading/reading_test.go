@@ -26,9 +26,9 @@ import (
 	"trie/internal/library"
 )
 
-// reader-service.test.ts, and the halves of other TS tests that read through ReaderService: gallery-page.test.ts,
-// reader-format.test.ts, subscription-service.test.ts and reader-document-validation.test.ts. The comment over each
-// test is the TS test's name. As there, extraction is the extract package called in place, not the worker.
+// Service's cases, then the reading halves of the gallery-page, reader-format, subscription and reader-document
+// validation cases. The comment over each test is its name. Extraction is the extract package called in place, not
+// the worker.
 
 var (
 	long    = strings.Repeat("This is a public paragraph with useful article content and code explanations. ", 8)
@@ -38,7 +38,7 @@ var (
 	empty   = library.Snapshot{Version: 1, AsOf: "2026-11-01", Sources: []library.SourceSnapshot{}, Articles: []library.ArticleSnapshot{}, ReviewItems: []library.ReviewItem{}}
 )
 
-// direct is the TS tests' extract: page without trustedArticle, the feed, cached images and SVG; no fragment, whiteboard
+// direct is the cases' extraction: page without trustedArticle, the feed, cached images and SVG; no fragment, whiteboard
 // or format.
 var direct = Extractors{
 	Page: func(html, url string, _ bool) (extract.Extracted, error) {
@@ -63,7 +63,7 @@ func withFragment(x Extractors) Extractors {
 	return x
 }
 
-// bare is reader-format.test.ts's extraction: nothing but the formatter, which the test gives.
+// bare is the reader-format cases' extraction: nothing but the formatter, which the test gives.
 func bare(format func(string, *library.ReaderSourceSnapshot) (extract.Formatted, error)) Extractors {
 	return Extractors{
 		Page: func(string, string, bool) (extract.Extracted, error) {
@@ -660,9 +660,9 @@ func TestMovedPost(t *testing.T) {
 	check(t, result.SourceKind == "page" && result.SourceURL == "https://writer.example/blog/post", "%s %s", result.SourceKind, result.SourceURL)
 }
 
-// --- The ReaderService halves of other TS tests.
+// --- The reading halves of the gallery-page, reader-format, subscription and reader-document validation cases.
 
-// gallery-page.test.ts's empty snapshot and extract (with the feed's body).
+// The gallery-page cases' empty snapshot and extract (with the feed's body).
 var gallerySnapshot = library.Snapshot{Version: 1, AsOf: "2026-11-05", Sources: []library.SourceSnapshot{}, Articles: []library.ArticleSnapshot{}, ReviewItems: []library.ReviewItem{}}
 
 var (
@@ -676,7 +676,7 @@ func importXML(t *testing.T, s *library.Store, source, xml, feedURL string) stri
 	return must[library.SubscriptionResult](t)(s.ImportFeed(source, parsed, true, nil, "")).Library.Articles[0].ID
 }
 
-// gallery-page.test.ts: a screenshot the read did not save in time is fetched on its own later and kept
+// A screenshot the read did not save in time is fetched on its own later and kept
 func TestScreenshotFetchedLater(t *testing.T) {
 	store := open(t, ":memory:", gallerySnapshot)
 	id := importXML(t, store, "g", `<rss><channel><title>G</title><link>https://g.example/</link><item><title>W</title><link>https://g.example/w</link></item></channel></rss>`, "https://g.example/feed")
@@ -695,7 +695,7 @@ func TestScreenshotFetchedLater(t *testing.T) {
 	check(t, must[string](t)(service.WorkMedia(context.Background(), id, 1)) == "", "a shot with no source stays not loaded")
 }
 
-// gallery-page.test.ts: a cached feed lead-in is read again from the page behind it
+// A cached feed lead-in is read again from the page behind it
 func TestCachedLeadInReadAgain(t *testing.T) {
 	store := open(t, ":memory:", gallerySnapshot)
 	teaser := `<p>A brand strategist's site.</p><p><a href="https://onepagelove.example/pete-sena">Full Review</a></p>`
@@ -724,7 +724,7 @@ func TestCachedLeadInReadAgain(t *testing.T) {
 	check(t, value(workOf(t, *content(t, store, id)).Video) == value(w.Video), "the work survives the cache")
 }
 
-// gallery-page.test.ts: an Awwwards feed item, one sentence under a picture, is read from its entry page
+// An Awwwards feed item, one sentence under a picture, is read from its entry page
 func TestAwwwardsItemReadFromEntry(t *testing.T) {
 	store := open(t, ":memory:", gallerySnapshot)
 	id := importXML(t, store, "aw", `<rss><channel><title>Awwwards - Sites of the day</title><link>https://www.awwwards.com</link><item><title>Agrumea Farm</title><link>`+awardURL+`</link>
@@ -744,7 +744,7 @@ func TestAwwwardsItemReadFromEntry(t *testing.T) {
 	check(t, value(w.Poster) == dataURL("image/jpeg", jpeg) && w.Video == nil, "poster %.40s, video %s", value(w.Poster), value(w.Video))
 }
 
-// reader-format.test.ts's library: one article on one source.
+// The reader-format cases' library: one article on one source.
 var formatSnapshot = library.Snapshot{Version: 1, AsOf: "2026-11-02",
 	Sources: []library.SourceSnapshot{{ID: "writer", Title: "Writer", HomeURL: "https://writer.example/", Host: "writer.example", SampledCount: 1, CatalogCandidateCount: 1, ScopeLabel: "test"}},
 	Articles: []library.ArticleSnapshot{{ID: "article", SourceID: "writer", Title: "Article", URL: "https://writer.example/article", Authors: []string{"Writer"}, Aliases: []string{},
@@ -764,7 +764,7 @@ func save(t *testing.T, s *library.Store, c library.ArticleContent) {
 	noErr(t, s.SaveContent(c))
 }
 
-// gate is a formatter held until it is opened, as the TS tests hold one on a promise; entered says it was reached.
+// gate is a formatter held until it is opened; entered says it was reached.
 func gate() (format func(string, *library.ReaderSourceSnapshot) (extract.Formatted, error), entered chan struct{}, release func()) {
 	opened := make(chan struct{})
 	entered = make(chan struct{}, 4)
@@ -790,7 +790,7 @@ func libraryJSON(t *testing.T, s *library.Store) string {
 	return string(b)
 }
 
-// reader-format.test.ts: offline cache format upgrade persists metadata and images without changing user state
+// Offline cache format upgrade persists metadata and images without changing user state
 func TestOfflineFormatUpgrade(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "library.sqlite")
 	store := open(t, path, formatSnapshot)
@@ -813,7 +813,7 @@ func TestOfflineFormatUpgrade(t *testing.T) {
 	check(t, slices.Equal(saved.Headings, result.Headings) && saved.HTML == result.HTML && first(t, store).Favorite, "after reopening %+v", saved)
 }
 
-// reader-format.test.ts: failed local reformat retains the cached readable article
+// Failed local reformat retains the cached readable article
 func TestFailedReformatKeepsCache(t *testing.T) {
 	store := open(t, ":memory:", formatSnapshot)
 	save(t, store, cached("<p>Existing cached body.</p>"))
@@ -824,7 +824,7 @@ func TestFailedReformatKeepsCache(t *testing.T) {
 	check(t, result.HTML == "<p>Existing cached body.</p>" && result.RefreshError != nil && content(t, store, "article").HTML == result.HTML, "%+v", result)
 }
 
-// reader-format.test.ts: offline refresh fallback upgrades old layout even when a newer feed body is pending
+// Offline refresh fallback upgrades old layout even when a newer feed body is pending
 func TestOfflineFallbackUpgrades(t *testing.T) {
 	seed := formatSnapshot
 	article := seed.Articles[0]
@@ -844,7 +844,7 @@ func TestOfflineFallbackUpgrades(t *testing.T) {
 	check(t, saved.FormatVersion == extract.FormatVersion && saved.FeedVersion == nil && must[*library.FeedBody](t)(store.FeedContent(article.ID)).Version == "newer", "%+v", saved)
 }
 
-// reader-format.test.ts: late reformat cannot overwrite a body refreshed while its worker was running
+// Late reformat cannot overwrite a body refreshed while its worker was running
 func TestLateReformatKeepsNewBody(t *testing.T) {
 	store := open(t, ":memory:", formatSnapshot)
 	save(t, store, cached("<h2>Old body</h2>"))
@@ -860,7 +860,7 @@ func TestLateReformatKeepsNewBody(t *testing.T) {
 	check(t, content(t, store, "article").HTML == "<h2>New body</h2>", "%s", content(t, store, "article").HTML)
 }
 
-// reader-format.test.ts: late reformat preserves newer fetch metadata when refreshed HTML is identical
+// Late reformat preserves newer fetch metadata when refreshed HTML is identical
 func TestLateReformatKeepsMetadata(t *testing.T) {
 	store := open(t, ":memory:", formatSnapshot)
 	original := cached("<h2>Same body</h2>")
@@ -879,7 +879,7 @@ func TestLateReformatKeepsMetadata(t *testing.T) {
 	check(t, saved.SourceURL == "https://writer.example/feed" && count(saved.MissingImageCount) == 1, "%+v", saved)
 }
 
-// subscription-service.test.ts's feed of one writer.
+// The subscription cases' feed of one writer.
 func writerFeed(body string, slugs ...string) string {
 	var items strings.Builder
 	for _, s := range slugs {
@@ -888,7 +888,7 @@ func writerFeed(body string, slugs ...string) string {
 	return `<rss xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Real Writer</title><link>https://writer.example/</link>` + items.String() + `</channel></rss>`
 }
 
-// subscription-service.test.ts: empty library -> typed feed URL -> preview -> persisted articles -> real source body, no
+// Empty library -> typed feed URL -> preview -> persisted articles -> real source body, no
 // sample whitelist (its reading half: the subscription half is in internal/subscription)
 func TestFeedBodyRead(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "db.sqlite")
@@ -901,7 +901,7 @@ func TestFeedBodyRead(t *testing.T) {
 	check(t, content(t, open(t, path, empty), id).Status == "ready", "the body was not kept")
 }
 
-// subscription-service.test.ts: repairing a partial page cache keeps using the page instead of a feed body with fewer images
+// Repairing a partial page cache keeps using the page instead of a feed body with fewer images
 func TestRepairPartialPageCache(t *testing.T) {
 	store := open(t, ":memory:", empty)
 	id := importXML(t, store, "writer", writerFeed("Short real body", "one"), "https://writer.example/feed")
@@ -918,7 +918,7 @@ func TestRepairPartialPageCache(t *testing.T) {
 	check(t, result.SourceKind == "page" && count(result.MissingImageCount) == 0 && strings.Contains(result.HTML, "Original page content") && strings.Contains(result.HTML, "data:image/png"), "%+v", result)
 }
 
-// subscription-service.test.ts: late body extraction cannot overwrite a newer feed version in the cache
+// Late body extraction cannot overwrite a newer feed version in the cache
 func TestLateExtractionKeepsNewerFeed(t *testing.T) {
 	store := open(t, ":memory:", empty)
 	id := importXML(t, store, "writer", writerFeed("Old body", "one"), "https://writer.example/feed")
@@ -942,7 +942,7 @@ func TestLateExtractionKeepsNewerFeed(t *testing.T) {
 	check(t, strings.Contains(saved, "New body") && !strings.Contains(saved, "Old body"), "%s", saved)
 }
 
-// reader-document-validation.test.ts: format failure on first retrieval preserves readable content instead of returning unavailable
+// Format failure on first retrieval preserves readable content instead of returning unavailable
 func TestFormatFailureKeepsBody(t *testing.T) {
 	store := open(t, ":memory:", snapshot(t))
 	article := first(t, store)
@@ -958,7 +958,7 @@ func TestFormatFailureKeepsBody(t *testing.T) {
 	check(t, content(t, store, article.ID).HTML == html, "the body was not kept")
 }
 
-// reader-document-validation.test.ts: identical display HTML cannot coalesce different source revisions during cache upgrade
+// Identical display HTML cannot coalesce different source revisions during cache upgrade
 func TestSourceRevisionsNotCoalesced(t *testing.T) {
 	store := open(t, ":memory:", snapshot(t))
 	article := first(t, store)
@@ -994,7 +994,7 @@ func TestSourceRevisionsNotCoalesced(t *testing.T) {
 	check(t, *saved.SourceSnapshot == *source("two"), "%+v", saved.SourceSnapshot)
 }
 
-// --- New in the port.
+// --- Picture conversion and the worker.
 
 // An AVIF picture, which the native reader cannot decode, is kept as PNG when it has transparency and as JPEG when not,
 // converted by sips; one sips cannot read counts as not loaded. The files are real AVIF (ffmpeg's SVT-AV1, Pillow).
@@ -1098,7 +1098,7 @@ func TestWorkerJobs(t *testing.T) {
 	check(t, page.Status == "ready", "the worker's page: %s", page.Status)
 }
 
-// gallery-page.test.ts's entry pages, reduced to the parts the adapters read.
+// The gallery-page cases' entry pages, reduced to the parts the adapters read.
 func cdn(trim string, w int) string {
 	return fmt.Sprintf("https://assets.example/cdn-cgi/image/trim=%s,width=%d,height=351,fit=cover,format=jpg/shot.jpg", trim, w)
 }

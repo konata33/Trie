@@ -35,7 +35,7 @@ func (l *layers) openMenu(id string, at ui.Rect, pointer bool) { l.menu = id }
 // closeAll closes the menus as a page changes (sourceMenu.close()).
 func (l *layers) closeAll() { l.menu = "" }
 
-// sourceMenu is an author's subscription menu (main.tsx sourceMenu), out of
+// sourceMenu is an author's subscription menu, out of
 // its ··· button, which it returns: 重命名 / 在浏览器打开 / 取消订阅. small is the
 // sidebar's 24 square trigger.
 func (a *App) sourceMenu(c *ui.Context, key any, src *library.Source, side bool) ui.Element {
@@ -73,7 +73,7 @@ func (a *App) sourceMenu(c *ui.Context, key any, src *library.Source, side bool)
 	return t
 }
 
-// menuPanel is a menu's look (Menu.tsx): elevated, a line edge, 12 corners,
+// menuPanel is a menu's look: elevated, a line edge, 12 corners,
 // the floating shadow; it grows out of its trigger and leaves by fading.
 func (a *App) menuPanel(c *ui.Context, panel ui.Element) ui.Element {
 	return panel.AttachedOrigin().Transition(a.tr(c, motion.Menu())).ObserveInput(a.observe).
@@ -103,7 +103,7 @@ func (a *App) menuItem(c *ui.Context, it ui.Element, label string, danger bool, 
 	})
 }
 
-// openExternal opens an http(s) address in the browser (main.tsx safeURL).
+// openExternal opens an http(s) address in the browser.
 func (a *App) openExternal(c *ui.Context, raw string) {
 	u, err := web.ParseURL(raw, nil)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Username != "" || u.Password != "" {
@@ -124,13 +124,13 @@ func (a *App) unsubscribe(src *library.Source) {
 	})
 }
 
-// fail shows an error notice (main.tsx error), until it is closed.
+// fail shows an error notice, until it is closed.
 func (a *App) fail(text string) {
 	a.errText = text
 	a.toast.add(toastItem{text: text, err: true})
 }
 
-// The shortcut sheet (ShortcutSheet.tsx): a reference, not a modal.
+// The shortcut sheet: a reference, not a modal.
 var shortcuts = []struct {
 	keys []string
 	text string
@@ -174,7 +174,7 @@ func (a *App) buildLayers(c *ui.Context) {
 	}
 	open := a.layers.dialog != nil
 	a.centred(c, "dialog", &open, motion.Dialog(), func(panel ui.Element) {
-		// DESIGN.md dialog: elevated, 12px corners, the dialog shadow, 24 inside (Dialog.tsx).
+		// DESIGN.md dialog: elevated, 12px corners, the dialog shadow, 24 inside.
 		panel.Width(480).Padding(24).Shadow(0, 0, 0, 1, theme.Line).Shadow(0, 24, 64, 0, theme.ShadowDialog).Label("订阅一个博客")
 	}, func() {
 		ui.Text(c, "订阅一个博客").FontSize(theme.Subtitle).FontWeight(600).LineHeight(1.4).Margin(0, 0, 8, 0)
@@ -190,7 +190,7 @@ func (a *App) buildLayers(c *ui.Context) {
 		}
 	}
 	a.centred(c, "sheet", &a.layers.sheet, motion.Sheet(), func(panel ui.Element) {
-		// A floating panel, 16 inside (ShortcutSheet.tsx).
+		// A floating panel, 16 inside.
 		panel.Width(360).Padding(16).FontSize(theme.Body).LineHeight(1.5).InsetShadow(0, 0, 0, 1, theme.Line).
 			Shadow(0, 0, 0, 1, theme.ShadowEdge).Shadow(0, 12, 32, 0, theme.ShadowFloat).Label("快捷键")
 	}, func() {
@@ -210,8 +210,7 @@ func (a *App) buildLayers(c *ui.Context) {
 	a.toasts(c)
 }
 
-// centred is a centred layer over the shade (Dialog.tsx, ShortcutSheet.tsx):
-// it grows out of the button that opened it and shrinks back into it, the
+// centred is a centred layer over the shade: it grows out of the button that opened it and shrinks back into it, the
 // shade fading on its timing. Opened from the keyboard, it is simply there.
 func (a *App) centred(c *ui.Context, key string, open *bool, t ui.ElementTransition, look func(ui.Element), content func()) {
 	if *open {
@@ -229,7 +228,7 @@ func (a *App) centred(c *ui.Context, key string, open *bool, t ui.ElementTransit
 	})
 }
 
-// Notices (Toast.tsx): one at a time; a notice about someone carries their
+// Notices: one at a time; a notice about someone carries their
 // face; 4 s for news, 8 s while it offers 撤销, errors until closed. ⌘Z
 // presses 撤销.
 type toastItem struct {
@@ -332,7 +331,7 @@ func trimSpace(s string) string { return strings.TrimSpace(s) }
 
 // trip sends a face from (a window box) onto a place read every frame: the
 // notice's face ("notice") or an author's in 收藏 ("shelf:<source ID>"), as
-// what they stand for is let go of and put back (main.tsx letGo). It flies
+// what they stand for is let go of and put back (letGo). It flies
 // as a face flies to the sidebar (faceFlight), and the place hides until
 // it lands.
 func (a *App) trip(img *ui.Bitmap, from ui.Rect, to string) {

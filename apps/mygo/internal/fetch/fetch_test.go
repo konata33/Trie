@@ -23,10 +23,9 @@ import (
 	"time"
 )
 
-// reader-http.test.ts, with a real TLS server in place of the mocked
-// https.request: the client resolves through a stub, dials whatever address
-// the policy pins and is connected to the test server, which presents a
-// certificate for the requested host.
+// Client cases, with a real TLS server: the client resolves through a stub,
+// dials whatever address the policy pins and is connected to the test
+// server, which presents a certificate for the requested host.
 
 type reply struct {
 	status  int
@@ -145,7 +144,7 @@ func fails(t *testing.T, err error, want string) {
 // reader network policy rejects private, reserved and mapped IP addresses
 func TestPublicAddress(t *testing.T) {
 	for _, a := range []string{"127.0.0.1", "10.0.0.1", "192.168.1.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1", "fc00::1", "fe80::1", "::ffff:127.0.0.1", "2001:db8::1", "198.18.1.2",
-		// Beyond the TS list: every other ipaddr.js range, a zoned link-local, a mapped private address, NAT64.
+		// Every other ipaddr.js range, a zoned link-local, a mapped private address, NAT64.
 		"172.16.0.1", "192.0.0.1", "192.0.2.1", "192.88.99.1", "198.51.100.1", "203.0.113.1", "240.0.0.1", "255.255.255.255", "224.0.0.1",
 		"192.175.48.1", "192.31.196.1", "192.52.193.1", "fe80::1%en0", "::ffff:10.0.0.1", "64:ff9b::808:808", "2002::1", "2001::1", "fec0::1", "ff02::1", "::", "100::1", "5f00::1", "3fff::1"} {
 		if PublicAddress(a, false) {
@@ -372,7 +371,7 @@ func TestSizeAndStall(t *testing.T) {
 	}
 }
 
-// Beyond the TS cases: a plain body over the limit, one exactly at it, a
+// A plain body over the limit, one exactly at it, a
 // gzip body inside it, deflate, an unsupported encoding, and a response that
 // keeps delivering a byte at a time, stopped at four times the timeout.
 func TestBodies(t *testing.T) {
@@ -442,7 +441,7 @@ func TestBudgetAndLoops(t *testing.T) {
 }
 
 // A connection dropped before TLS finished, or reset, is a transient network
-// error, which reader-service and subscriptions try once more; DNS that
+// error, which the reader and subscriptions try once more; DNS that
 // fails for now is too, a name that does not exist is not.
 func TestDroppedConnections(t *testing.T) {
 	for _, reset := range []bool{false, true} {

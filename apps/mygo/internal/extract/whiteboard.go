@@ -9,7 +9,7 @@ import (
 	"trie/internal/web"
 )
 
-// whiteboard.ts: an Excalidraw scene (the JSON file a whiteboard is saved as) drawn into an SVG picture the way Excalidraw
+// Whiteboards: an Excalidraw scene (the JSON file a whiteboard is saved as) drawn into an SVG picture the way Excalidraw
 // draws it, the same rough.js strokes from each element's own seed (rough.go). Text uses system fonts. The result still
 // goes through SanitizeSVG before it is kept. Rectangles, ellipses, diamonds, lines and arrows (with arrowheads),
 // freehand strokes and text are drawn; embedded images and frames are left out.
@@ -83,7 +83,7 @@ func wbFont(family float64, ok bool) string {
 	return "Helvetica, Arial, sans-serif"
 }
 
-// wbOptions are whiteboard.ts options(): as Excalidraw's generateRoughOptions, dashes widen the stroke a little, small
+// wbOptions are a shape's drawing options: as Excalidraw's generateRoughOptions, dashes widen the stroke a little, small
 // shapes are drawn less roughly, fills are as heavy as half a stroke.
 type wbOptions struct {
 	rough roughOptions // the generator's options, merged over its defaults
@@ -319,7 +319,7 @@ func jsMax(a, b float64) float64 {
 	return math.Max(a, b)
 }
 
-// RenderWhiteboard is whiteboard.ts renderWhiteboard(): the scene as an SVG picture, or "" for anything that is not one.
+// RenderWhiteboard returns the scene as an SVG picture, or "" for anything that is not one.
 func RenderWhiteboard(source string) string {
 	v, err := parseJS(source)
 	if err != nil {

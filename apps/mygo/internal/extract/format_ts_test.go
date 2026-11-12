@@ -13,8 +13,8 @@ import (
 	"trie/internal/library"
 )
 
-// The cases of svg-image.test.ts, reader-format.test.ts and reader-document.test.ts. Documents are checked by saving them
-// through internal/library, whose SaveContent runs reader-document.ts's isReaderDocument (check.go).
+// SVG picture, reader format and reader document cases. Documents are checked by saving them through internal/library,
+// whose SaveContent runs the reader document check (check.go).
 
 func svgDoc(body string, attrs ...string) string {
 	return `<svg xmlns="http://www.w3.org/2000/svg" ` + strings.Join(attrs, "") + `>` + body + `</svg>`
@@ -106,7 +106,7 @@ func TestSVGUseReferences(t *testing.T) {
 	must(t, strings.Count(spaced, `id="mark"`) == 1, "%s", spaced)
 }
 
-// reader-format.test.ts
+// Reader format
 
 const tinyPNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j5T8AAAAASUVORK5CYII="
 
@@ -280,7 +280,7 @@ func TestFormatLimits(t *testing.T) {
 
 // TestFormatUpgradePersists is the formatter's half of "offline cache format upgrade persists metadata and images
 // without changing user state": a cached body formatted again saves and reloads whole, the favourite kept. Deciding when
-// to reformat is reader-service's, ported with it.
+// to reformat belongs to internal/reading, tested there.
 func TestFormatUpgradePersists(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "library.sqlite")
 	s, err := library.Open(path, formatSnapshot)
@@ -310,7 +310,7 @@ func TestFormatUpgradePersists(t *testing.T) {
 	must(t, state.Articles[0].Favorite, "the favourite was lost")
 }
 
-// reader-document.test.ts
+// Reader document
 
 func TestDocumentSemanticNodes(t *testing.T) {
 	r := format(t, `<script>bad()</script><div><h2 id="section">Section</h2><blockquote><p>[!NOTE]<br>Useful.</p></blockquote><table><caption>Rates</caption><tr><th scope="col">Name</th><td><strong>Value</strong></td></tr></table><p onclick="bad()">Text <a href="javascript:bad()">unsafe</a> <a href="https://example.com/ok" title="safe">safe</a></p><img src="`+tinyPNG+`" alt="Picture"><button>Fake</button></div>`)

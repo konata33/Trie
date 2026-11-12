@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Ports of clips.test.ts, favorites.test.ts and reading-position.test.ts.
+// Clip, favourite and reading-position cases.
 
 const clipUUID = "6f1c2d3e-4a5b-4c6d-8e7f-90a1b2c3d4e5"
 

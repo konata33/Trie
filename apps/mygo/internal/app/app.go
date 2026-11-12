@@ -1,8 +1,6 @@
 // Package app is Trie's window: the shell (the sidebar and the content
-// area's crossings), an author's page and the reader, carried over from the
-// Electron app's renderer (apps/desktop/src/renderer/src: main.tsx,
-// Sidebar.tsx, AuthorPage.tsx, ArticleReader.tsx and the parts they use),
-// drawn by MyGo, on the library, reading and subscription packages.
+// area's crossings), an author's page and the reader, drawn by MyGo, on the
+// library, reading and subscription packages.
 package app
 
 import (
@@ -37,8 +35,7 @@ type Options struct {
 	// Sync runs the jobs at once, on the calling goroutine, for tests and
 	// screenshots; otherwise each runs on a goroutine of its own.
 	Sync bool
-	// Refresh reads the subscriptions once as the window opens, as the
-	// Electron app does.
+	// Refresh reads the subscriptions once as the window opens.
 	Refresh bool
 	// Thumbs loads a list row's picture; nil uses the library and the
 	// network (thumb.go).
@@ -63,7 +60,7 @@ type App struct {
 	authors []*author
 	icons   map[string]*siteIcon // by source ID
 
-	// Navigation (motion-spike's crossings): the page showing, where going
+	// Navigation: the page showing, where going
 	// back goes, the change asked for in this build and shown in the next,
 	// how the page showing came, and the page left, built on for its exit.
 	page page
@@ -90,10 +87,10 @@ type App struct {
 	lists   map[string]*listState // an author's page by source ID
 	readers map[string]*readerPage
 	thumbs  map[string]*thumb
-	// Where each article was read to in this session (useReadingSession's
-	// sessionPositions), kept as each reader is left.
+	// Where each article was read to in this session, kept as each reader
+	// is left.
 	positions map[string]reader.Position
-	fontSize  float32 // the body's size, for the session (ArticleReader sessionFontSize)
+	fontSize  float32 // the body's size, for the session
 	wide      bool    // 宽松
 	focused   bool    // 专注阅读: the sidebar slides away
 
@@ -137,7 +134,7 @@ type App struct {
 	movedAt       time.Time // when the page last changed
 	pressed       []string  // Press's, for the next build
 	busy          bool      // a library change is being saved
-	said          []string  // for screen readers to read out at the next build (main.tsx's live regions)
+	said          []string  // for screen readers to read out at the next build
 	errText       string
 	booted        bool
 }
@@ -216,7 +213,7 @@ func (a *App) ease(d time.Duration) ui.Animation {
 	return ui.Animation{Duration: d, Ease: motion.Ease, NonMotion: true}
 }
 
-// observe keeps what the last input was (main.tsx data-input): a key marks
+// observe keeps what the last input was: a key marks
 // the keyboard, the pointer moving clears it.
 func (a *App) observe(ev ui.InputEvent) {
 	switch ev.Kind {
@@ -268,7 +265,7 @@ func (a *App) View(c *ui.Context) {
 	a.noDrag = nil
 	root := ui.Row(c).Fill().AlignItems(ui.Stretch).Background(theme.Window).Font(theme.Sans).FontSize(theme.FontSize).
 		LineHeight(theme.LineHeight).FontFeatures(theme.Numbers).TextColor(theme.Text).ObserveInput(a.observe)
-	// The page behind a dialog goes out of focus while it shows (Dialog.tsx backdrop-filter).
+	// The page behind a dialog goes out of focus while it shows.
 	target, d := float32(0), a.layers.out
 	if a.layers.dialog != nil {
 		target, d = motion.Behind, a.layers.in
@@ -322,7 +319,7 @@ func (a *App) View(c *ui.Context) {
 	})
 }
 
-// dragStrip is the window's drag strip (app.styles titlebar): the top 38
+// dragStrip is the window's drag strip: the top 38
 // DIPs move the window, but for the controls there.
 func (a *App) dragStrip(c *ui.Context, holes []ui.Rect) {
 	ui.Box(c.Key("titlebar")).Absolute().Left(0).Top(0).Right(0).Height(38).DragWindow().AccessHidden(true).
@@ -345,8 +342,8 @@ func (a *App) control(e ui.Element) ui.Element {
 	return e
 }
 
-// boot runs once, with the first frame: the launch's refresh, as main.tsx
-// reads the subscriptions again once per launch.
+// boot runs once, with the first frame: the launch's refresh, which reads
+// the subscriptions again once per launch.
 func (a *App) boot(c *ui.Context) {
 	if !a.opt.Sync {
 		go warmFonts()

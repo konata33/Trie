@@ -16,8 +16,8 @@ import (
 
 var charset = regexp.MustCompile(`charset[` + web.Space + `]*=[` + web.Space + `]*["']?([\w-]+)`)
 
-// Charset is the charset a Content-Type names, read as reader-service.ts
-// reads it (/charset\s*=\s*["']?([\w-]+)/i); "" when it names none. Labels
+// Charset is the charset a Content-Type names, read with
+// /charset\s*=\s*["']?([\w-]+)/i; "" when it names none. Labels
 // are case-insensitive, so the lowered spelling is returned.
 func Charset(contentType string) string {
 	if m := charset.FindStringSubmatch(strings.Map(web.LowerASCII, contentType)); m != nil {
@@ -62,8 +62,8 @@ func Decode(body []byte, label string) string {
 		}
 		return string(out)
 	}
-	// ponytail: Node decodes the multi-byte encodings with ICU, which reads some invalid or user-defined
-	// sequences differently from x/text's WHATWG decoders (PUA, C1 controls, U+FFFD); real text reads the same.
+	// ponytail: x/text's WHATWG decoders read some invalid or user-defined multi-byte sequences differently
+	// from ICU's (PUA, C1 controls, U+FFFD); real text reads the same.
 	out, err := e.NewDecoder().Bytes(body)
 	if err != nil {
 		return utf8String(body)

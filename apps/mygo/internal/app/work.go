@@ -27,7 +27,7 @@ import (
 	"trie/internal/video"
 )
 
-// A design gallery's work (WorkPage.tsx, work.css): its recording or first
+// A design gallery's work: its recording or first
 // screen on the screenshot ground, its parts as a contact sheet, who made it
 // with the way to the real site, and the labelled facts after the words.
 
@@ -64,7 +64,7 @@ func (a *App) shotPic(rp *readerPage, i int) reader.Pic {
 }
 
 // workLate fetches the pictures of a work the read did not get to within its
-// wait (WorkHero, WorkShots): the first screen, the recording and the shots,
+// wait: the first screen, the recording and the shots,
 // two at a time; each takes its place as it lands.
 func (a *App) workLate(rp *readerPage) {
 	if rp.lateAsked || rp.work == nil || a.warming {
@@ -156,7 +156,7 @@ func (a *App) waitingGround(c *ui.Context, e ui.Element) {
 }
 
 // workHero builds the work's first screen, its strip of shots and who made it, one under another. Each part's top margin
-// collapses with what is above it, as work.css's do: with the head's 36, a notice's 24 (afterNotice), or the part before's
+// collapses with what is above it, as CSS margins do: with the head's 36, a notice's 24 (afterNotice), or the part before's
 // none. It returns the margin under the last part, for the body's to collapse with: 36, the head's, when there is none.
 func (a *App) workHero(c *ui.Context, rp *readerPage, art *library.Article, afterNotice bool) float32 {
 	w := rp.work
@@ -281,7 +281,7 @@ func (a *App) workHero(c *ui.Context, rp *readerPage, art *library.Article, afte
 				if w.Host != nil {
 					host = *w.Host
 				}
-				// The way to the real site (.work-by a): its underline a hairline, then the arrow.
+				// The way to the real site: its underline a hairline, then the arrow.
 				b := ui.ButtonBase(c.Key("site")).Label(host).Gap(4).AlignItems(ui.Center).Radius(6).FocusRing(false)
 				color, line := theme.Text2, theme.Line
 				if b.Hovered() {
@@ -304,7 +304,7 @@ func (a *App) workHero(c *ui.Context, rp *readerPage, art *library.Article, afte
 	return gap
 }
 
-// recording is a work's recording as its page plays it (WorkHero's video): the player of the file it is kept in, or why
+// recording is a work's recording as its page plays it: the player of the file it is kept in, or why
 // there is none yet.
 type recording struct {
 	player  *ui.VideoPlayer
@@ -339,7 +339,7 @@ func (a *App) workRecording(c *ui.Context, rp *readerPage, hero ui.Element, rati
 	hero.Draw(func(p *ui.Painter, _ ui.Rect) { rec.scale = p.Scale() })
 	fade := func(d time.Duration) ui.Animation {
 		if still {
-			return ui.Animation{Duration: time.Nanosecond} // work.css: no transitions under less motion
+			return ui.Animation{Duration: time.Nanosecond} // no transitions under less motion
 		}
 		return a.ease(d)
 	}
@@ -468,7 +468,7 @@ func (a *App) openRecording(rp *readerPage, data string, w, h int, still bool) {
 			}
 			rec.opening = false
 			if err != nil {
-				// As a video that does not load in the Electron app: the first screen stays, and nothing is said.
+				// A recording that does not play: the first screen stays, and nothing is said.
 				log.Printf("trie: the recording of %s does not play: %v", rp.id, err)
 				rec.failed = true
 				return
@@ -481,8 +481,8 @@ func (a *App) openRecording(rp *readerPage, data string, w, h int, still bool) {
 	})
 }
 
-// stillPlay plays a recording asked for while the desktop asks for less motion, as the Electron app does once its picture
-// is clicked, where ui.Video holds a video at its first frame: a goroutine decodes it a frame ahead, and the view shows each
+// stillPlay plays a recording asked for, its picture clicked, while the desktop asks for less motion, where ui.Video
+// holds a video at its first frame: a goroutine decodes it a frame ahead, and the view shows each
 // frame as it comes due, on time while it shows, and stops as it goes from view or out of sight.
 type stillPlay struct {
 	bmp    *ui.Bitmap

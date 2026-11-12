@@ -14,8 +14,8 @@ import (
 // its load never over (catk.de, vendredi-society.fr: a first screen of the
 // page's background alone). seen has the window answer AppKit's isVisible as
 // shown, which is what WebKit asks of it: the page then runs as it would on
-// screen, as Electron's hidden windows ran theirs, while the window stays off
-// the screen, out of the window lists and without the focus. NSWindow's
+// screen, while the window stays off the screen, out of the window lists and
+// without the focus. NSWindow's
 // isVisible answers so for the capture windows (seeming) and as before for
 // every other window.
 

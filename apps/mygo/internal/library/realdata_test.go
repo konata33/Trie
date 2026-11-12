@@ -14,9 +14,10 @@ import (
 	"trie/internal/web"
 )
 
-// TestRealLibrary compares the Go store with the Electron one on a copy of a
-// real library: TRIE_LIBRARY_COPY names the library (only ever copied),
-// TRIE_TS_DUMP what .context/mygo/data-layer/dump.ts made of it.
+// TestRealLibrary compares the Go store with reference outputs recorded from
+// the previous implementation on a copy of a real library: TRIE_LIBRARY_COPY
+// names the library (only ever copied), TRIE_TS_DUMP what
+// .context/mygo/data-layer/dump.ts made of it.
 // .context/mygo/data-layer/run.sh sets both.
 func TestRealLibrary(t *testing.T) {
 	source, dumpPath := os.Getenv("TRIE_LIBRARY_COPY"), os.Getenv("TRIE_TS_DUMP")
@@ -121,14 +122,14 @@ func TestRealLibrary(t *testing.T) {
 		failed = failed || len(diffs) > 0
 	}
 	if failed {
-		t.Error("the Go store differs from the Electron store")
+		t.Error("the Go store differs from the recorded reference")
 	}
 	replay(t, source, seed, ts)
 	roundTrip(t, source, seed)
 }
 
 // replay applies dump.ts's scripted changes to a fresh copy and compares the
-// library and the rows they leave with what the Electron store left.
+// library and the rows they leave with what the previous implementation left.
 func replay(t *testing.T, source string, seed Snapshot, ts map[string]any) {
 	s := mustOpen(t, copyLibrary(t, source), seed)
 	started := time.Now()
@@ -254,7 +255,7 @@ func replay(t *testing.T, source string, seed Snapshot, ts map[string]any) {
 
 // TestSharedFile writes to a library another process may hold, to see how
 // the two apps share one file: TRIE_SHARED_LIBRARY names a temporary
-// copy (.context/mygo/data-layer/run.sh holds it from Node meanwhile).
+// copy (.context/mygo/data-layer/run.sh holds it from another process meanwhile).
 func TestSharedFile(t *testing.T) {
 	path := os.Getenv("TRIE_SHARED_LIBRARY")
 	if path == "" {
@@ -408,7 +409,7 @@ func sourceIDs(state LibraryState) []string {
 	return ids
 }
 
-// attempt is dump.ts's attempt(): the value, or {error} when the call failed.
+// attempt is the value, or {error} when the call failed, as dump.ts records it.
 func attempt[T any](v T, err error) any {
 	if err != nil {
 		return map[string]string{"error": err.Error()}

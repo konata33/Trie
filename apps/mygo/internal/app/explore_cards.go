@@ -14,8 +14,8 @@ import (
 	"trie/internal/theme"
 )
 
-// The pieces of Explore's pages (Explore.tsx Lead, Frame, Paper, Story,
-// SiteCard, Cover, Plate, Ink, Face; explore.css).
+// The pieces of Explore's pages: the lead, frames, paper, stories, site
+// cards, covers, plates, ink and faces.
 
 // shrinkTo is img at most w wide, smoothly.
 func shrinkTo(img image.Image, w int) image.Image {
@@ -127,7 +127,7 @@ func (a *App) designFront(c *ui.Context, g exGeometry, on bool) {
 }
 
 // enterIn plays a front page's part coming into focus on Explore's first
-// arrival, the n-th 40 ms after the one before (.issue.enter); the room away
+// arrival, the n-th 40 ms after the one before; the room away
 // comes in as a whole.
 func (a *App) enterIn(c *ui.Context, e ui.Element, n int, on bool) ui.Element {
 	ex := a.ex
@@ -924,7 +924,7 @@ func (a *App) capPost(c *ui.Context, e *explore.Entry, post explore.Post, key st
 }
 
 // pickTurns is a gallery's picks, loaded on first sight and turned on the
-// lead's clock while pointed at (usePicks).
+// lead's clock while pointed at.
 type pickTurns struct {
 	at, prev  int
 	pics      []*exPic

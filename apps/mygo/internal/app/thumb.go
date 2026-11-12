@@ -21,8 +21,7 @@ import (
 	"trie/internal/theme"
 )
 
-// A list row's picture (HomeList Thumb, main/index.ts library:thumb): the
-// article's picture shrunk to 240 wide, kept on disk by article and source,
+// A list row's picture: the article's picture shrunk to 240 wide, kept on disk by article and source,
 // fetched once it is near the view; one that never comes gives its room back.
 type thumb struct {
 	img     *ui.Bitmap
@@ -68,7 +67,7 @@ func (a *App) thumbView(c *ui.Context, id string, index int, near bool) ui.Eleme
 		}
 		img := ui.Image(c, t.img).Fit(ui.Cover).Fill()
 		// It comes into focus: its fade over 280 ms, its blur and scale over
-		// 560 (author.css); under less motion only the fade.
+		// 560; under less motion only the fade.
 		if t.shown.IsZero() {
 			t.shown = c.Now()
 		}
@@ -94,8 +93,8 @@ func (a *App) loadThumb(id string, index int) (*ui.Bitmap, error) {
 	return a.thumbFrom(id, index, true)
 }
 
-// thumbFrom is a row's picture from the thumbnails kept on disk (the
-// Electron app's too: the same names), else, when fetching, read and kept.
+// thumbFrom is a row's picture from the thumbnails kept on disk, else, when
+// fetching, read and kept.
 func (a *App) thumbFrom(id string, index int, fetching bool) (*ui.Bitmap, error) {
 	img, err := a.thumbImage(id, index, 240, fetching)
 	if img == nil {
@@ -105,8 +104,7 @@ func (a *App) thumbFrom(id string, index int, fetching bool) (*ui.Bitmap, error)
 }
 
 // thumbImage is an article's picture at most size wide: 240 for list rows,
-// 1200 for 收藏's pictures, whose file names carry their width (main/index.ts
-// library:thumb).
+// 1200 for 收藏's pictures, whose file names carry their width.
 func (a *App) thumbImage(id string, index, size int, fetching bool) (image.Image, error) {
 	src, err := a.opt.Store.Picture(id, index)
 	if err != nil || src == "" {

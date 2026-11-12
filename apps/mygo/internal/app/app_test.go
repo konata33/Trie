@@ -105,7 +105,7 @@ func TestShots(t *testing.T) {
 }
 
 // TestMeasure prints where the pages put their texts, to set beside the
-// Electron app's (.context/mygo/app-v1/electron/shots/geometry.json):
+// recorded reference (.context/mygo/app-v1/electron/shots/geometry.json):
 // MEASURE=1 go test -run Measure -v.
 func TestMeasure(t *testing.T) {
 	if os.Getenv("MEASURE") == "" {
@@ -129,8 +129,8 @@ func TestMeasure(t *testing.T) {
 	show("十个月，给 LobeHub 换掉 Ant Design：向 Base UI 与 StyleX 的渐进式迁移", "11月4日", "约 17 分钟", "起点是一轮性能优化", "让新旧组件在同一个包里并存")
 }
 
-// TestPairs writes the reader at the scroll positions the Electron app was
-// captured at (.context/mygo/app-v1/electron/pairs.mjs): PAIRS=dir go test -run Pairs.
+// TestPairs writes the reader at the scroll positions the previous
+// implementation's captures were taken at (.context/mygo/app-v1/electron/pairs.mjs): PAIRS=dir go test -run Pairs.
 func TestPairs(t *testing.T) {
 	dir := os.Getenv("PAIRS")
 	if dir == "" {
