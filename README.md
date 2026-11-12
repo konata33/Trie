@@ -60,3 +60,7 @@ docs/               产品、设计、页面规格、正文引擎和决策记录
 ## 参与开发
 
 欢迎提交问题和改动。开始之前请先读 [CONTRIBUTING.md](CONTRIBUTING.md)；改界面前先读 [docs/DESIGN.md](docs/DESIGN.md) 和 [docs/PAGES.md](docs/PAGES.md) 中对应的页面。
+
+## 许可
+
+代码以 [MIT](LICENSE) 许可发布。`apps/mygo/resources/explore` 中的站点图标、站点名称和文章摘要归各自网站所有，只用于在应用里标识来源，不在 MIT 许可范围内。
