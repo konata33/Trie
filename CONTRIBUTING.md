@@ -70,7 +70,6 @@ go tool mygo build -skip-dmg
 ## 文档约定
 
 - 规范（[docs/PRODUCT.md](docs/PRODUCT.md)、[docs/DESIGN.md](docs/DESIGN.md)、[docs/PAGES.md](docs/PAGES.md)、[docs/READER_ENGINE.md](docs/READER_ENGINE.md)）只写现在的做法：陈述句、具体数值，不写日期、来历和被否的方案。
-- 为什么这样定、考虑过哪些做法，写进 [docs/decisions/](docs/decisions/README.md)，一个决定一个文件。
 - 项目文档用中文。
 
 ## 界面改动
@@ -83,4 +82,4 @@ go tool mygo build -skip-dmg
 
 - 一次提交只做一件事；提交信息用英文，首行概括改了什么，例如 `Motion polish: continuous selection, page fades and rolling counts`。
 - 合并请求写清改了什么、为什么改、怎么验证过；界面改动附截图。
-- 涉及规范或决策的改动，同一个合并请求里更新对应文档。
+- 改了产品或界面规则，同一个合并请求里更新 `docs/` 里对应的规范。
