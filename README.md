@@ -29,10 +29,10 @@ Trie 不追求「把所有新内容都推给你」，那是通用 RSS 阅读器�
 ```sh
 git clone <仓库地址> trie
 cd trie/apps/mygo
-TRIE_DATA_DIR=/tmp/trie-dev go run .
+TRIE_DATA_DIR=/tmp/trie-dev go tool mygo dev
 ```
 
-从源码运行时，应用只打开 `TRIE_DATA_DIR` 指向的资料库（必须是绝对路径），不会碰已安装版本的资料库。打包和安装见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+开发版在程序坞上叫「Trie Dev」，只打开 `TRIE_DATA_DIR` 指向的资料库（必须是绝对路径），不会碰已安装版本的资料库。打包和安装见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 文档
 

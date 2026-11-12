@@ -12,8 +12,10 @@
 
 ```sh
 cd apps/mygo
-TRIE_DATA_DIR=/tmp/trie-dev go run .
+TRIE_DATA_DIR=/tmp/trie-dev go tool mygo dev
 ```
+
+开发模式把应用打包成「Trie Dev」（标识 `com.example.trie.dev`，放在 `apps/mygo/.mygo/dev/`）再启动，程序坞上和正式版分得开。改了源码会自动重新构建并重启，Ctrl+C 结束。
 
 从源码运行时，应用只打开 `TRIE_DATA_DIR` 指向的目录：必须是绝对路径，不能是真实资料库，目录不存在时自动创建一个空资料库。
 
@@ -21,7 +23,7 @@ TRIE_DATA_DIR=/tmp/trie-dev go run .
 
 ```sh
 cp -R ~/Library/Application\ Support/Trie /tmp/trie-copy
-TRIE_DATA_DIR=/tmp/trie-copy go run .
+TRIE_DATA_DIR=/tmp/trie-copy go tool mygo dev
 ```
 
 | 环境变量 | 作用 |

@@ -5,10 +5,10 @@ Trie 的桌面应用：Go 写成，界面用 [MyGo](https://github.com/egoist/my
 ## 运行与检查
 
 ```sh
-TRIE_DATA_DIR=/tmp/trie-dev go run .        # 从源码运行，只打开这个目录
-CGO_ENABLED=0 go test -timeout 30m ./...    # 测试
+TRIE_DATA_DIR=/tmp/trie-dev go tool mygo dev      # 开发版「Trie Dev」，只打开这个目录，改了源码自动重启
+CGO_ENABLED=0 go test -timeout 30m ./...          # 测试
 go vet ./... && go tool mygo vet . && gofmt -l .
-go tool mygo build -skip-dmg                # 打包到 build/darwin-arm64/Trie.app
+go tool mygo build -skip-dmg                      # 打包到 build/darwin-arm64/Trie.app
 ```
 
 ## 结构

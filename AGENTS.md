@@ -19,7 +19,7 @@ Trie 是 macOS 上的博客阅读应用，代码在 `apps/mygo`：Go + MyGo 原�
 
 都在 `apps/mygo` 下运行：
 
-- 运行：`TRIE_DATA_DIR=<资料库副本的绝对路径> go run .`
+- 运行：`TRIE_DATA_DIR=<资料库副本的绝对路径> go tool mygo dev`。它把开发版打包成「Trie Dev」再启动，改了源码会自动重新构建并重启；在后台运行时用 `kill -INT` 结束 mygo 进程，它会先关掉应用。不用 `go run .`：那样跑出来的程序没有应用包，程序坞上显示成小写的 `trie`。要自己 `go build` 出程序时（比如带 `e2e` 标签做自动化），用 `-o` 把输出命名为 `Trie Dev`。
 - 测试：`CGO_ENABLED=0 go test -timeout 30m ./...`
 - 检查：`go vet ./...`、`go tool mygo vet .`、`gofmt -l .`
 - 打包：`go tool mygo build -skip-dmg`，产物在 `build/darwin-arm64/Trie.app`。装进 `/Applications` 会替换正在使用的版本，先征得维护者同意。
