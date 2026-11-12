@@ -56,6 +56,15 @@ type readerPage struct {
 	lateWait  map[reading.Part]bool
 	lateAt    map[reading.Part]time.Time
 	rec       recording // and its recording, as it plays
+	// The picture its first screen shows once one is picked (stagePic's s), and when: picked by the pointer, it grows up
+	// out of the strip (flies) from pickFrom, its place there from the first screen's corner; followed from the viewer's
+	// steps, the zero time. stageBox is the first screen in the window, as the frame before laid it out.
+	show     int
+	picked   bool
+	pickAt   time.Time
+	flies    bool
+	pickFrom ui.Rect
+	stageBox ui.Rect
 
 	lit   float32   // the moon as the article was opened, for its row's to wane from
 	swipe backSwipe // the two-finger swipe back

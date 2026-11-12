@@ -20,10 +20,11 @@ import (
 // and under less motion only fades; from the keyboard it is simply there
 // or gone. Esc, a click beside the picture or 关闭 close it, and the focus
 // goes back to what opened it, whose place stays empty while the picture
-// is large. A work's shots show one at a time, named with their place in
-// the set: 上一张 and 下一张 at the sides, and ← →, walk through them and
-// round; by the pointer the picture shown lets go where it is while the
-// next comes into focus, from the keys the next is simply there. A shot
+// is large. A work's pictures, its first screen and its shots, show one at
+// a time, named with their place in the set: 上一张 and 下一张 at the
+// sides, and ← →, walk through them and round, and the work's first screen
+// follows; by the pointer the picture shown lets go where it is while the
+// next comes into focus, from the keys the next is simply there. A picture
 // that did not load shows as a quiet tile saying so.
 
 type viewer struct {
@@ -37,8 +38,9 @@ type viewer struct {
 	instant bool        // the keys opened it
 	until   time.Time   // closed: its copy goes until then, and its place stays empty
 
-	// A work's shots: the one shown, from 1, 0 for a picture of the body;
-	// its place in the strip as this build laid it out; a step asked for,
+	// A work's pictures, as its strip lists them: the one shown, from 1, 0
+	// for a picture of the body; its place on the work's first screen as
+	// this build laid it out; a step asked for,
 	// and the frame it was asked in, which shows it in the next one, so that
 	// the picture it leaves goes as that frame said; the frame the last
 	// step showed in.
@@ -47,14 +49,14 @@ type viewer struct {
 	step   int
 	stepAt time.Time
 	swapAt time.Time
-	// The shot a step by the pointer left, letting go where it showed for
+	// The picture a step by the pointer left, letting go where it showed for
 	// SwapOut from swapAt; 0 for none.
 	gone    int
 	goneBox ui.Rect
 }
 
 // land shows a step asked for in a frame before this one, through a set of
-// n shots, round at both ends.
+// n pictures, round at both ends.
 func (v *viewer) land(now time.Time, n int) {
 	if v.step != 0 && now.After(v.stepAt) && n > 0 {
 		v.shot = ((v.shot-1+v.step)%n+n)%n + 1
@@ -93,20 +95,22 @@ func (a *App) viewerView(c *ui.Context) {
 		*v = viewer{run: v.run}
 		return
 	}
-	shots := 0
+	from, shots := 0, 0 // the work's pictures, from stagePic's from
 	if v.shot > 0 && v.rp != nil && v.rp.work != nil {
-		shots = len(v.rp.work.Sections)
+		var n int
+		from, n = a.stageSet(v.rp)
+		shots = n - from + 1
 	}
 	if v.rp == nil || a.page != (page{"reader", v.rp.id}) || v.shot > shots || v.shot == 0 && (v.pic.W <= 0 || v.pic.H <= 0) {
 		*v = viewer{run: v.run} // its page went
 		return
 	}
-	// Its place on the page, or in the strip, if it shows there: closed
-	// now, the picture would fly back into it.
+	// Its place on the page, or on the work's first screen, if it shows
+	// there: closed now, the picture would fly back into it.
 	twin := v.rp.r.HiddenBox()
 	if v.shot > 0 {
 		v.land(now, shots)
-		v.pic, twin, v.place = a.shotPic(v.rp, v.shot-1), v.place, ui.Rect{}
+		v.pic, twin, v.place = a.stagePic(v.rp, v.shot-1+from), v.place, ui.Rect{}
 	}
 	p := v.pic
 	w, h := c.Size()
@@ -140,7 +144,7 @@ func (a *App) viewerView(c *ui.Context) {
 	if first && twin.W <= 0 {
 		twin = p.Box // the page has not left it empty yet
 	}
-	// Anywhere in the window, as a shot past the strip's edge.
+	// Anywhere in the window, as a first screen scrolled partly away.
 	back := !still && twin.W > 0 && twin.H > 0 && twin.Y < h && twin.Y+twin.H > 0 && twin.X < w && twin.X+twin.W > 0
 	if first {
 		v.travel = back && !v.instant
@@ -195,7 +199,7 @@ func (a *App) viewerView(c *ui.Context) {
 			v.gone = v.shot
 		}
 	}
-	// The picture of p in box, or a quiet tile for a shot that did not
+	// The picture of p in box, or a quiet tile for a picture that did not
 	// load, as a dialog: 12 corners and the dialog's shadow.
 	picture := func(key any, p reader.Pic, box ui.Rect) ui.Element {
 		var e ui.Element
@@ -261,7 +265,7 @@ func (a *App) viewerView(c *ui.Context) {
 		// ponytail: one at a time; a step within SwapOut of the last drops its copy at once.
 		if g := v.gone; g > 0 && g <= shots && g != v.shot && v.step == 0 && now.Sub(v.swapAt) < motion.SwapOut {
 			k := motion.Ease(float32(now.Sub(v.swapAt)) / float32(motion.SwapOut))
-			picture(fmt.Sprint("viewer-pic:", v.run, ":", g), a.shotPic(v.rp, g-1), v.goneBox).Opacity(1 - k).IgnoreInput(true).
+			picture(fmt.Sprint("viewer-pic:", v.run, ":", g), a.stagePic(v.rp, g-1+from), v.goneBox).Opacity(1 - k).IgnoreInput(true).
 				AccessHidden(true).Transition(ui.ElementTransition{Duration: -1})
 			c.AnimationFrame()
 		}

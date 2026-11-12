@@ -407,18 +407,25 @@ func TestWorkShotsSwipe(t *testing.T) {
 	}
 }
 
-// A shot clicked opens in the viewer, out of its
-// place in the strip, which stays empty while it shows: 截图, its name and
-// its place in the set under it, 上一张 and 下一张 at the sides. ← and →
-// step through the set and round it, the shot that did not load showing
-// as a missing picture; by the pointer the picture shown lets go where it
-// is while the next comes in, from the keys the next is simply there. Esc
-// closes it, the focus back on the shot that opened it; closed by the
-// pointer, the picture flies back into the place of the
-// one shown, even past the strip's edge, as long as it is in the window.
-func TestWorkShotsViewer(t *testing.T) {
+// stageTester is shotsTester with the page scrolled back, so that the first
+// screen shows whole over the strip, 540 below the top of the window.
+func stageTester(t *testing.T) (*App, *ui.Tester, *readerPage) {
+	t.Helper()
 	a, tt, rp := shotsTester(t)
-	v := &a.viewer
+	rp.r.Scroll.Y = max(0, rp.r.Scroll.Y-340)
+	tt.Frame()
+	settle(tt)
+	return a, tt, rp
+}
+
+// The strip lists the work's own first screen, then its shots, the one the
+// first screen shows checked and ringed. A shot clicked grows up out of the
+// strip into the first screen, over the picture it showed, which goes out of
+// focus beneath it; from the keys the next is simply there, and under less
+// motion it comes into focus where it shows. A shot that did not load, or
+// is on its way, cannot be picked.
+func TestWorkStage(t *testing.T) {
+	_, tt, rp := stageTester(t)
 	if acc, ok := tt.Access("Shot 2：截图没能载入"); !ok || !acc.Disabled {
 		t.Errorf("a shot that did not load is a disabled button: %v %+v", ok, acc)
 	}
@@ -429,16 +436,146 @@ func TestWorkShotsViewer(t *testing.T) {
 	}
 	rp.lateWait = nil
 	tt.Frame()
-	first, ok := tt.Access("查看截图：Shot 1")
+	checked := func(name string) bool {
+		t.Helper()
+		acc, ok := tt.AccessByRole(ui.RoleRadio, name)
+		if !ok {
+			t.Fatalf("no %q in the strip", name)
+		}
+		return acc.Checked
+	}
+	if !checked("首屏") || checked("Shot 1") {
+		t.Fatal("the work's own first screen leads the strip, checked")
+	}
+	hero, ok := tt.Access("放大查看：首屏")
 	if !ok {
-		t.Fatal("the first shot is not a button")
+		t.Fatal("the first screen is not a button")
+	}
+	hx, hy := center(hero.Bounds)
+	at := func() color.RGBA { return tt.Image().RGBAAt(int(hx), int(hy)) }
+	if c := at(); c.R != c.B || c.R < 80 {
+		t.Fatalf("the first screen shows the work's own, grey: %v", c)
+	}
+	// By the pointer: Shot 3 grows up out of the strip.
+	b, _ := tt.AccessByRole(ui.RoleRadio, "Shot 3")
+	tt.Move(center(b.Bounds))
+	tt.Advance(time.Second)
+	tt.ClickAt(center(b.Bounds))
+	tt.Advance(16 * time.Millisecond)
+	tt.Advance(40 * time.Millisecond)
+	if c := at(); c.B > 150 && c.R < 80 {
+		t.Errorf("Shot 3 is at once where it rests: %v", c)
+	}
+	tt.Advance(time.Second)
+	if c := at(); c.B < 200 || c.R > 60 {
+		t.Errorf("Shot 3 is not on the first screen: %v", c)
+	}
+	if !checked("Shot 3") || checked("首屏") {
+		t.Error("the strip does not check Shot 3")
+	}
+	if _, ok := tt.Access("放大查看：Shot 3"); !ok {
+		t.Error("the first screen is not called after Shot 3")
+	}
+	// From the keys: Tab reaches Shot 4, Enter shows it at once.
+	for range 60 {
+		if tt.Focused("Shot 4") {
+			break
+		}
+		tt.Key(0, ui.KeyTab)
+		tt.Frame()
+	}
+	if !tt.Focused("Shot 4") {
+		t.Fatal("Tab does not reach Shot 4")
+	}
+	tt.Key(0, ui.KeyEnter)
+	tt.Advance(16 * time.Millisecond)
+	if c := at(); c.G < 150 || c.B > 80 {
+		t.Errorf("from the keys Shot 4 is simply there: %v", c)
+	}
+	// Under less motion Shot 5 comes into focus where it shows, over Shot 4.
+	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
+	b, _ = tt.AccessByRole(ui.RoleRadio, "Shot 5")
+	tt.Move(center(b.Bounds))
+	tt.Advance(time.Second)
+	tt.ClickAt(center(b.Bounds))
+	tt.Advance(16 * time.Millisecond)
+	tt.Advance(60 * time.Millisecond)
+	if c := at(); c.R < 60 || c.R > 210 {
+		t.Errorf("under less motion the two cross where they show: %v", c)
+	}
+	tt.Advance(time.Second)
+	if c := at(); c.R < 200 || c.G < 180 || c.B > 80 {
+		t.Errorf("Shot 5 is not on the first screen: %v", c)
+	}
+}
+
+// Scrolled while a shot grows up out of the strip, the shot scrolls with the
+// page: it keeps its way from its place in the strip to the first screen,
+// from the first screen's corner, and lands there; so does the line under
+// the strip's pictures.
+func TestWorkStageScroll(t *testing.T) {
+	_, tt, rp := stageTester(t)
+	hero, _ := tt.Access("放大查看：首屏")
+	b, _ := tt.AccessByRole(ui.RoleRadio, "Shot 3")
+	from := ui.Rect{X: b.Bounds.X - hero.Bounds.X, Y: b.Bounds.Y - hero.Bounds.Y, W: b.Bounds.W, H: b.Bounds.W * 10 / 16}
+	tt.Move(center(b.Bounds))
+	tt.Advance(time.Second)
+	tt.ClickAt(center(b.Bounds))
+	for range 6 {
+		tt.Scroll(700, 760, 0, 12)
+		tt.Advance(16 * time.Millisecond)
+	}
+	moved, _ := tt.Access("放大查看：Shot 3")
+	if moved.Bounds.Y > hero.Bounds.Y-20 {
+		t.Fatalf("the page did not scroll: the first screen at %v, then %v", hero.Bounds.Y, moved.Bounds.Y)
+	}
+	pic, ok := tt.AccessByRole(ui.RoleImage, "Shot 3")
+	if !ok {
+		t.Fatal("Shot 3 is not on its way")
+	}
+	// How far along it is, by its width; the rest of its box must be as far along.
+	got := ui.Rect{X: pic.Bounds.X - moved.Bounds.X, Y: pic.Bounds.Y - moved.Bounds.Y, W: pic.Bounds.W, H: pic.Bounds.H}
+	e := (got.W - from.W) / (hero.Bounds.W - from.W)
+	at := func(a, b float32) float32 { return a + (b-a)*e }
+	want := ui.Rect{X: at(from.X, 0), Y: at(from.Y, 0), W: got.W, H: at(from.H, hero.Bounds.H)}
+	if e < 0.1 || e > 0.9 || abs32(got.X-want.X) > 1.5 || abs32(got.Y-want.Y) > 1.5 || abs32(got.H-want.H) > 1.5 {
+		t.Errorf("scrolled on its way, from the first screen's corner it is at %+v, not %+v (%.2f of the way)", got, want, e)
+	}
+	_ = rp
+	tt.Advance(time.Second)
+	pic, _ = tt.AccessByRole(ui.RoleImage, "Shot 3")
+	moved, _ = tt.Access("放大查看：Shot 3")
+	if pic.Bounds != moved.Bounds {
+		t.Errorf("it lands on the first screen: %+v, not %+v", pic.Bounds, moved.Bounds)
+	}
+}
+
+// The first screen clicked opens its picture in the viewer, out of its
+// place, which stays empty while it shows: 截图, its name and its place in
+// the set under it, 上一张 and 下一张 at the sides. ← and → step through the
+// work's pictures, its own first screen and its shots, and round, the shot
+// that did not load showing as a missing picture, and the first screen
+// follows; by the pointer the picture shown lets go where it is while the
+// next comes in, from the keys the next is simply there. Esc closes it, the
+// focus back on the first screen; closed by the pointer, the picture flies
+// back into it.
+func TestWorkShotsViewer(t *testing.T) {
+	a, tt, _ := stageTester(t)
+	v := &a.viewer
+	b, _ := tt.AccessByRole(ui.RoleRadio, "Shot 1")
+	tt.Move(center(b.Bounds))
+	tt.Advance(time.Second)
+	tt.ClickAt(center(b.Bounds))
+	tt.Advance(time.Second)
+	hero, ok := tt.Access("放大查看：Shot 1")
+	if !ok {
+		t.Fatal("the first screen does not show Shot 1")
 	}
 	at := func(x, y float32) color.RGBA { return tt.Image().RGBAAt(int(x), int(y)) }
-	sx, sy := center(first.Bounds)
-	sy = first.Bounds.Y + first.Bounds.W*10/16/2 // the middle of its picture
-	tt.Move(sx, sy)
+	hx, hy := center(hero.Bounds)
+	tt.Move(hx, hy)
 	tt.Advance(time.Second)
-	tt.ClickAt(sx, sy)
+	tt.ClickAt(hx, hy)
 	if !v.open || !v.travel {
 		t.Fatalf("clicked: open %v, travels %v", v.open, v.travel)
 	}
@@ -454,11 +591,11 @@ func TestWorkShotsViewer(t *testing.T) {
 		}
 		return true
 	}
-	if !shows("Shot 1", "1 / 7", "上一张", "下一张", "关闭") {
-		t.Fatalf("the shot's name, 1 / 7 and the arrows: %q", tt.Texts())
+	if !shows("Shot 1", "2 / 8", "上一张", "下一张", "关闭") {
+		t.Fatalf("the shot's name, 2 / 8 and the arrows: %q", tt.Texts())
 	}
-	if c := at(sx, sy); c.R > 120 {
-		t.Errorf("its place in the strip stays empty while it shows: %v", c)
+	if c := at(hx, hy); c.R > 120 {
+		t.Errorf("its place on the first screen stays empty while it shows: %v", c)
 	}
 	big, ok := tt.AccessByRole(ui.RoleImage, "Shot 1")
 	if !ok {
@@ -473,15 +610,20 @@ func TestWorkShotsViewer(t *testing.T) {
 			t.Fatalf("stepping to %s: %q", want, tt.Texts())
 		}
 	}
-	step(ui.KeyRight, "2 / 7")
+	step(ui.KeyRight, "3 / 8")
 	if _, ok := tt.Access("图片没能载入：Shot 2"); !ok {
 		t.Error("the shot that did not load shows as a missing picture")
 	}
-	step(ui.KeyLeft, "1 / 7")
-	step(ui.KeyLeft, "7 / 7")
-	step(ui.KeyRight, "1 / 7")
-	step(ui.KeyRight, "2 / 7")
-	step(ui.KeyRight, "3 / 7")
+	step(ui.KeyLeft, "2 / 8")
+	step(ui.KeyLeft, "1 / 8")
+	if !shows("首屏") {
+		t.Errorf("the work's own first screen is the first of the set: %q", tt.Texts())
+	}
+	step(ui.KeyLeft, "8 / 8")
+	step(ui.KeyRight, "1 / 8")
+	step(ui.KeyRight, "2 / 8")
+	step(ui.KeyRight, "3 / 8")
+	step(ui.KeyRight, "4 / 8")
 	if c := at(px, py); c.B < 200 || c.R > 60 {
 		t.Errorf("from the keys the next is simply there: %v", c)
 	}
@@ -492,37 +634,43 @@ func TestWorkShotsViewer(t *testing.T) {
 	tt.ClickAt(center(next.Bounds))
 	tt.Advance(16 * time.Millisecond)
 	tt.Advance(40 * time.Millisecond)
-	if c := at(px, py); !shows("4 / 7") || c.B < 40 || c.G < 40 {
+	if c := at(px, py); !shows("5 / 8") || c.B < 40 || c.G < 40 {
 		t.Errorf("by the pointer the two cross: %v, %q", c, tt.Texts())
 	}
 	tt.Advance(400 * time.Millisecond)
 	if c := at(px, py); c.B > 60 || c.G < 150 {
 		t.Errorf("crossed, Shot 4 alone: %v", c)
 	}
-	// Esc: the focus goes back to the shot that opened it.
+	// Esc: the focus goes back to the first screen, which shows Shot 4 now.
 	tt.Key(0, ui.KeyEscape)
 	tt.Advance(16 * time.Millisecond)
-	if v.open || !tt.Focused("查看截图：Shot 1") {
-		t.Fatalf("Esc: open %v, the focus back on Shot 1 %v", v.open, tt.Focused("查看截图：Shot 1"))
+	if v.open || !tt.Focused("放大查看：Shot 4") {
+		t.Fatalf("Esc: open %v, the focus back on the first screen %v", v.open, tt.Focused("放大查看：Shot 4"))
 	}
-	if c := at(sx, sy); c.R < 200 {
-		t.Errorf("closed, Shot 1 is back in its place: %v", c)
+	if c := at(hx, hy); c.G < 150 || c.B > 80 {
+		t.Errorf("closed, the first screen shows Shot 4: %v", c)
 	}
-	// Enter opens it at once; ← goes round to Shot 7, past the strip's
-	// edge; closed by the pointer it flies back there.
+	if acc, ok := tt.AccessByRole(ui.RoleRadio, "Shot 4"); !ok || !acc.Checked {
+		t.Error("the strip does not check Shot 4")
+	}
+	// Enter opens it at once; ← goes back to Shot 3; closed by the pointer
+	// it flies back into the first screen, which shows it.
 	tt.Key(0, ui.KeyEnter)
 	tt.Advance(16 * time.Millisecond)
 	if !v.open || v.travel || !v.instant {
 		t.Fatalf("Enter: open %v, travels %v, at once %v", v.open, v.travel, v.instant)
 	}
-	step(ui.KeyLeft, "7 / 7")
+	step(ui.KeyLeft, "4 / 8")
 	tt.ClickAt(640, 830)
 	if v.open || v.until.Sub(tt.Now()) != motion.TravelOut {
-		t.Errorf("closed by the pointer, it flies back to Shot 7's place: open %v, for %v", v.open, v.until.Sub(tt.Now()))
+		t.Errorf("closed by the pointer, it flies back to the first screen: open %v, for %v", v.open, v.until.Sub(tt.Now()))
 	}
 	tt.Advance(time.Second)
-	if !tt.Focused("查看截图：Shot 1") {
-		t.Error("the focus is not back on Shot 1")
+	if !tt.Focused("放大查看：Shot 3") {
+		t.Error("the focus is not back on the first screen")
+	}
+	if c := at(hx, hy); c.B < 200 || c.R > 60 {
+		t.Errorf("the first screen shows Shot 3: %v", c)
 	}
 }
 
@@ -723,7 +871,7 @@ func TestWorkCredits(t *testing.T) {
 // never past it.
 func TestWorkShotLateIn(t *testing.T) {
 	_, tt, rp := shotsTester(t)
-	first, ok := tt.Access("查看截图：Shot 1")
+	first, ok := tt.Access("Shot 1")
 	if !ok {
 		t.Fatal("the first shot is not a button")
 	}

@@ -182,6 +182,27 @@ func (x Crossing) Shared(match any) ui.ElementTransition {
 	return ui.ElementTransition{Animation: &a, Match: match, Fly: true}
 }
 
+// Stage is the picture a work's first screen shows: once another is picked,
+// it goes out of focus and back beneath the one coming, as a page left does
+// (DESIGN.md 移焦的分寸), until it is covered. Its place and size change at
+// once: the picture picked grows up out of the strip along TravelEase over
+// TravelIn, which the page steps, so that it scrolls with the page.
+func Stage() ui.ElementTransition {
+	return ui.ElementTransition{Colors: true, ExitDuration: TravelIn, ExitEase: Ease,
+		Exit: &ui.Motion{Opacity: 0.5, Blur: Defocus, Scale: 0.985}}
+}
+
+// StageStill is Stage under less motion: nothing flies, and the picture
+// picked comes into focus where it shows, out of 2px of blur over the one
+// shown (DESIGN.md 原处换内容), which stays until it is in.
+func StageStill(picked bool) ui.ElementTransition {
+	t := ui.ElementTransition{Colors: true, Duration: SwapIn, Ease: Ease, ExitDuration: SwapIn, Exit: &ui.Motion{Opacity: 1}}
+	if picked {
+		t.Enter = &ui.Motion{Blur: 2}
+	}
+	return t
+}
+
 // Layers come and go over In and Out along Ease.
 func layer(in, out time.Duration, enter, exit ui.Motion) ui.ElementTransition {
 	return ui.ElementTransition{Duration: in, Ease: Ease, ExitDuration: out, ExitEase: Ease, Enter: &enter, Exit: &exit}

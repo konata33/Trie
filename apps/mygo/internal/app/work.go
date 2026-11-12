@@ -53,14 +53,66 @@ func (a *App) workImage(key string, data *string) *ui.Bitmap {
 	return t.img
 }
 
-// shotPic is shot i of rp's work as the viewer shows it, named as the gallery
-// names it; without a picture if it did not load.
-func (a *App) shotPic(rp *readerPage, i int) reader.Pic {
-	s := rp.work.Sections[i]
-	if img := a.workImage(rp.id+":"+strconv.Itoa(i), s.Image); img != nil {
-		return reader.NewPic(i+1, img, s.Name, s.Name)
+// A work's pictures, as its strip lists them and its first screen shows them: s is 0 for its own first screen and i+1 for
+// shot i.
+
+// recorded says whether rp's work has a recording that plays.
+func recorded(rp *readerPage) bool {
+	w := rp.work
+	return w.Video != nil && *w.Video != "" && !rp.rec.failed
+}
+
+// stageSet is the pictures of rp's work from first to n: from 0 when the work has a first screen of its own (its picture,
+// that picture on its way, or its recording), else from 1; n is how many shots it has.
+func (a *App) stageSet(rp *readerPage) (first, n int) {
+	w := rp.work
+	if a.workImage(rp.id+":poster", w.Poster) == nil && !rp.lateWait[reading.Poster] && !recorded(rp) {
+		first = 1
 	}
-	return reader.Pic{ID: i + 1, Alt: s.Name, Caption: s.Name}
+	return first, len(w.Sections)
+}
+
+// stageImage is picture s, nil until it comes, and the part that fetches it late.
+func (a *App) stageImage(rp *readerPage, s int) (*ui.Bitmap, reading.Part) {
+	if s == 0 {
+		return a.workImage(rp.id+":poster", rp.work.Poster), reading.Poster
+	}
+	return a.workImage(rp.id+":"+strconv.Itoa(s-1), rp.work.Sections[s-1].Image), reading.Part(s - 1)
+}
+
+// stageName is what picture s is called: 录屏 or 首屏 for the work's own, a shot as the gallery names it.
+func stageName(rp *readerPage, s int) string {
+	switch {
+	case s > 0:
+		return rp.work.Sections[s-1].Name
+	case recorded(rp):
+		return "录屏"
+	}
+	return "首屏"
+}
+
+// stagePic is picture s as the viewer shows it; without a picture if it did not load.
+func (a *App) stagePic(rp *readerPage, s int) reader.Pic {
+	name := stageName(rp, s)
+	if img, _ := a.stageImage(rp, s); img != nil {
+		return reader.NewPic(s+1, img, name, name)
+	}
+	return reader.Pic{ID: s + 1, Alt: name, Caption: name}
+}
+
+// staged is the picture the first screen shows: the one picked in the strip, or else the work's own, or else the first
+// shot that came or is on its way; -1 for none.
+func (a *App) staged(rp *readerPage) int {
+	first, n := a.stageSet(rp)
+	if rp.picked && rp.show >= first && rp.show <= n {
+		return rp.show
+	}
+	for s := first; s <= n; s++ {
+		if img, part := a.stageImage(rp, s); img != nil || rp.lateWait[part] || s == 0 {
+			return s
+		}
+	}
+	return -1
 }
 
 // workLate fetches the pictures of a work the read did not get to within its
@@ -167,98 +219,26 @@ func (a *App) workHero(c *ui.Context, rp *readerPage, art *library.Article, afte
 		return margin
 	}
 	ui.Column(c.Key("work")).Children(func() {
-		// The recording or the first screen, on the screenshot ground and shadow: the first screen, or its place breathing while it is
-		// on its way, with the recording over it once it plays.
-		poster := a.workImage(art.ID+":poster", w.Poster)
-		waiting := poster == nil && rp.lateWait[reading.Poster]
-		recorded := w.Video != nil && *w.Video != "" && !rp.rec.failed
-		if poster != nil || recorded || waiting {
-			ratio := float32(16.0 / 10)
-			if poster != nil {
-				pw, ph := poster.Size()
-				ratio = float32(pw) / float32(max(1, ph))
+		first, n := a.stageSet(rp)
+		v := &a.viewer
+		if v.rp == rp && v.shot > 0 {
+			v.land(c.Now(), n-first+1)
+			if v.open {
+				rp.show, rp.picked, rp.pickAt = v.shot-1+first, true, time.Time{} // the first screen follows the viewer
 			}
-			hero := ui.Box(c.Key("poster")).FillWidth().AspectRatio(ratio).Radius(10).Margin(top(32, 0), 0, 0, 0).Background(theme.Surface).
-				Shadow(0, 0, 0, 1, theme.LineSoft).Shadow(0, 16, 32, -16, theme.ShadowShot)
-			if waiting {
-				hero.Role(ui.RoleStatus).Label(w.Name + " 的首屏载入中")
-				a.waitingGround(c, hero)
-			}
-			hero.Children(func() {
-				if poster != nil {
-					img := ui.Image(c, poster).Absolute().Fill().Radius(10).Label(w.Name + " 的首屏")
-					a.lateIn(c, rp, reading.Poster, img, 1, 420*time.Millisecond)
-				}
-				if recorded {
-					a.workRecording(c, rp, hero, ratio)
-				}
-			})
 		}
-		if len(w.Sections) > 0 {
-			// The strip rests with a shot at its start, and keeps a swipe that starts on it while it can scroll that way. Each
-			// shot that loaded shows large in the viewer, which walks through them all; its place stays empty meanwhile.
-			v := &a.viewer
-			if v.rp == rp && v.shot > 0 {
-				v.land(c.Now(), len(w.Sections))
-			}
-			rp.r.Aside(c, "shots").ScrollSnap(ui.SnapProximity).Margin(top(24, 0), 0, 0, 0).Scrollbars(false).Label(w.Name + " 的页面截图").Children(func() {
-				ui.Row(c).Gap(8).Padding(0, 0, 4, 0).Children(func() {
-					for i, s := range w.Sections {
-						img := a.workImage(art.ID+":"+strconv.Itoa(i), s.Image)
-						waiting := img == nil && rp.lateWait[reading.Part(i)]
-						label := "查看截图：" + s.Name
-						switch {
-						case waiting:
-							label = s.Name + "：截图载入中"
-						case img == nil:
-							label = s.Name + "：截图没能载入"
-						}
-						b := ui.ButtonBase(c.Key(i)).Label(label).Column().AlignItems(ui.Stretch).Justify(ui.Start).Gap(8).
-							Width((a.column() - 32) / 5).SnapAlign(ui.Start).FocusRing(false).Disabled(img == nil)
-						if img != nil {
-							b.Cursor(ui.CursorZoomIn)
-						}
-						if b.Clicked() {
-							*v = viewer{open: true, rp: rp, shot: i + 1, label: "截图", run: v.run + 1, since: c.Now(), instant: a.kbd}
-						}
-						lit := b.Hovered()
-						b.Children(func() {
-							f := ui.Box(c).FillWidth().AspectRatio(16.0 / 10).Radius(6).ClipX().ClipY().Background(theme.Surface).
-								Center().TextColor(theme.Faint)
-							if b.FocusVisible() {
-								f.Shadow(0, 0, 0, 2, theme.Focus)
-							} else {
-								f.InsetShadow(0, 0, 0, 1, theme.LineSoft)
-							}
-							press := ui.Pose{}
-							if b.Pressed() && !a.kbd {
-								press.Scale = motion.Pressed
-							}
-							f.AnimatePose(press, ui.Animation{Duration: motion.WorkShot, Ease: motion.Ease})
-							if waiting {
-								a.waitingGround(c, f)
-							}
-							f.Children(func() {
-								switch {
-								case img != nil:
-									pic := ui.Image(c, img).Fit(ui.Cover).ObjectPosition(0.5, 0).Fill()
-									o := pic.AnimateTo("lit", map[bool]float32{true: 1, false: 0.88}[lit], a.ease(motion.WorkShot))
-									pic.Opacity(o)
-									a.lateIn(c, rp, reading.Part(i), pic, o, 360*time.Millisecond)
-									if v.rp == rp && v.shot == i+1 && (v.open || c.Now().Before(v.until)) {
-										pic.Opacity(0)
-										v.place = pic.LayoutBounds()
-									}
-								case !waiting:
-									a.icon(c, "brokenImage", 16, false)
-								}
-							})
-							name := ui.Text(c, s.Name).FontSize(theme.Label).LineHeight(16.0 / 12).SingleLine().Ellipsis("…")
-							name.TextColor(name.AnimateColor("ink", map[bool]ui.Color{true: theme.Text2, false: theme.Muted}[lit], a.ease(motion.WorkShot)))
-						})
-					}
-				})
-			})
+		s := a.staged(rp)
+		// The recording plays over the work's own first screen alone: another picked, it lets go, and starts over once
+		// the work's own is back.
+		playing := s == 0 && recorded(rp)
+		if !playing && (rp.rec.player != nil || rp.rec.still != nil || rp.rec.opening) {
+			rp.rec.close()
+		}
+		if s >= 0 {
+			a.workStage(c, rp, s, first, playing, top(32, 0))
+		}
+		if n > first {
+			a.workStrip(c, rp, s, first, n, top(24, 0))
 		}
 		var by []string
 		if w.Designer != nil && *w.Designer != "" {
@@ -302,6 +282,167 @@ func (a *App) workHero(c *ui.Context, rp *readerPage, art *library.Article, afte
 		})
 	})
 	return gap
+}
+
+// workStage is the work's first screen: picture s on the screenshot ground and shadow, or its place breathing while it
+// is on its way, with the recording over the work's own as it plays (playing). The frame keeps the shape of the work's
+// first picture, its own first screen or else its first shot, and the pictures picked fill it from the top. A picture
+// picked by the pointer grows up out of the strip into it, over the strip, while the one shown goes out of focus
+// beneath; from the keys
+// it is simply there, and under less motion it comes into focus where it shows. A click on it shows it large in the
+// viewer, which walks through all the pictures and leaves its place empty meanwhile.
+func (a *App) workStage(c *ui.Context, rp *readerPage, s, first int, playing bool, margin float32) {
+	w, v, now := rp.work, &a.viewer, c.Now()
+	img, part := a.stageImage(rp, s)
+	waiting := img == nil && rp.lateWait[part]
+	frame, _ := a.stageImage(rp, first)
+	if frame == nil {
+		frame = img
+	}
+	ratio := float32(16.0 / 10)
+	if frame != nil {
+		pw, ph := frame.Size()
+		ratio = max(1, float32(pw)/float32(max(1, ph))) // no taller than it is wide: a long page shows its top
+	}
+	name := stageName(rp, s)
+	alt, coming := name, name+"：截图载入中"
+	if s == 0 {
+		alt, coming = w.Name+" 的首屏", w.Name+" 的首屏载入中"
+	}
+	// Over the strip, which a picture picked grows up out of.
+	hero := ui.Box(c.Key("poster")).FillWidth().AspectRatio(ratio).Radius(10).Margin(margin, 0, 0, 0).Background(theme.Surface).
+		Shadow(0, 0, 0, 1, theme.LineSoft).Shadow(0, 16, 32, -16, theme.ShadowShot).ZIndex(1)
+	if waiting {
+		hero.Role(ui.RoleStatus).Label(coming)
+		a.waitingGround(c, hero)
+	}
+	box := hero.LayoutBounds()
+	rp.stageBox = box
+	hero.Children(func() {
+		if img != nil {
+			pic := ui.Image(c.Key(s), img).Absolute().Fit(ui.Cover).ObjectPosition(0.5, 0).IgnoreInput(true).Label(alt)
+			picked := s == rp.show && rp.picked && now.Sub(rp.pickAt) < time.Second
+			k := float32(now.Sub(rp.pickAt)) / float32(motion.TravelIn)
+			switch {
+			case a.still(c):
+				pic.Fill().Radius(10).Transition(a.tr(c, motion.StageStill(picked)))
+			case picked && rp.flies && k < 1 && box.W > 0:
+				// It grows up out of its place in the strip, from the first screen's corner, so that it scrolls
+				// with the page: from the strip's 16:10 and 6 corners to the first screen's frame and 10.
+				e, from := motion.TravelEase(k), rp.pickFrom
+				at := func(a, b float32) float32 { return a + (b-a)*e }
+				pic.Left(at(from.X, 0)).Top(at(from.Y, 0)).Size(at(from.W, box.W), at(from.H, box.H)).Radius(at(6, 10)).
+					Transition(a.tr(c, motion.Stage()))
+				c.AnimationFrame()
+			default:
+				pic.Fill().Radius(10).Transition(a.tr(c, motion.Stage()))
+			}
+			a.lateIn(c, rp, part, pic, 1, 420*time.Millisecond)
+			if v.rp == rp && v.shot > 0 && (v.open || now.Before(v.until)) {
+				pic.Opacity(0)
+				v.place = pic.LayoutBounds()
+			}
+		}
+		if playing {
+			a.workRecording(c, rp, hero, ratio)
+			return
+		}
+		b := ui.ButtonBase(c.Key("zoom")).Label("放大查看：" + name).Absolute().Fill().Radius(10).Center().TextColor(theme.Faint).
+			Cursor(ui.CursorZoomIn).FocusRing(false)
+		if b.FocusVisible() {
+			b.FocusRing(true).FocusRingOffset(-2)
+		}
+		if b.Clicked() {
+			*v = viewer{open: true, rp: rp, shot: s - first + 1, label: "截图", run: v.run + 1, since: now, instant: a.kbd}
+		}
+		if img == nil && !waiting {
+			b.Children(func() { a.icon(c, "brokenImage", 20, false) })
+		}
+	})
+}
+
+// workStrip is the strip of the work's pictures, first to n, under its first screen: a contact sheet, with an amber
+// line under s, the one the first screen shows, that slides along to the one picked. It rests with a picture at its
+// start, and keeps a swipe that starts on it while it can scroll that way. A picture that came is picked by a click,
+// Enter or Space; one on its way breathes in its place, and one that did not load cannot be picked.
+func (a *App) workStrip(c *ui.Context, rp *readerPage, s, first, n int, margin float32) {
+	tw := (a.column() - 32) / 5
+	rp.r.Aside(c, "shots").ScrollSnap(ui.SnapProximity).Margin(margin, 0, 0, 0).Scrollbars(false).Label(rp.work.Name + " 的页面截图").Children(func() {
+		ui.Row(c).Gap(8).Padding(0, 0, 4, 0).Children(func() {
+			for i := first; i <= n; i++ {
+				img, part := a.stageImage(rp, i)
+				name := stageName(rp, i)
+				waiting := img == nil && rp.lateWait[part]
+				ok := img != nil || i == 0 && recorded(rp)
+				label := name
+				switch {
+				case waiting:
+					label = name + "：截图载入中"
+				case !ok:
+					label = name + "：截图没能载入"
+				}
+				cur := i == s
+				b := ui.ButtonBase(c.Key(i)).Label(label).Role(ui.RoleRadio).Checked(cur).Column().AlignItems(ui.Stretch).
+					Justify(ui.Start).Gap(8).Width(tw).SnapAlign(ui.Start).FocusRing(false).Disabled(!ok)
+				if b.Clicked() && !cur {
+					rp.show, rp.picked, rp.pickAt, rp.flies = i, true, c.Now(), !a.kbd
+					// Where its picture shows in the strip, from the first screen's corner.
+					at, hero := b.LayoutBounds(), rp.stageBox
+					rp.pickFrom = ui.Rect{X: at.X - hero.X, Y: at.Y - hero.Y, W: tw, H: tw * 10 / 16}
+				}
+				lit := b.Hovered() || cur
+				b.Children(func() {
+					f := ui.Box(c).FillWidth().AspectRatio(16.0 / 10).Radius(6).ClipX().ClipY().Background(theme.Surface).
+						Center().TextColor(theme.Faint)
+					if b.FocusVisible() {
+						f.Shadow(0, 0, 0, 2, theme.Focus)
+					} else {
+						f.InsetShadow(0, 0, 0, 1, theme.LineSoft)
+					}
+					press := ui.Pose{}
+					if b.Pressed() && !a.kbd && !cur {
+						press.Scale = motion.Pressed
+					}
+					f.AnimatePose(press, ui.Animation{Duration: motion.WorkShot, Ease: motion.Ease})
+					if waiting {
+						a.waitingGround(c, f)
+					}
+					f.Children(func() {
+						switch {
+						case img != nil:
+							pic := ui.Image(c, img).Fit(ui.Cover).ObjectPosition(0.5, 0).Fill()
+							o := pic.AnimateTo("lit", map[bool]float32{true: 1, false: 0.88}[lit], a.ease(motion.WorkShot))
+							pic.Opacity(o)
+							a.lateIn(c, rp, part, pic, o, 360*time.Millisecond)
+						case ok:
+							a.icon(c, "play", 16, false) // a recording without its first screen's picture
+						case !waiting:
+							a.icon(c, "brokenImage", 16, false)
+						}
+					})
+					ink := map[bool]ui.Color{true: theme.Text2, false: theme.Muted}[lit]
+					if cur {
+						ink = theme.Text
+					}
+					t := ui.Text(c, name).FontSize(theme.Label).LineHeight(16.0/12).SingleLine().Ellipsis("…").Margin(2, 0, 0, 0)
+					t.TextColor(t.AnimateColor("ink", ink, a.ease(motion.WorkShot)))
+				})
+			}
+			// The amber line under the picture shown, on the window's ground, where any picture's colours leave it clear: one
+			// line that slides along the strip to the picture picked, in the strip's own terms, so that it scrolls with it.
+			if s >= first {
+				line := ui.Box(c.Key("mark")).Absolute().Top(tw*10/16+4).Size(tw, 2).Radius(1).Background(theme.Accent).
+					IgnoreInput(true).AccessHidden(true)
+				x := float32(s-first) * (tw + 8)
+				if a.kbd || a.still(c) {
+					x = line.Jump("x", x)
+				} else {
+					x = line.AnimateTo("x", x, motion.Follow)
+				}
+				line.Left(x)
+			}
+		})
+	})
 }
 
 // recording is a work's recording as its page plays it: the player of the file it is kept in, or why

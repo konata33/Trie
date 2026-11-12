@@ -546,7 +546,8 @@ func TestPictureTone(t *testing.T) {
 	savePNG(t, filepath.Join(dir, "picture-large-mygo-"+label+".png"), tt.Image())
 }
 
-// TestShotFrames writes a work's shots in the viewer, opened and stepped by
+// TestShotFrames writes a work's shots in the viewer, opened from its first
+// screen and stepped by
 // the pointer, to set beside the previous implementation's capture:
 // SHOTWORK=work.json LEFTOVERS=dir go test -run ShotFrames, the work as the
 // app keeps Extrafazant once it has fetched its shots.
@@ -582,9 +583,9 @@ func TestShotFrames(t *testing.T) {
 		tt.Frame()
 		settle(tt)
 	}
-	first, ok := tt.Access("查看截图：Loader and Hero Variable Font Interaction")
+	first, ok := tt.Access("放大查看：Loader and Hero Variable Font Interaction")
 	if !ok {
-		t.Fatal("the first shot is not a button")
+		t.Fatal("the first screen does not show the first shot")
 	}
 	tt.ClickAt(center(first.Bounds))
 	tt.Advance(900 * time.Millisecond)
