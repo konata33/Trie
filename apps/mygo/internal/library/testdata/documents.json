@@ -1,0 +1,198 @@
+{
+ "<p id=\"root\">Read <a href=\"https://example.com/\">link</a></p>": {
+  "version": 1,
+  "contentRevision": "61ca0fcb2bf542335d1e0bfecfb71bce577e36125c9f9f7d892c77e0545b4f27",
+  "unitsRevision": "5e128b5fb7e12d119e7a6933e691e7473c063ae31bca974adc9725b81a4bcd39",
+  "provenance": "legacy-cache",
+  "root": {
+   "type": "root",
+   "children": [
+    {
+     "type": "element",
+     "tagName": "p",
+     "properties": {
+      "id": "root",
+      "dataReaderUnit": "reader-unit-f65fbd75bbe60236aaa2bb1d"
+     },
+     "children": [
+      {
+       "type": "text",
+       "value": "Read "
+      },
+      {
+       "type": "element",
+       "tagName": "a",
+       "properties": {
+        "href": "https://example.com/"
+       },
+       "children": [
+        {
+         "type": "text",
+         "value": "link"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "units": [
+   {
+    "id": "reader-unit-f65fbd75bbe60236aaa2bb1d",
+    "kind": "paragraph",
+    "text": "Read link",
+    "anchor": "root"
+   }
+  ],
+  "codeTokens": {}
+ },
+ "<p id=\"first\">One</p><p>Two</p>": {
+  "version": 1,
+  "contentRevision": "723a8c6c2d9d27876a2c5e5e4a7ca9d6cf6afac4f03cc3da652a94c898ca3c1b",
+  "unitsRevision": "8ce534ffbfccf0cd2acf90800f15d7e8e6d824c1cdf287b9373b359e10ff708a",
+  "provenance": "legacy-cache",
+  "root": {
+   "type": "root",
+   "children": [
+    {
+     "type": "element",
+     "tagName": "p",
+     "properties": {
+      "id": "first",
+      "dataReaderUnit": "reader-unit-8566c8809061688429289563"
+     },
+     "children": [
+      {
+       "type": "text",
+       "value": "One"
+      }
+     ]
+    },
+    {
+     "type": "element",
+     "tagName": "p",
+     "properties": {
+      "dataReaderUnit": "reader-unit-83162c131f91a31d856f4656"
+     },
+     "children": [
+      {
+       "type": "text",
+       "value": "Two"
+      }
+     ]
+    }
+   ]
+  },
+  "units": [
+   {
+    "id": "reader-unit-8566c8809061688429289563",
+    "kind": "paragraph",
+    "text": "One",
+    "anchor": "first"
+   },
+   {
+    "id": "reader-unit-83162c131f91a31d856f4656",
+    "kind": "paragraph",
+    "text": "Two"
+   }
+  ],
+  "codeTokens": {}
+ },
+ "<p>Readable</p>": {
+  "version": 1,
+  "contentRevision": "f0c0a6941050f92048263bc4886468da7ee381fb884c5b937b22e552824493cb",
+  "unitsRevision": "ea4d609f79314b9f8128d1e9d45b0b6b2bee5bcfb4c65f28e26ced41eb34b3e0",
+  "provenance": "legacy-cache",
+  "root": {
+   "type": "root",
+   "children": [
+    {
+     "type": "element",
+     "tagName": "p",
+     "properties": {
+      "dataReaderUnit": "reader-unit-10ea848ad2d02fb8aa2b9b69"
+     },
+     "children": [
+      {
+       "type": "text",
+       "value": "Readable"
+      }
+     ]
+    }
+   ]
+  },
+  "units": [
+   {
+    "id": "reader-unit-10ea848ad2d02fb8aa2b9b69",
+    "kind": "paragraph",
+    "text": "Readable"
+   }
+  ],
+  "codeTokens": {}
+ },
+ "formatted": {
+  "html": "<h2 id=\"reader-heading-d4ebb125cc93\">Title</h2><p>Body.</p>",
+  "formatVersion": 4,
+  "headings": [
+   {
+    "id": "reader-heading-d4ebb125cc93",
+    "level": 2,
+    "text": "Title"
+   }
+  ],
+  "codeBlocks": [],
+  "highlightStyles": [],
+  "document": {
+   "version": 1,
+   "contentRevision": "06f6aa9904219de632c61fdf130cc0815cf7187503b9450c04ca51b78e071ce8",
+   "unitsRevision": "f50da3c228493ed47cbc5b3ba6b4cfdb514387faedd1207737d67a385129c274",
+   "provenance": "source",
+   "root": {
+    "type": "root",
+    "children": [
+     {
+      "type": "element",
+      "tagName": "h2",
+      "properties": {
+       "id": "reader-heading-d4ebb125cc93",
+       "dataReaderUnit": "reader-unit-d0b163759c8c1a754e7a09fc"
+      },
+      "children": [
+       {
+        "type": "text",
+        "value": "Title"
+       }
+      ]
+     },
+     {
+      "type": "element",
+      "tagName": "p",
+      "properties": {
+       "dataReaderUnit": "reader-unit-4a86fe02c38d911240c5095d"
+      },
+      "children": [
+       {
+        "type": "text",
+        "value": "Body."
+       }
+      ]
+     }
+    ]
+   },
+   "units": [
+    {
+     "id": "reader-unit-d0b163759c8c1a754e7a09fc",
+     "kind": "heading",
+     "text": "Title",
+     "anchor": "reader-heading-d4ebb125cc93"
+    },
+    {
+     "id": "reader-unit-4a86fe02c38d911240c5095d",
+     "kind": "paragraph",
+     "text": "Body."
+    }
+   ],
+   "codeTokens": {}
+  }
+ }
+}

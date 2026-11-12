@@ -1,0 +1,297 @@
+{
+  "version": 1,
+  "asOf": "2026-11-01",
+  "sources": [
+    {
+      "id": "innei",
+      "title": "Innei",
+      "host": "innei.in",
+      "homeURL": "https://innei.in/",
+      "icon": "../foundation/assets/innei.ico",
+      "checkedAt": "2026-11-01T03:13:51.631492+00:00",
+      "sampledCount": 5,
+      "catalogCandidateCount": 404,
+      "scopeLabel": "仅核验 5 个样本地址，尚未导入完整历史"
+    },
+    {
+      "id": "antfu",
+      "title": "Anthony Fu",
+      "host": "antfu.me",
+      "homeURL": "https://antfu.me/",
+      "icon": "../foundation/assets/antfu.svg",
+      "checkedAt": "2026-11-01T03:13:49.138893+00:00",
+      "sampledCount": 2,
+      "catalogCandidateCount": 91,
+      "scopeLabel": "仅核验 2 个样本地址，尚未导入完整历史"
+    },
+    {
+      "id": "velas",
+      "title": "Velas 电波站",
+      "host": "velasx.com",
+      "homeURL": "https://www.velasx.com/",
+      "icon": "../foundation/assets/velas.png",
+      "checkedAt": "2026-11-01T03:13:53.536459+00:00",
+      "sampledCount": 3,
+      "catalogCandidateCount": 123,
+      "scopeLabel": "仅核验 3 个样本地址，尚未导入完整历史"
+    },
+    {
+      "id": "mitchell",
+      "title": "Mitchell Hashimoto",
+      "host": "mitchellh.com",
+      "homeURL": "https://mitchellh.com/",
+      "icon": null,
+      "checkedAt": "2026-11-01T03:13:50.691590+00:00",
+      "sampledCount": 3,
+      "catalogCandidateCount": 59,
+      "scopeLabel": "仅核验 3 个样本地址，尚未导入完整历史"
+    },
+    {
+      "id": "paulgraham",
+      "title": "Paul Graham",
+      "host": "paulgraham.com",
+      "homeURL": "https://www.paulgraham.com/",
+      "icon": null,
+      "checkedAt": "2026-11-01T03:13:49.882755+00:00",
+      "sampledCount": 2,
+      "catalogCandidateCount": 233,
+      "scopeLabel": "仅核验 2 个样本地址，尚未导入完整历史"
+    },
+    {
+      "id": "danluu",
+      "title": "Dan Luu",
+      "host": "danluu.com",
+      "homeURL": "https://danluu.com/",
+      "icon": null,
+      "checkedAt": "2026-11-01T03:13:49.087708+00:00",
+      "sampledCount": 2,
+      "catalogCandidateCount": 152,
+      "scopeLabel": "仅核验 2 个样本地址，尚未导入完整历史"
+    }
+  ],
+  "articles": [
+    {
+      "id": "https://innei.in/notes/2026/10/24/2026-10-recap",
+      "url": "https://innei.in/notes/2026/10/24/2026-10-recap",
+      "sourceID": "innei",
+      "title": "十月未央",
+      "authors": [
+        "Innei"
+      ],
+      "publishedAt": "2026-10-24T18:16:19.126Z",
+      "modifiedAt": "2026-10-24T18:38:52.269Z",
+      "aliases": [
+        "https://innei.in/notes/221"
+      ],
+      "bodyStatus": "not_extracted",
+      "verificationLabel": "页面提供文章信息"
+    },
+    {
+      "id": "https://innei.in/posts/tech/ai-native-ios-e2e-verification",
+      "url": "https://innei.in/posts/tech/ai-native-ios-e2e-verification",
+      "sourceID": "innei",
+      "title": "我的 AI Native iOS 开发验证工作流",
+      "authors": [
+        "Innei"
+      ],
+      "publishedAt": "2026-10-09T17:39:44.546Z",
+      "modifiedAt": "2026-10-09T17:44:54.993Z",
+      "aliases": [],
+      "bodyStatus": "not_extracted",
+      "verificationLabel": "页面提供文章信息"
+    },
+    {
+      "id": "https://antfu.me/posts/categorize-deps",
+      "url": "https://antfu.me/posts/categorize-deps",
+      "sourceID": "antfu",
+      "title": "Categorize Your Dependencies",
+      "authors": [
+        "Anthony Fu"
+      ],
+      "publishedAt": null,
+      "modifiedAt": null,
+      "aliases": [],
+      "bodyStatus": "not_extracted",
+      "verificationLabel": "订阅标题与页面一致"
+    },
+    {
+      "id": "https://velasx.com/am/6498",
+      "url": "https://velasx.com/am/6498",
+      "sourceID": "velas",
+      "title": "手记2",
+      "authors": [
+        "Zeee"
+      ],
+      "publishedAt": "2026-06-16T10:59:15.881Z",
+      "modifiedAt": "2026-06-17T01:45:11.579Z",
+      "aliases": [],
+      "bodyStatus": "not_extracted",
+      "verificationLabel": "页面提供文章信息"
+    },
+    {
+      "id": "https://mitchellh.com/writing/superlogical",
+      "url": "https://mitchellh.com/writing/superlogical",
+      "sourceID": "mitchell",
+      "title": "Superlogical",
+      "authors": [],
+      "publishedAt": "2026-07-29T00:00:00.000Z",
+      "modifiedAt": "2026-07-29T00:00:00.000Z",
+      "aliases": [],
+      "bodyStatus": "not_extracted",
+      "verificationLabel": "页面提供文章信息"
+    }
+  ],
+  "reviewItems": [
+    {
+      "id": "review:https://innei.in/about",
+      "url": "https://innei.in/about",
+      "sourceID": "innei",
+      "title": "自述 - Innei",
+      "authors": [],
+      "publishedAt": null,
+      "status": "uncertain",
+      "reason": "页面已读取，但文章依据还不足，暂时保留待核验。"
+    },
+    {
+      "id": "review:https://innei.in/notes",
+      "url": "https://innei.in/notes",
+      "sourceID": "innei",
+      "title": "手记列表 - Innei",
+      "authors": [],
+      "publishedAt": null,
+      "status": "non_article",
+      "reason": "页面显示为文章列表或其他集合，已从文章清单排除，保留检查记录。"
+    },
+    {
+      "id": "review:https://antfu.me/posts",
+      "url": "https://antfu.me/posts",
+      "sourceID": "antfu",
+      "title": "Anthony Fu",
+      "authors": [
+        "Anthony Fu"
+      ],
+      "publishedAt": null,
+      "status": "uncertain",
+      "reason": "页面已读取，但文章依据还不足，暂时保留待核验。"
+    },
+    {
+      "id": "review:https://velasx.com/about",
+      "url": "https://velasx.com/about",
+      "sourceID": "velas",
+      "title": "关于本站",
+      "authors": [],
+      "publishedAt": null,
+      "status": "uncertain",
+      "reason": "页面已读取，但文章依据还不足，暂时保留待核验。"
+    },
+    {
+      "id": "review:https://velasx.com/am",
+      "url": "https://velasx.com/am",
+      "sourceID": "velas",
+      "title": "文章列表",
+      "authors": [],
+      "publishedAt": null,
+      "status": "uncertain",
+      "reason": "页面已读取，但文章依据还不足，暂时保留待核验。"
+    },
+    {
+      "id": "review:https://mitchellh.com/writing",
+      "url": "https://mitchellh.com/writing",
+      "sourceID": "mitchell",
+      "title": "Writing – Mitchell Hashimoto",
+      "authors": [],
+      "publishedAt": null,
+      "status": "uncertain",
+      "reason": "页面已读取，但文章依据还不足，暂时保留待核验。"
+    },
+    {
+      "id": "review:https://mitchellh.com/about",
+      "url": "https://mitchellh.com/about",
+      "sourceID": "mitchell",
+      "title": "/about",
+      "authors": [],
+      "publishedAt": null,
+      "status": "uncertain",
+      "reason": "页面已读取，但文章依据还不足，暂时保留待核验。"
+    },
+    {
+      "id": "review:https://paulgraham.com/avg.html",
+      "url": "https://paulgraham.com/avg.html",
+      "sourceID": "paulgraham",
+      "title": "Beating the Averages",
+      "authors": [],
+      "publishedAt": null,
+      "status": "uncertain",
+      "reason": "页面已读取，但文章依据还不足，暂时保留待核验。"
+    },
+    {
+      "id": "review:https://paulgraham.com/greatwork.html",
+      "url": "https://paulgraham.com/greatwork.html",
+      "sourceID": "paulgraham",
+      "title": "How to Do Great Work",
+      "authors": [],
+      "publishedAt": null,
+      "status": "uncertain",
+      "reason": "页面已读取，但文章依据还不足，暂时保留待核验。"
+    },
+    {
+      "id": "review:https://danluu.com/ai-coding",
+      "url": "https://danluu.com/ai-coding/",
+      "sourceID": "danluu",
+      "title": "Agentic test processes, LLM benchmarks, and other notes on agentic coding from Galapagos Island",
+      "authors": [],
+      "publishedAt": null,
+      "status": "uncertain",
+      "reason": "页面已读取，但文章依据还不足，暂时保留待核验。"
+    },
+    {
+      "id": "review:https://danluu.com/about",
+      "url": "https://danluu.com/about/",
+      "sourceID": "danluu",
+      "title": "About danluu.com",
+      "authors": [],
+      "publishedAt": null,
+      "status": "uncertain",
+      "reason": "页面已读取，但文章依据还不足，暂时保留待核验。"
+    }
+  ],
+  "summary": {
+    "sampledCount": 17,
+    "articleCount": 5,
+    "pendingCount": 10,
+    "excludedCount": 1,
+    "failedCount": 0
+  },
+  "verificationPrograms": {
+    "innei": {
+      "article_verify.py": "2896e4e1fae6b50d39f67c829336a3a57dd6abe3ee84792926032c931910cc9d",
+      "article_metadata.py": "f09cc236aaa78e58f52609361457b887e40d68e37d3bd52f8b49681b2c51497c",
+      "catalog_probe.py": "c219a198c95edde70df7e5e2f2f5f71625de2515a40ddaf163df4f1f5addbb64"
+    },
+    "antfu": {
+      "article_verify.py": "2896e4e1fae6b50d39f67c829336a3a57dd6abe3ee84792926032c931910cc9d",
+      "article_metadata.py": "f09cc236aaa78e58f52609361457b887e40d68e37d3bd52f8b49681b2c51497c",
+      "catalog_probe.py": "c219a198c95edde70df7e5e2f2f5f71625de2515a40ddaf163df4f1f5addbb64"
+    },
+    "velas": {
+      "article_verify.py": "2896e4e1fae6b50d39f67c829336a3a57dd6abe3ee84792926032c931910cc9d",
+      "article_metadata.py": "f09cc236aaa78e58f52609361457b887e40d68e37d3bd52f8b49681b2c51497c",
+      "catalog_probe.py": "c219a198c95edde70df7e5e2f2f5f71625de2515a40ddaf163df4f1f5addbb64"
+    },
+    "mitchell": {
+      "article_verify.py": "2896e4e1fae6b50d39f67c829336a3a57dd6abe3ee84792926032c931910cc9d",
+      "article_metadata.py": "f09cc236aaa78e58f52609361457b887e40d68e37d3bd52f8b49681b2c51497c",
+      "catalog_probe.py": "c219a198c95edde70df7e5e2f2f5f71625de2515a40ddaf163df4f1f5addbb64"
+    },
+    "paulgraham": {
+      "article_verify.py": "2896e4e1fae6b50d39f67c829336a3a57dd6abe3ee84792926032c931910cc9d",
+      "article_metadata.py": "f09cc236aaa78e58f52609361457b887e40d68e37d3bd52f8b49681b2c51497c",
+      "catalog_probe.py": "c219a198c95edde70df7e5e2f2f5f71625de2515a40ddaf163df4f1f5addbb64"
+    },
+    "danluu": {
+      "article_verify.py": "2896e4e1fae6b50d39f67c829336a3a57dd6abe3ee84792926032c931910cc9d",
+      "article_metadata.py": "f09cc236aaa78e58f52609361457b887e40d68e37d3bd52f8b49681b2c51497c",
+      "catalog_probe.py": "c219a198c95edde70df7e5e2f2f5f71625de2515a40ddaf163df4f1f5addbb64"
+    }
+  }
+}
