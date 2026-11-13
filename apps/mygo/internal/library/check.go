@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"trie/internal/locales"
 	"trie/internal/web"
 )
 
@@ -170,6 +171,9 @@ func articleJSON(value any) (ArticleSnapshot, error) {
 	a := ArticleSnapshot{ID: f.str(v["id"]), URL: f.str(v["url"]), SourceID: f.str(v["sourceID"]), Title: f.str(v["title"]),
 		Authors: f.strs(v["authors"]), PublishedAt: f.nstr(v["publishedAt"]), ModifiedAt: f.nstr(v["modifiedAt"]),
 		Aliases: f.strs(v["aliases"]), BodyStatus: "not_extracted", VerificationLabel: f.str(v["verificationLabel"])}
+	if k, ok := v["kinds"]; ok {
+		a.Kinds = f.strs(k)
+	}
 	return a, f.err
 }
 
@@ -203,19 +207,19 @@ func dateOK(s string) bool { _, ok := web.JSDateParse(s); return ok }
 func checkClip(c ClipInput) error {
 	switch {
 	case !clipID(c.ID):
-		return errors.New("无效的摘录标识")
+		return errors.New(locales.ErrorInvalidClipID())
 	case c.ArticleID == "" || web.JSLen(c.ArticleID) > 4096:
-		return errors.New("无效的文章标识")
+		return errors.New(locales.ErrorInvalidArticleID())
 	case web.JSTrim(c.Text) == "" || web.JSLen(c.Text) > 20000:
-		return errors.New("摘录内容应为 1 至 20000 个字")
+		return errors.New(locales.ErrorClipLength())
 	case c.UnitID != nil && (*c.UnitID == "" || web.JSLen(*c.UnitID) > 256 || strings.IndexFunc(*c.UnitID, controlOrSpace) >= 0):
-		return errors.New("无效的段落位置")
+		return errors.New(locales.ErrorInvalidClipParagraph())
 	case c.ContentRevision != nil && !sha256Hex.MatchString(*c.ContentRevision):
-		return errors.New("无效的正文版本")
+		return errors.New(locales.ErrorInvalidTextVersion())
 	case c.CreatedAt != "" && (!isoMillis.MatchString(c.CreatedAt) || !dateOK(c.CreatedAt)):
-		return errors.New("无效的摘录时间")
+		return errors.New(locales.ErrorInvalidClipDate())
 	case web.JSLen(c.Note) > 4000:
-		return errors.New("备注最多 4000 个字")
+		return errors.New(locales.ErrorNoteTooLong())
 	}
 	return nil
 }
@@ -295,7 +299,7 @@ func checkPosition(p ReadingPositionInput) error {
 	if !bounded(p.ArticleID, 4096) || !bounded(p.ContentVersion, 256) || p.UnitID != nil && !bounded(*p.UnitID, 256) ||
 		!finite(p.Offset) || math.Abs(p.Offset) > 1e7 || !finite(p.ScrollTop) || p.ScrollTop < 0 || p.ScrollTop > 1e7 ||
 		!finite(p.Progress) || p.Progress < 0 || p.Progress > 1 {
-		return errors.New("无效的阅读位置")
+		return errors.New(locales.ErrorInvalidPosition())
 	}
 	return nil
 }

@@ -20,6 +20,8 @@ type Post struct {
 	PublishedAt *string `json:"publishedAt"`
 	// The opening of the post's text from its feed, plain and short; "" when the feed carries no text.
 	Excerpt string `json:"excerpt,omitempty"`
+	// What a gallery's work is shelved under (Shelf.Kind): landing, portfolio, motion, type, brand.
+	Kinds []string `json:"kinds,omitempty"`
 }
 
 // work is a design gallery's latest featured site and the picture its feed shows of it.
@@ -397,12 +399,13 @@ func feedStats(feed library.ParsedFeed, now int64, gallery bool) stats {
 		return &n
 	}
 	out := stats{Posts: []Post{}, Last90: within(90), Recent30: within(30), Works: []work{}, Pictures: map[string][]string{}}
-	for _, d := range sorted[:min(16, len(sorted))] {
-		if img := firstImage(d.a); img != nil && len(out.Works) < 8 {
+	// An author's page lists as many as the feed gives, up to feedKept; the rooms show the newest few.
+	for _, d := range sorted[:min(feedKept, len(sorted))] {
+		if img := firstImage(d.a); img != nil {
 			out.Works = append(out.Works, work{Title: d.a.Title, URL: d.a.URL, PublishedAt: d.at, Image: *img})
 		}
 	}
-	for _, d := range sorted[:min(10, len(sorted))] {
+	for _, d := range sorted[:min(feedKept, len(sorted))] {
 		out.Posts = append(out.Posts, Post{Title: d.a.Title, URL: d.a.URL, PublishedAt: d.at, Excerpt: excerpt(d.a)})
 		if found := postPictures(d.a); len(found) > 0 {
 			out.Pictures[d.a.URL] = found

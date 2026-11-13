@@ -420,13 +420,18 @@
   {
     "id": "fontsinuse-com",
     "name": "Fonts In Use",
-    "kind": "blog",
+    "kind": "site",
     "homeURL": "https://fontsinuse.com",
     "host": "fontsinuse.com",
     "feedURL": "https://fontsinuse.com/main.rss",
     "intro": "真实作品中的字体使用档案，配图丰富，适合找排版参考",
-    "section": "设计写作 / Newsletter",
-    "subscribed": false
+    "section": "设计灵感画廊（有可用 RSS）",
+    "subscribed": false,
+    "kinds": [
+      {
+        "kind": "type"
+      }
+    ]
   },
   {
     "id": "densediscovery-com",
@@ -470,7 +475,13 @@
     "feedURL": "https://minimal.gallery/feed/",
     "intro": "极简风网站精选，适合找克制的排版与留白",
     "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false
+    "subscribed": false,
+    "kinds": [
+      {
+        "kind": "portfolio",
+        "feed": "https://minimal.gallery/tag/portfolio/feed/"
+      }
+    ]
   },
   {
     "id": "onepagelove-com",
@@ -481,7 +492,25 @@
     "feedURL": "https://onepagelove.com/feed",
     "intro": "单页网站与落地页收录，更新频繁",
     "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false
+    "subscribed": false,
+    "kinds": [
+      {
+        "kind": "landing",
+        "feed": "https://onepagelove.com/genre/landing-page/feed"
+      },
+      {
+        "kind": "portfolio",
+        "feed": "https://onepagelove.com/genre/portfolio/feed"
+      },
+      {
+        "kind": "motion",
+        "feed": "https://onepagelove.com/style/scroll-effects/feed"
+      },
+      {
+        "kind": "motion",
+        "feed": "https://onepagelove.com/tag/webgl/feed"
+      }
+    ]
   },
   {
     "id": "awwwards-com",
@@ -503,7 +532,12 @@
     "feedURL": "https://www.typewolf.com/feed",
     "intro": "每日一个网站并标注所用字体，排版参考首选",
     "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false
+    "subscribed": false,
+    "kinds": [
+      {
+        "kind": "type"
+      }
+    ]
   },
   {
     "id": "saaslandingpage-com",
@@ -514,7 +548,12 @@
     "feedURL": "https://saaslandingpage.com/feed/",
     "intro": "SaaS 落地页收录（Raycast、Incident.io 等），贴近产品界面",
     "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false
+    "subscribed": false,
+    "kinds": [
+      {
+        "kind": "landing"
+      }
+    ]
   },
   {
     "id": "io3000-com",
@@ -525,7 +564,17 @@
     "feedURL": "https://io3000.com/feed/",
     "intro": "日本与海外网站精选，排版安静克制",
     "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false
+    "subscribed": false,
+    "kinds": [
+      {
+        "kind": "motion",
+        "feed": "https://io3000.com/tag/carousel/feed/"
+      },
+      {
+        "kind": "motion",
+        "feed": "https://io3000.com/tag/ticker/feed/"
+      }
+    ]
   },
   {
     "id": "thefwa-com",
@@ -536,7 +585,12 @@
     "feedURL": "https://thefwa.com/feed/winners.xml",
     "intro": "老牌网站奖项的获奖作品，完成度高，偏体验与动效",
     "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false
+    "subscribed": false,
+    "kinds": [
+      {
+        "kind": "motion"
+      }
+    ]
   },
   {
     "id": "land-book-com",
@@ -547,7 +601,12 @@
     "feedURL": "https://land-book.com/rss.xml",
     "intro": "落地页与产品网站精选，收录严、更新勤",
     "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false
+    "subscribed": false,
+    "kinds": [
+      {
+        "kind": "landing"
+      }
+    ]
   },
   {
     "id": "minimalissimo-com",
@@ -569,7 +628,12 @@
     "feedURL": "https://bpando.org/feed/",
     "intro": "品牌识别与字体设计，附评论，偏重排版",
     "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false
+    "subscribed": false,
+    "kinds": [
+      {
+        "kind": "brand"
+      }
+    ]
   },
   {
     "id": "itsnicethat-com",
@@ -602,7 +666,17 @@
     "feedURL": "https://abduzeedo.com/rss.xml",
     "intro": "品牌、平面与界面设计作品，更新量大",
     "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false
+    "subscribed": false,
+    "kinds": [
+      {
+        "kind": "brand",
+        "match": "brand|visual identity|packaging"
+      },
+      {
+        "kind": "type",
+        "match": "typograph|typeface|font"
+      }
+    ]
   },
   {
     "id": "behance-net",
@@ -624,7 +698,12 @@
     "feedURL": "https://www.mindsparklemag.com/feed/",
     "intro": "品牌识别与包装设计案例，补足网页以外的视觉参考",
     "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false
+    "subscribed": false,
+    "kinds": [
+      {
+        "kind": "brand"
+      }
+    ]
   },
   {
     "id": "rauno-me",

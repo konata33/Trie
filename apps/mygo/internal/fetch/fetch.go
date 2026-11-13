@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"trie/internal/locales"
 	"trie/internal/web"
 )
 
@@ -52,18 +53,17 @@ type NetError struct {
 func (e *NetError) Error() string { return e.Err.Error() }
 func (e *NetError) Unwrap() error { return e.Err }
 
-var (
-	errNotPublic  = errors.New("仅支持公开网站的 HTTP(S) 地址")
-	errScope      = errors.New("重定向超出来源范围或形成循环")
-	errBudget     = errors.New("本篇文章的读取额度已用完")
-	errDNSTimeout = errors.New("网站地址解析超时")
-	errAddress    = errors.New("网站地址未通过公开网络检查")
-	errEncoding   = errors.New("不支持的网页编码")
-	errTooBig     = errors.New("网页或图片超出大小限制")
-	errTimeout    = errors.New("读取网站超时")
-	errHops       = errors.New("重定向次数超出限制")
-	errDowngrade  = errors.New("不跟随 HTTPS 降级跳转")
-)
+// The policy's errors, said in the app's language when they are made.
+func errNotPublic() error  { return errors.New(locales.ErrorNotPublicAddress()) }
+func errScope() error      { return errors.New(locales.ErrorRedirectOutOfScope()) }
+func errBudget() error     { return errors.New(locales.ErrorReadBudget()) }
+func errDNSTimeout() error { return errors.New(locales.ErrorLookupTimeout()) }
+func errAddress() error    { return errors.New(locales.ErrorPrivateAddress()) }
+func errEncoding() error   { return errors.New(locales.ErrorUnsupportedEncoding()) }
+func errTooBig() error     { return errors.New(locales.ErrorTooLarge()) }
+func errTimeout() error    { return errors.New(locales.ErrorTimeout()) }
+func errHops() error       { return errors.New(locales.ErrorTooManyRedirects()) }
+func errDowngrade() error  { return errors.New(locales.ErrorHTTPSDowngrade()) }
 
 func prefixes(list ...string) []netip.Prefix {
 	out := make([]netip.Prefix, len(list))
@@ -124,7 +124,7 @@ func PublicURL(value string) (*web.URL, error) {
 	if u.Scheme != "http" && u.Scheme != "https" || u.Username != "" || u.Password != "" || hasPort(u) ||
 		host == "localhost" || strings.HasSuffix(host, ".localhost") || strings.HasSuffix(host, ".local") ||
 		!strings.Contains(host, ".") && !ip || ip && !PublicAddress(host, false) {
-		return nil, errNotPublic
+		return nil, errNotPublic()
 	}
 	if href := u.Href(); strings.Contains(href, "#") {
 		// url.hash = '': the first # of a serialized URL starts its fragment.
@@ -227,7 +227,7 @@ func (c *Client) Fetch(ctx context.Context, value string, scope func(string) boo
 	for hop := 0; hop <= 5; hop++ {
 		href := u.Href()
 		if !scope(href) || seen[href] {
-			return nil, errScope
+			return nil, errScope()
 		}
 		seen[href] = true
 		c.mu.Lock()
@@ -235,7 +235,7 @@ func (c *Client) Fetch(ctx context.Context, value string, scope func(string) boo
 		over := c.requests > c.limit
 		c.mu.Unlock()
 		if over {
-			return nil, errBudget
+			return nil, errBudget()
 		}
 		addrs, err := c.lookup(ctx, unbracket(u.Hostname()))
 		if err != nil {
@@ -243,7 +243,7 @@ func (c *Client) Fetch(ctx context.Context, value string, scope func(string) boo
 		}
 		// A URL naming a fake-IP address still fails PublicURL; only answers may be one.
 		if len(addrs) == 0 || slices.ContainsFunc(addrs, func(a netip.Addr) bool { return !public(a, true) }) {
-			return nil, errAddress
+			return nil, errAddress()
 		}
 		res, location, err := c.get(ctx, u, addrs[0].WithZone("").Unmap(), maxBytes)
 		if err != nil {
@@ -254,7 +254,7 @@ func (c *Client) Fetch(ctx context.Context, value string, scope func(string) boo
 			return res, nil
 		}
 		if location == "" || hop == 5 {
-			return nil, errHops
+			return nil, errHops()
 		}
 		target, err := web.ResolveURL(location, href)
 		if err != nil {
@@ -265,16 +265,16 @@ func (c *Client) Fetch(ctx context.Context, value string, scope func(string) boo
 			return nil, err
 		}
 		if u.Scheme == "https" && next.Scheme != "https" {
-			return nil, errDowngrade
+			return nil, errDowngrade()
 		}
 		u = next
 	}
-	return nil, errHops
+	return nil, errHops()
 }
 
 // lookup resolves host within 6 s, whether or not the resolver watches ctx.
 func (c *Client) lookup(ctx context.Context, host string) ([]netip.Addr, error) {
-	ctx, cancel := context.WithTimeoutCause(ctx, 6*time.Second, errDNSTimeout)
+	ctx, cancel := context.WithTimeoutCause(ctx, 6*time.Second, errDNSTimeout())
 	defer cancel()
 	type answer struct {
 		addrs []netip.Addr
@@ -302,9 +302,9 @@ func (c *Client) get(ctx context.Context, u *web.URL, ip netip.Addr, maxBytes in
 	ctx, cancel := context.WithCancelCause(context.WithValue(ctx, pinKey{}, ip))
 	defer cancel(nil)
 	// The timeout is for a stalled connection; a slow one still delivering bytes may run up to four times as long.
-	idle := time.AfterFunc(c.timeout, func() { cancel(errTimeout) })
+	idle := time.AfterFunc(c.timeout, func() { cancel(errTimeout()) })
 	defer idle.Stop()
-	limit := time.AfterFunc(4*c.timeout, func() { cancel(errTimeout) })
+	limit := time.AfterFunc(4*c.timeout, func() { cancel(errTimeout()) })
 	defer limit.Stop()
 	fail := func(err error) error {
 		if cause := context.Cause(ctx); cause != nil {
@@ -341,7 +341,7 @@ func (c *Client) get(ctx context.Context, u *web.URL, ip netip.Addr, maxBytes in
 		}
 		body = z
 	default:
-		return nil, "", errEncoding
+		return nil, "", errEncoding()
 	}
 	var buf bytes.Buffer
 	chunk := make([]byte, 32*1024)
@@ -350,7 +350,7 @@ func (c *Client) get(ctx context.Context, u *web.URL, ip netip.Addr, maxBytes in
 		if n > 0 {
 			idle.Reset(c.timeout)
 			if buf.Len()+n > maxBytes {
-				return nil, "", errTooBig
+				return nil, "", errTooBig()
 			}
 			buf.Write(chunk[:n])
 		}

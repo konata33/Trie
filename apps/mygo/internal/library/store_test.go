@@ -221,7 +221,7 @@ func TestSourceNamesAreLiteral(t *testing.T) {
 	// JavaScript counts UTF-16 units: 20 astral characters are 40 and fit, 21 do not.
 	mutate(t, s, RenameSource{ID: "innei", Name: strings.Repeat("😀", 20)})
 	_, err := s.Mutate(RenameSource{ID: "innei", Name: strings.Repeat("😀", 21)})
-	fails(t, err, "订阅名称")
+	fails(t, err, "作者名字")
 }
 
 // a failed seed rolls back metadata and inserted rows before closing

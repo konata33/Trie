@@ -25,6 +25,7 @@ import (
 	"trie/internal/extract"
 	"trie/internal/fetch"
 	"trie/internal/library"
+	"trie/internal/locales"
 	"trie/internal/web"
 
 	"golang.org/x/text/encoding/unicode"
@@ -51,6 +52,9 @@ const (
 
 // Short feed bodies saved before they were checked against the page are read once more (fetchedAt older than this).
 var shortFeedChecked = time.Date(2026, 11, 8, 12, 30, 0, 0, time.UTC).UnixMilli()
+
+// Pages saved before a streamed box's stand-in gave way to its content are read once more (fetchedAt older than this).
+var standInChecked = time.Date(2026, 11, 13, 4, 0, 0, 0, time.UTC).UnixMilli()
 
 // Target is ReadTarget: everything retrieval needs to know about an article, whether or not it is in the library.
 type Target struct {
@@ -180,7 +184,7 @@ func withError(c library.ArticleContent, message string) library.ArticleContent 
 
 func unavailable(id, url string) library.ArticleContent {
 	return library.ArticleContent{ArticleID: id, Status: "unavailable", Links: []string{}, SourceURL: url, SourceKind: "page",
-		Message: str("暂时无法读取正文，请重试或打开原文查看")}
+		Message: str(locales.ReaderCantReadText())}
 }
 
 // Read is read: the article's body, from the library while what is kept is current, else read and kept. refresh reads
@@ -194,7 +198,7 @@ func (s *Service) Read(ctx context.Context, id string, refresh bool, source stri
 	}
 	at := slices.IndexFunc(state.Articles, func(a library.Article) bool { return a.ID == id })
 	if at < 0 {
-		return library.ArticleContent{}, errors.New("文章不在当前阅读库中")
+		return library.ArticleContent{}, errors.New(locales.ReaderNotInLibrary())
 	}
 	articleURL := state.Articles[at].URL
 	cached, err := s.store.Content(id)
@@ -205,7 +209,8 @@ func (s *Service) Read(ctx context.Context, id string, refresh bool, source stri
 	if err != nil {
 		return library.ArticleContent{}, err
 	}
-	var oldImages, staleTeaser, staleGallery, staleShort bool
+	// mending is a read only to mend what was kept (staleBody): failing, it keeps what was kept and says nothing.
+	var oldImages, staleTeaser, staleGallery, staleShort, staleBody, mending bool
 	if c := cached; c != nil {
 		oldImages = (c.ImageCacheVersion == nil || *c.ImageCacheVersion != imageCacheVersion) &&
 			(c.Message != nil && strings.Contains(*c.Message, "部分图片暂未保存") || c.MissingImageCount != nil && *c.MissingImageCount != 0)
@@ -220,10 +225,15 @@ func (s *Service) Read(ctx context.Context, id string, refresh bool, source stri
 		// And so is a short feed body kept before the page was compared with it.
 		fetched, ok := web.JSDateParse(c.FetchedAt)
 		staleShort = c.SourceKind == "feed" && c.Status == "ready" && c.TextLength < shortFeedText && c.TextLength >= pictureText && !(ok && fetched >= shortFeedChecked)
-		if !refresh && source == "" && !oldImages && !staleTeaser && !staleGallery && !staleShort &&
-			(feedBody == nil || c.FeedVersion != nil && *c.FeedVersion == feedBody.Version) {
+		// And so is a body read before its lost headings or a streamed box's stand-in were mended: a feed's body with bare
+		// heading lines (Smashing Magazine), a page that kept "CodeBlock Loading..." for its code (innei.in).
+		staleBody = c.Status == "ready" && (c.SourceKind == "feed" && extract.HasLooseLines(snapshot) ||
+			c.SourceKind == "page" && extract.HasStandIn(snapshot) && !(ok && fetched >= standInChecked))
+		current := feedBody == nil || c.FeedVersion != nil && *c.FeedVersion == feedBody.Version
+		if !refresh && source == "" && !oldImages && !staleTeaser && !staleGallery && !staleShort && !staleBody && current {
 			return s.formatCached(*c), nil
 		}
+		mending = !refresh && source == "" && !oldImages && !staleTeaser && !staleGallery && !staleShort && current
 	}
 	version := "page"
 	if feedBody != nil && feedBody.Version != "" {
@@ -242,10 +252,17 @@ func (s *Service) Read(ctx context.Context, id string, refresh bool, source stri
 		if err == nil {
 			content, err = s.settle(id, cached, content)
 		}
+		// A mending read that fails, or reads nothing better than what was kept, leaves it as it was.
+		if mending && (err != nil || content.RefreshError != nil) {
+			if err != nil {
+				log.Print("Article read failed: ", err)
+			}
+			return s.formatCached(*cached), nil
+		}
 		if err != nil {
 			log.Print("Article read failed: ", err)
 			if cached != nil {
-				return withError(s.formatCached(*cached), "暂时无法获取新版内容，继续显示本机保存的内容"), nil
+				return withError(s.formatCached(*cached), locales.ReaderLatestUnavailable()), nil
 			}
 			return unavailable(id, articleURL), nil
 		}
@@ -256,7 +273,7 @@ func (s *Service) Read(ctx context.Context, id string, refresh bool, source stri
 // settle is what read does with a body it has read: keeps what was saved when the new one is worse, formats and saves it.
 func (s *Service) settle(id string, cached *library.ArticleContent, content library.ArticleContent) (library.ArticleContent, error) {
 	if cached != nil && cached.Status == "ready" && cached.HTML != "" && content.Status != "ready" {
-		message := "来源暂未提供新版正文，继续显示已保存的内容"
+		message := locales.ReaderNoNewerText()
 		if content.Message != nil && *content.Message != "" {
 			message = *content.Message
 		}
@@ -264,14 +281,14 @@ func (s *Service) settle(id string, cached *library.ArticleContent, content libr
 	}
 	if cached != nil && cached.Status == "ready" && cached.ImageCacheVersion != nil && *cached.ImageCacheVersion == imageCacheVersion &&
 		cached.MissingImageCount != nil && *cached.MissingImageCount == 0 && content.MissingImageCount != nil && *content.MissingImageCount != 0 {
-		return withError(s.formatCached(*cached), "新版图片暂未保存完整，继续显示已保存的内容"), nil
+		return withError(s.formatCached(*cached), locales.ReaderNewImagesIncomplete()), nil
 	}
 	if formatted, err := s.formatContent(content); err == nil {
 		content = formatted
 	} else if cached != nil && cached.HTML != "" {
-		return withError(s.formatCached(*cached), "新版排版暂时不可用，继续显示已保存的内容"), nil
+		return withError(s.formatCached(*cached), locales.ReaderNewLayoutUnavailable()), nil
 	} else {
-		content = withError(content, "增强排版暂时不可用，已保留可阅读的正文")
+		content = withError(content, locales.ReaderLayoutUnavailable())
 	}
 	s.saving.Lock()
 	defer s.saving.Unlock()
@@ -337,7 +354,7 @@ func (s *Service) formatCached(cached library.ArticleContent) library.ArticleCon
 				}
 			}
 		}
-		return withError(cached, "阅读排版暂时无法更新，继续显示已保存的内容"), nil
+		return withError(cached, locales.ReaderLayoutNotUpdated()), nil
 	})
 	return content
 }
@@ -450,7 +467,7 @@ func (s *Service) Preview(ctx context.Context, t Target, source string, imageWai
 	formatted, err := s.formatContent(content)
 	if err != nil {
 		if content.HTML != "" {
-			return withError(content, "增强排版暂时不可用，已保留可阅读的正文")
+			return withError(content, locales.ReaderLayoutUnavailable())
 		}
 		return content
 	}
@@ -464,7 +481,7 @@ func (s *Service) retrieve(ctx context.Context, id, from string) (library.Articl
 	}
 	at := slices.IndexFunc(state.Articles, func(a library.Article) bool { return a.ID == id })
 	if at < 0 {
-		return library.ArticleContent{}, errors.New("文章不在当前阅读库中")
+		return library.ArticleContent{}, errors.New(locales.ReaderNotInLibrary())
 	}
 	article := state.Articles[at]
 	source := func(id string) *library.Source {
@@ -556,9 +573,9 @@ func (s *Service) fetchContent(ctx context.Context, t Target, from string, image
 			switch {
 			case page.Status == 401 || page.Status == 402 || page.Status == 403:
 				if summary == nil {
-					status, message := "restricted", "原站要求登录或付费，请前往作者网站完成授权后阅读"
+					status, message := "restricted", locales.ReaderSiteNeedsSignIn()
 					if page.Status == 403 {
-						status, message = "unavailable", "原站拒绝了本次读取，请打开原文确认访问方式"
+						status, message = "unavailable", locales.ReaderSiteRefused()
 					}
 					return library.ArticleContent{ArticleID: t.ID, Status: status, Links: []string{}, FetchedAt: web.Now(), SourceURL: page.URL, SourceKind: "page", Message: &message}, nil
 				}

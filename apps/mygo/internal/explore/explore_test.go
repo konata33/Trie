@@ -185,7 +185,7 @@ func TestPreviewFromFeedBody(t *testing.T) {
 	explore := service(t, Options{Resources: dir, Cache: cache, FetchFeed: feedsOf(t, func(string) string { return xml })})
 	list(t, explore)
 	ctx := context.Background()
-	if _, err := explore.ReadTarget(ctx, "writer", "https://writer.example/other/"); err == nil || err.Error() != "推荐里没有这篇文章" {
+	if _, err := explore.ReadTarget(ctx, "writer", "https://writer.example/other/"); err == nil || err.Error() != "探索里已经没有这篇文章。" {
 		t.Fatalf("a post Explore does not list: %v", err)
 	}
 	target, err := explore.ReadTarget(ctx, "writer", "https://writer.example/post/")
@@ -211,7 +211,7 @@ func TestPreviewFromFeedBody(t *testing.T) {
 	}
 	// When that read fails (a reset connection), the post is still opened, from its page.
 	offline := service(t, Options{Resources: dir, Cache: cache, FetchFeed: func(context.Context, string) (library.ParsedFeed, error) {
-		return library.ParsedFeed{}, errors.New("连接被中断，请稍后重试")
+		return library.ParsedFeed{}, errors.New("连接中断了，稍后再试。")
 	}})
 	if target, err := offline.ReadTarget(ctx, "writer", "https://writer.example/post/"); err != nil || target.URL != "https://writer.example/post/" || target.FeedBody != nil {
 		t.Fatalf("offline: %+v %v", target, err)
@@ -623,5 +623,5 @@ func TestResetTwice(t *testing.T) {
 		return nil, &fetch.NetError{Err: errors.New("Client network socket disconnected before secure TLS connection was established"), Transient: true}
 	}
 	_, err := subscription.New(openStore(t), func() fetch.Fetch { return get }, nil, nil).Preview(context.Background(), "https://writer.example/feed")
-	check(t, err != nil && strings.Contains(err.Error(), "连接被中断，请稍后重试"), "the message", err)
+	check(t, err != nil && strings.Contains(err.Error(), "连接中断了，稍后再试。"), "the message", err)
 }

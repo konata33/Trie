@@ -368,7 +368,7 @@ func TestReadPreviews(t *testing.T) {
 	if !slices.Equal(got, []string{"auto https://g.example/wa", "auto https://g.example/wb", "auto https://g.example/wb", "page https://g.example/wa", "auto https://g.example/wa"}) {
 		t.Fatal(got)
 	}
-	if _, err := s.Read(ctx, "gallery", "https://g.example/elsewhere", ""); err == nil || err.Error() != "推荐里没有这篇文章" {
+	if _, err := s.Read(ctx, "gallery", "https://g.example/elsewhere", ""); err == nil || err.Error() != "探索里已经没有这篇文章。" {
 		t.Fatal("a post Explore does not list:", err)
 	}
 	links := s.Links()

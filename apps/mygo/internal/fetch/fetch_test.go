@@ -223,7 +223,7 @@ func TestEveryAnswerChecked(t *testing.T) {
 	for _, list := range [][]string{{"8.8.8.8", "127.0.0.1"}, {"10.0.0.1"}, {"8.8.8.8", "::1"}, {"::ffff:192.168.0.1"}, {}} {
 		w := newWire(t)
 		_, err := w.client(5, time.Second, answers(list...)).Fetch(context.Background(), "https://writer.example/", anywhere, MaxBytes)
-		fails(t, err, "公开网络")
+		fails(t, err, "公共互联网")
 		if w.calls() != 0 || len(w.dialed) != 0 {
 			t.Fatalf("%v: %d requests, dialed %v", list, w.calls(), w.dialed)
 		}
@@ -282,7 +282,7 @@ func TestRebinding(t *testing.T) {
 	}
 	w := newWire(t, reply{status: 302, headers: map[string]string{"Location": "/next"}})
 	_, err := w.client(5, time.Second, rebind).Fetch(context.Background(), "https://writer.example/", anywhere, MaxBytes)
-	fails(t, err, "公开网络")
+	fails(t, err, "公共互联网")
 	if w.calls() != 1 || lookups != 2 || len(w.dialed) != 1 || w.dialed[0] != "8.8.8.8:443" {
 		t.Fatalf("%d requests, %d lookups, dialed %v", w.calls(), lookups, w.dialed)
 	}
@@ -299,8 +299,8 @@ func TestRedirectLimits(t *testing.T) {
 		}
 		return []netip.Addr{netip.MustParseAddr("8.8.8.8")}, nil
 	}
-	for target, want := range map[string]string{"https://other.example/": "来源范围", "http://127.0.0.1/": "公开网站", "http://writer.example/": "降级",
-		"https://internal.writer.example/": "公开网络", "https://[::1]/": "公开网站", "http://user:pw@writer.example/": "公开网站", "file:///etc/passwd": "公开网站"} {
+	for target, want := range map[string]string{"https://other.example/": "站外", "http://127.0.0.1/": "公开网站", "http://writer.example/": "跳到了 HTTP",
+		"https://internal.writer.example/": "公共互联网", "https://[::1]/": "公开网站", "http://user:pw@writer.example/": "公开网站", "file:///etc/passwd": "公开网站"} {
 		w := newWire(t, reply{status: 302, headers: map[string]string{"Location": target}})
 		_, err := w.client(5, time.Second, byName).Fetch(context.Background(), "https://writer.example/", scope(t, "https://writer.example/"), MaxBytes)
 		fails(t, err, want)
@@ -311,7 +311,7 @@ func TestRedirectLimits(t *testing.T) {
 	// Subscriptions follow any public redirect, but never from HTTPS to HTTP.
 	w := newWire(t, reply{status: 301, headers: map[string]string{"Location": "http://writer.example/feed"}})
 	_, err := w.client(5, time.Second, google).Fetch(context.Background(), "https://writer.example/", anywhere, MaxBytes)
-	fails(t, err, "降级")
+	fails(t, err, "跳到了 HTTP")
 	if w.calls() != 1 {
 		t.Fatalf("%d requests", w.calls())
 	}
@@ -330,13 +330,13 @@ func TestRedirectLimits(t *testing.T) {
 	}
 	w = newWire(t, hops(6)...)
 	_, err = w.client(10, time.Second, google).Fetch(context.Background(), "https://writer.example/", anywhere, MaxBytes)
-	fails(t, err, "重定向次数超出限制")
+	fails(t, err, "跳转的次数太多")
 	if w.calls() != 6 {
 		t.Fatalf("%d requests", w.calls())
 	}
 	w = newWire(t, reply{status: 302})
 	_, err = w.client(5, time.Second, google).Fetch(context.Background(), "https://writer.example/", anywhere, MaxBytes)
-	fails(t, err, "重定向次数超出限制")
+	fails(t, err, "跳转的次数太多")
 	// Other statuses are answers, not redirects.
 	w = newWire(t, reply{status: 304, headers: map[string]string{"Location": "/x"}}, reply{status: 404, body: []byte("missing")})
 	c := w.client(5, time.Second, google)
@@ -360,11 +360,11 @@ func gzipped(b []byte) []byte {
 func TestSizeAndStall(t *testing.T) {
 	w := newWire(t, reply{headers: map[string]string{"Content-Encoding": "gzip"}, body: gzipped(bytes.Repeat([]byte("x"), 10000))})
 	_, err := w.client(5, time.Second, google).Fetch(context.Background(), "https://writer.example/", anywhere, 100)
-	fails(t, err, "大小限制")
+	fails(t, err, "太大")
 	w = newWire(t, reply{stall: true})
 	start := time.Now()
 	_, err = w.client(5, 100*time.Millisecond, google).Fetch(context.Background(), "https://writer.example/", anywhere, MaxBytes)
-	fails(t, err, "超时")
+	fails(t, err, "太久没有回应")
 	// The stall timeout, not the limit at four times it.
 	if took := time.Since(start); took > 300*time.Millisecond {
 		t.Fatalf("a stalled request ran %v, want about 100ms", took)
@@ -384,14 +384,14 @@ func TestBodies(t *testing.T) {
 		return c.Fetch(context.Background(), "https://writer.example/", anywhere, max)
 	}
 	_, err := get(999)
-	fails(t, err, "大小限制")
+	fails(t, err, "太大")
 	for range 3 {
 		if res, err := get(1000); err != nil || !bytes.Equal(res.Body, big) {
 			t.Fatal(res, err)
 		}
 	}
 	_, err = get(1000)
-	fails(t, err, "不支持的网页编码")
+	fails(t, err, "不支持的文字编码")
 	// Header values read one character per byte, as Node reads them.
 	if res, err := get(1000); err != nil || res.Type != "text/html; charset=é" {
 		t.Fatal(res, err)
@@ -401,7 +401,7 @@ func TestBodies(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	_, err = w.client(5, 60*time.Millisecond, google).Fetch(ctx, "https://writer.example/", anywhere, MaxBytes)
-	fails(t, err, "超时")
+	fails(t, err, "太久没有回应")
 	if took := time.Since(start); took < 200*time.Millisecond || took > 2*time.Second {
 		t.Fatalf("a slow response ran %v, want about 240ms", took)
 	}
@@ -419,20 +419,20 @@ func deflated(b []byte) []byte {
 func TestBudgetAndLoops(t *testing.T) {
 	w := newWire(t, reply{status: 301, headers: map[string]string{"Location": "/next"}}, reply{})
 	_, err := w.client(1, time.Second, google).Fetch(context.Background(), "https://writer.example/", anywhere, MaxBytes)
-	fails(t, err, "额度")
+	fails(t, err, "请求太多")
 	if w.calls() != 1 {
 		t.Fatalf("%d requests", w.calls())
 	}
 	w = newWire(t, reply{status: 302, headers: map[string]string{"Location": "/"}})
 	_, err = w.client(5, time.Second, google).Fetch(context.Background(), "https://writer.example/", anywhere, MaxBytes)
-	fails(t, err, "循环")
+	fails(t, err, "来回跳")
 	if w.calls() != 1 {
 		t.Fatalf("%d requests", w.calls())
 	}
 	// The budget is the client's, across reads.
 	w = newWire(t, reply{}, reply{})
 	c := w.client(2, time.Second, google)
-	for i, want := range []string{"", "", "额度"} {
+	for i, want := range []string{"", "", "请求太多"} {
 		_, err := c.Fetch(context.Background(), "https://writer.example/", anywhere, MaxBytes)
 		if want == "" && err != nil || want != "" && (err == nil || !strings.Contains(err.Error(), want)) {
 			t.Fatalf("read %d: %v", i, err)

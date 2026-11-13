@@ -11,6 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"trie/internal/locales"
 	"trie/internal/web"
 
 	readeck "codeberg.org/readeck/go-readability/v2"
@@ -406,10 +407,191 @@ func resolveReactSegments(doc *html.Node) {
 			if !contains(doc, segment) || !contains(doc, target) || !htmlElement(segment, "div") || !hasAttr(segment, "hidden") || !htmlElement(target, "template") || contains(segment, target) {
 				continue
 			}
+			// A completed boundary's content takes the place of its fallback, as $RC does: what follows the template up to the
+			// boundary's <!--/$--> (a "Loading..." box) goes. Without the closing comment the fallback stays.
+			if op == "RC" {
+				for _, n := range fallback(target) {
+					remove(n)
+				}
+			}
 			replaceWith(target, children(segment)...)
 			remove(segment)
 		}
 	}
+}
+
+// HasStandIn reports whether a body kept a streamed box's stand-in as words: a paragraph that only says it is loading
+// ("CodeBlock Loading..."), as pages read before boundaries dropped their fallbacks did.
+func HasStandIn(page string) bool { return loadingStandIn.MatchString(page) }
+
+var loadingStandIn = regexp.MustCompile(`<p>[A-Za-z ]{0,24}Loading(?:\.\.\.|…)</p>`)
+
+// fallback is what a Suspense boundary shows until its content comes: the siblings after its template up to the
+// boundary's closing <!--/$--> comment, nested boundaries (<!--$-->, <!--$?-->, <!--$!-->) included; none when the
+// comment is not there.
+func fallback(template *html.Node) []*html.Node {
+	var nodes []*html.Node
+	depth := 0
+	for n := template.NextSibling; n != nil; n = n.NextSibling {
+		if n.Type == html.CommentNode {
+			switch n.Data {
+			case "$", "$?", "$!":
+				depth++
+			case "/$":
+				if depth == 0 {
+					return nodes
+				}
+				depth--
+			}
+		}
+		nodes = append(nodes, n)
+	}
+	return nil
+}
+
+// headingsFromLooseLines gives back the headings a feed lost its tags for (Smashing Magazine's feed writes each h2 as
+// bare text between the paragraphs): a lone line of text standing between blocks, short, and not ending as a sentence
+// does. It becomes a heading a level above the body's own (h2 under h3s), at most h2.
+func headingsFromLooseLines(root *html.Node) {
+	loose, level := looseLines(root)
+	tag := string([]byte{'h', byte('0' + max(2, level-1))})
+	for _, c := range loose {
+		h := &html.Node{Type: html.ElementNode, Data: tag}
+		c.Parent.InsertBefore(h, c)
+		c.Parent.RemoveChild(c)
+		h.AppendChild(&html.Node{Type: html.TextNode, Data: web.JSTrim(c.Data)})
+	}
+}
+
+// HasLooseLines reports whether a body has lines headingsFromLooseLines would make headings of: a feed's body kept
+// before they were.
+func HasLooseLines(page string) bool {
+	doc := domFor(page)
+	if doc == nil {
+		return false
+	}
+	loose, _ := looseLines(body(doc))
+	return len(loose) > 0
+}
+
+// looseLines are root's lone lines of text between blocks, and the highest level of its own headings (3 without).
+func looseLines(root *html.Node) (loose []*html.Node, level int) {
+	level = 3
+	for c := root.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode && len(c.Data) == 2 && c.Data[0] == 'h' && c.Data[1] >= '1' && c.Data[1] <= '6' {
+			level = min(level, int(c.Data[1]-'0'))
+		}
+		if c.Type != html.TextNode {
+			continue
+		}
+		line := web.JSTrim(c.Data)
+		if line == "" || strings.Contains(line, "\n") || web.JSLen(line) > 100 || lineEnd.MatchString(line) ||
+			!isElement(nearElement(c, -1), looseBlocks...) || !isElement(nearElement(c, 1), looseBlocks...) {
+			continue
+		}
+		loose = append(loose, c)
+	}
+	return loose, level
+}
+
+var (
+	lineEnd     = regexp.MustCompile(`[.,;:!?。，；：！？、…）)」』"”]$`)
+	looseBlocks = []string{"p", "ul", "ol", "pre", "figure", "blockquote", "table", "div", "hr", "h1", "h2", "h3", "h4", "h5", "h6"}
+)
+
+// nearElement is the element before (dir -1) or after (dir 1) n among its siblings, past whitespace; nil past text.
+func nearElement(n *html.Node, dir int) *html.Node {
+	for s := sibling(n, dir); s != nil; s = sibling(s, dir) {
+		switch {
+		case s.Type == html.ElementNode:
+			return s
+		case s.Type == html.TextNode && web.JSTrim(s.Data) != "":
+			return nil
+		}
+	}
+	return nil
+}
+
+func sibling(n *html.Node, dir int) *html.Node {
+	if dir < 0 {
+		return n.PrevSibling
+	}
+	return n.NextSibling
+}
+
+// labelCodeLanguages takes a code block's language from the label its site's code box shows above it ("TSX" over a
+// pre, innei.in's boxes): a lone line just before the pre, or before the box holding only it, whose words are one of
+// Shiki's language names. The code takes the language and the label goes; a pre that names its own keeps it.
+func labelCodeLanguages(doc *html.Node) {
+	for _, pre := range queryAll(doc, "pre") {
+		code := pre
+		if c := query(pre, "code"); c != nil {
+			code = c
+		}
+		if languageClass.MatchString(firstLanguage(attr(pre, "class"))) || languageClass.MatchString(firstLanguage(attr(code, "class"))) {
+			continue
+		}
+		// The box: the pre, or a wrapper whose only element is the box below it, at most two levels up.
+		box := pre
+		for range 2 {
+			if label := previousElement(box); label != nil {
+				words := strings.ToLower(web.JSTrim(labelWords(label)))
+				if len(words) <= 20 && (shikiLanguages[words] || plainLabels[words]) && query(label, "pre, img, a") == nil {
+					if shikiLanguages[words] {
+						setAttr(code, "class", web.JSTrim(attr(code, "class")+" language-"+words))
+					}
+					remove(label)
+					break
+				}
+			}
+			if box.Parent == nil || !htmlElement(box.Parent, "div") || len(elementsOf(box.Parent)) != 1 {
+				break
+			}
+			box = box.Parent
+		}
+	}
+}
+
+// plainLabels name code without a language (Shiki shows it as plain text): the label goes, the code stays plain.
+var plainLabels = set("text plaintext plain txt")
+
+// labelWords is the words a code box's label shows, without its buttons (复制, Copy).
+func labelWords(n *html.Node) string {
+	var b strings.Builder
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			switch {
+			case c.Type == html.TextNode:
+				b.WriteString(c.Data)
+			case c.Type == html.ElementNode && c.Data != "button":
+				walk(c)
+			}
+		}
+	}
+	walk(n)
+	return b.String()
+}
+
+// firstLanguage is the first language-* class of classes, or "".
+func firstLanguage(classes string) string {
+	for _, c := range strings.Fields(classes) {
+		if strings.HasPrefix(c, "language-") {
+			return c
+		}
+	}
+	return ""
+}
+
+// elementsOf is n's element children.
+func elementsOf(n *html.Node) []*html.Node {
+	var out []*html.Node
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // lastTail is where the run of placement calls ending the script starts, or -1. RE2 has no back-references, so the
@@ -574,7 +756,7 @@ func finish(page, base, status string, feeds []string, message *string, allowSho
 		feeds = []string{}
 	}
 	if len(cleaned) > maxBytes {
-		e := empty("正文超出解析大小限制")
+		e := empty(locales.ReaderTextTooLarge())
 		if status == "restricted" {
 			e.Status = "restricted"
 		}
@@ -866,6 +1048,7 @@ func ExtractPage(page, pageURL string, trustedArticle bool) (result Extracted) {
 	if !rulesOff["react"] {
 		resolveReactSegments(doc)
 	}
+	labelCodeLanguages(doc)
 	restricted, verified := false, false
 	if !rulesOff["paywall"] {
 		restricted, verified = schemaRestricted(doc)
@@ -1040,6 +1223,7 @@ func ExtractFeedBody(page, base, kind string) Extracted {
 	removeHidden(doc)
 	b := body(doc)
 	withoutFurniture(b, u)
+	headingsFromLooseLines(b)
 	// A syndication notice opening the post ("by zhangxinxu from <the post's address> / 本文可全文转载…"): the reader names
 	// the author and links the original itself.
 	for c := b.FirstChild; c != nil; c = c.NextSibling {

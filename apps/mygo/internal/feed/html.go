@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"trie/internal/locales"
 	"trie/internal/web"
 
 	"golang.org/x/net/html"
@@ -129,7 +130,7 @@ var (
 	feedLabel = regexp.MustCompile(`^(?:rss|atom|feed|rss[` + web.Space + `]*feed|atom[` + web.Space + `]*feed|订阅[` + web.Space + `]*(?:rss|atom)|(?:rss|atom)[` + web.Space + `]*订阅)$`)
 )
 
-var errPageTooBig = errors.New("网页过大，请直接填写 RSS/Atom 地址")
+func errPageTooBig() error { return errors.New(locales.SubscribePageTooLarge()) }
 
 // lower is toLowerCase for ASCII only: with it a case-sensitive pattern of
 // ASCII letters matches as JavaScript's /i does, which never folds other
@@ -140,7 +141,7 @@ func lower(s string) string { return strings.Map(web.LowerASCII, s) }
 // home page declares in its head or links to as "RSS", "Atom", "订阅 RSS"…
 func DiscoverFeeds(page, pageURL string) ([]string, error) {
 	if len(page) > 5*1024*1024 {
-		return nil, errPageTooBig
+		return nil, errPageTooBig()
 	}
 	doc := document(page)
 	var values []string

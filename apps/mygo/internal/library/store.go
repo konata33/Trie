@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"trie/internal/locales"
 	"trie/internal/web"
 
 	_ "modernc.org/sqlite" // pure Go; MyGo's plugin has no interactive transactions
@@ -473,22 +474,22 @@ func (s *Store) Mutate(action LibraryAction) (LibraryState, error) {
 func checkAction(action LibraryAction) error {
 	id := func(id string) error {
 		if id == "" || web.JSLen(id) > 4096 {
-			return errors.New("无效的记录标识")
+			return errors.New(locales.ErrorInvalidItemID())
 		}
 		return nil
 	}
 	switch a := action.(type) {
 	case nil:
-		return errors.New("无效的操作")
+		return errors.New(locales.ErrorInvalidChange())
 	case ToggleFavorite:
 		return id(a.ID)
 	case SetFavorites:
 		if len(a.Items) == 0 || len(a.Items) > 5000 {
-			return errors.New("无效的批量收藏操作")
+			return errors.New(locales.ErrorInvalidFavoritesChange())
 		}
 		for _, item := range a.Items {
 			if item.ID == "" || web.JSLen(item.ID) > 4096 || item.FavoritedAt != nil && (web.JSLen(*item.FavoritedAt) > 40 || !dateOK(*item.FavoritedAt)) {
-				return errors.New("无效的批量收藏操作")
+				return errors.New(locales.ErrorInvalidFavoritesChange())
 			}
 		}
 		return nil
@@ -496,12 +497,12 @@ func checkAction(action LibraryAction) error {
 		return id(a.ID)
 	case SetReadBatch:
 		if len(a.IDs) > 5000 || slices.ContainsFunc(a.IDs, func(id string) bool { return id == "" || web.JSLen(id) > 4096 }) {
-			return errors.New("无效的批量操作")
+			return errors.New(locales.ErrorInvalidBatchChange())
 		}
 		return nil
 	case RenameSource:
 		if name := web.JSTrim(a.Name); name == "" || web.JSLen(name) > 40 {
-			return errors.New("订阅名称应为 1 至 40 个字")
+			return errors.New(locales.ErrorWriterNameLength())
 		}
 		return id(a.ID)
 	case SetSubscription:
@@ -510,19 +511,30 @@ func checkAction(action LibraryAction) error {
 		return checkClip(a.Clip)
 	case UpdateClipNote:
 		if !clipID(a.ID) {
-			return errors.New("无效的摘录标识")
+			return errors.New(locales.ErrorInvalidClipID())
 		}
 		if web.JSLen(a.Note) > 4000 {
-			return errors.New("备注最多 4000 个字")
+			return errors.New(locales.ErrorNoteTooLong())
 		}
 		return nil
 	case DeleteClip:
 		if !clipID(a.ID) {
-			return errors.New("无效的摘录标识")
+			return errors.New(locales.ErrorInvalidClipID())
 		}
 		return nil
+	case Keep:
+		// Both the article's ID and its address are addresses, as a feed's are.
+		for _, u := range []string{a.Article.ID, a.Article.URL} {
+			if _, err := web.URLKey(u); err != nil || web.JSLen(u) > 4096 {
+				return errors.New(locales.ErrorInvalidItemID())
+			}
+		}
+		if name := web.JSTrim(a.Name); name == "" || web.JSLen(name) > 200 || len(a.Article.Kinds) > 8 {
+			return errors.New(locales.ErrorInvalidChange())
+		}
+		return id(a.Source.ID)
 	}
-	return errors.New("不支持的操作")
+	return errors.New(locales.ErrorUnsupportedChange())
 }
 
 func unique(ids []string) bool {
@@ -605,6 +617,8 @@ func (s *Store) apply(action LibraryAction) error {
 			return err
 		}
 		return s.exec("UPDATE sources SET subscribed = ? WHERE id = ?", a.Subscribed, a.ID)
+	case Keep:
+		return s.keep(a)
 	case AddClip:
 		input := a.Clip
 		row, err := s.get("SELECT a.data, s.displayName FROM articles a JOIN sources s ON s.id = a.sourceID WHERE a.id = ?", input.ArticleID)
@@ -670,6 +684,57 @@ func (s *Store) apply(action LibraryAction) error {
 		return nil
 	}
 	return errors.New("Unsupported library action")
+}
+
+// keep is Keep: the article, unless the library has its address already,
+// under its source, added unsubscribed when the library has none.
+func (s *Store) keep(a Keep) error {
+	key, err := web.URLKey(a.Article.URL)
+	if err != nil {
+		return err
+	}
+	rows, err := s.all("SELECT id, json_extract(data, '$.url'), json_extract(data, '$.aliases') FROM articles")
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		id, _ := row[0].(string)
+		url, _ := row[1].(string)
+		var aliases []string
+		if raw, ok := row[2].(string); ok {
+			json.Unmarshal([]byte(raw), &aliases)
+		}
+		for _, u := range append([]string{id, url}, aliases...) {
+			if k, err := web.URLKey(u); err == nil && k == key {
+				return nil
+			}
+		}
+	}
+	src := a.Source
+	if row, err := s.get("SELECT 1 FROM sources WHERE id = ?", src.ID); err != nil {
+		return err
+	} else if row == nil {
+		data, err := s.rewrite("sources", "id", src.ID, src)
+		if err == nil {
+			err = s.exec("INSERT INTO sources(id,data,displayName,subscribed) VALUES(?,?,?,0)", src.ID, data, web.JSTrim(a.Name))
+		}
+		if err == nil && a.FeedURL != "" {
+			err = s.exec("INSERT INTO source_feeds VALUES(?,?,?,NULL,0) ON CONFLICT(sourceID) DO NOTHING", src.ID, a.FeedURL, web.Now())
+		}
+		if err != nil {
+			return err
+		}
+	}
+	art := a.Article
+	art.SourceID = src.ID
+	data, err := s.rewrite("articles", "id", art.ID, art)
+	if err == nil {
+		err = s.exec("INSERT INTO articles(id,sourceID,data,read) VALUES(?,?,?,0) ON CONFLICT(id) DO NOTHING", art.ID, src.ID, data)
+	}
+	if err == nil {
+		err = s.exec("INSERT OR IGNORE INTO article_sources VALUES(?,?)", art.ID, src.ID)
+	}
+	return err
 }
 
 func (s *Store) articleExists(id string) error {
@@ -1020,7 +1085,7 @@ func (s *Store) ImportFeed(sourceID string, feed ParsedFeed, resubscribe bool, i
 			owns := !isOld || old.SourceID == sourceID
 			article := ArticleSnapshot{ID: id, URL: or(old.URL, entry.URL), SourceID: or(old.SourceID, sourceID), Title: entry.Title,
 				Authors: entry.Authors, PublishedAt: orPtr(entry.PublishedAt, old.PublishedAt), ModifiedAt: orPtr(entry.ModifiedAt, old.ModifiedAt),
-				Aliases: aliases, BodyStatus: "not_extracted", VerificationLabel: "来自 RSS/Atom 订阅"}
+				Aliases: aliases, BodyStatus: "not_extracted", VerificationLabel: "来自 RSS/Atom 订阅", Kinds: old.Kinds}
 			if len(entry.Authors) == 0 {
 				article.Authors = old.Authors
 				if !isOld {

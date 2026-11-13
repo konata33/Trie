@@ -108,10 +108,10 @@ func TestReplay(t *testing.T) {
 				}
 				for _, hop := range e.Hops {
 					if !scope(hop) {
-						return nil, errors.New("重定向超出来源范围或形成循环")
+						return nil, errors.New("网站跳转到了站外，或在几个地址间来回跳。")
 					}
 					if used.Add(1) > 160 {
-						return nil, errors.New("本篇文章的读取额度已用完")
+						return nil, errors.New("读这篇文章发出的请求太多，已经停下。")
 					}
 				}
 				if e.Error != "" {

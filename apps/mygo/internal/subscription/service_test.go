@@ -340,7 +340,7 @@ func TestTransientReset(t *testing.T) {
 	// A second network failure reads as a dropped connection, and other failures are not retried.
 	calls = 0
 	s = New(store, reply(reset, &fetch.NetError{Err: errors.New("read: connection reset by peer")}), nil, nil)
-	if _, err := s.Preview(context.Background(), "https://writer.example/feed"); err == nil || err.Error() != "连接被中断，请稍后重试" || calls != 2 {
+	if _, err := s.Preview(context.Background(), "https://writer.example/feed"); err == nil || err.Error() != "连接中断了，稍后再试。" || calls != 2 {
 		t.Fatalf("%v after %d reads", err, calls)
 	}
 	calls = 0

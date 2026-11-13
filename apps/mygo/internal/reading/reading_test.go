@@ -844,6 +844,20 @@ func TestOfflineFallbackUpgrades(t *testing.T) {
 	check(t, saved.FormatVersion == extract.FormatVersion && saved.FeedVersion == nil && must[*library.FeedBody](t)(store.FeedContent(article.ID)).Version == "newer", "%+v", saved)
 }
 
+// A page kept with a streamed box's stand-in ("CodeBlock Loading...") is read again to mend it; offline, the kept
+// body shows as it was, with nothing said of a read failing, since no one asked for one.
+func TestStandInMendedQuietly(t *testing.T) {
+	store := open(t, ":memory:", formatSnapshot)
+	save(t, store, cached("<p>Words before the code.</p><p>CodeBlock Loading...</p>"))
+	var calls atomic.Int32
+	reader := New(store, serve(func(string, func(string) bool, int) (*fetch.Response, error) {
+		calls.Add(1)
+		return nil, errors.New("offline")
+	}), bare(extract.FormatArticleHTML))
+	result := read(t, reader, "article", false)
+	check(t, calls.Load() > 0 && result.RefreshError == nil && strings.Contains(result.HTML, "Words before the code."), "%d reads, %+v", calls.Load(), result)
+}
+
 // Late reformat cannot overwrite a body refreshed while its worker was running
 func TestLateReformatKeepsNewBody(t *testing.T) {
 	store := open(t, ":memory:", formatSnapshot)
@@ -954,7 +968,7 @@ func TestFormatFailureKeepsBody(t *testing.T) {
 		return extract.Extracted{Status: "ready", HTML: html, TextLength: 150, Links: []string{}, Images: []string{}, FeedURLs: []string{}}, nil
 	}
 	result := read(t, New(store, serve(htmlPage(html)), x), article.ID, false)
-	check(t, result.Status == "ready" && result.HTML == html && !hasWork(result.Document) && result.RefreshError != nil && strings.Contains(*result.RefreshError, "已保留可阅读"), "%+v", result)
+	check(t, result.Status == "ready" && result.HTML == html && !hasWork(result.Document) && result.RefreshError != nil && strings.Contains(*result.RefreshError, "按原样显示"), "%+v", result)
 	check(t, content(t, store, article.ID).HTML == html, "the body was not kept")
 }
 

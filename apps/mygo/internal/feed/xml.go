@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"trie/internal/locales"
 	"trie/internal/web"
 )
 
@@ -47,7 +48,7 @@ const (
 	mrssNS  = "http://search.yahoo.com/mrss/"
 )
 
-var errNotXML = errors.New("这个地址没有返回有效的 RSS 或 Atom 订阅源")
+func errNotXML() error { return errors.New(locales.SubscribeInvalidFeed()) }
 
 // The XML declaration saxes accepts: version 1.x first, then encoding and standalone, in that order.
 var declaration = regexp.MustCompile(`^<\?xml[ \t\r\n]+version[ \t\r\n]*=[ \t\r\n]*(?:"1\.[0-9]+"|'1\.[0-9]+')` +
@@ -64,7 +65,7 @@ func parseXML(text string) (*node, int, int, error) {
 	if len(text) > 5 && strings.HasPrefix(text, "<?xml") && (space(text[5]) || text[5] == '?') {
 		decl := declaration.FindString(text)
 		if decl == "" {
-			return nil, 0, 0, errNotXML
+			return nil, 0, 0, errNotXML()
 		}
 		text = text[len(decl):]
 	}
@@ -82,18 +83,18 @@ func parseXML(text string) (*node, int, int, error) {
 			break
 		}
 		if err != nil {
-			return nil, 0, 0, errNotXML
+			return nil, 0, 0, errNotXML()
 		}
 		parent := stack[len(stack)-1]
 		outside := parent == document
 		switch t := tok.(type) {
 		case xml.StartElement:
 			if outside && root != nil {
-				return nil, 0, 0, errNotXML // documents may contain only one root
+				return nil, 0, 0, errNotXML() // documents may contain only one root
 			}
 			el, scope, ok := element(t, text[start:d.InputOffset()], scopes[len(scopes)-1])
 			if !ok {
-				return nil, 0, 0, errNotXML
+				return nil, 0, 0, errNotXML()
 			}
 			el.parent = parent
 			parent.children = append(parent.children, el)
@@ -105,14 +106,14 @@ func parseXML(text string) (*node, int, int, error) {
 			stack, scopes = append(stack, el), append(scopes, scope)
 		case xml.EndElement:
 			if outside || t.Name.Space != parent.prefix || t.Name.Local != parent.local {
-				return nil, 0, 0, errNotXML
+				return nil, 0, 0, errNotXML()
 			}
 			stack, scopes = stack[:len(stack)-1], scopes[:len(scopes)-1]
 		case xml.CharData:
 			cdata := strings.HasPrefix(text[start:], "<![CDATA[")
 			if outside {
 				if cdata || strings.Trim(string(t), " \t\r\n") != "" {
-					return nil, 0, 0, errNotXML // text data outside of root node
+					return nil, 0, 0, errNotXML() // text data outside of root node
 				}
 				continue
 			}
@@ -127,17 +128,17 @@ func parseXML(text string) (*node, int, int, error) {
 			}
 		case xml.ProcInst:
 			if strings.EqualFold(t.Target, "xml") {
-				return nil, 0, 0, errNotXML // a declaration away from the start
+				return nil, 0, 0, errNotXML() // a declaration away from the start
 			}
 			if !outside {
 				parent.children = append(parent.children, &node{kind: piNode, parent: parent, target: t.Target, data: string(t.Inst)})
 			}
 		default: // a DOCTYPE (refused before parsing) or another <! declaration
-			return nil, 0, 0, errNotXML
+			return nil, 0, 0, errNotXML()
 		}
 	}
 	if root == nil || len(stack) != 1 {
-		return nil, 0, 0, errNotXML
+		return nil, 0, 0, errNotXML()
 	}
 	return root, count, deepest, nil
 }

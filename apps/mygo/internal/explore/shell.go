@@ -136,9 +136,9 @@ func (s *Service) Links() []string {
 	return out
 }
 
-// Work is loadExploreWork: the picture of one of a gallery's works (index 0 to 7) as a data URL, "" when it cannot be had.
+// Work is loadExploreWork: the picture of one of a gallery's works (its place in Entry.Works) as a data URL, "" when it cannot be had.
 func (s *Service) Work(ctx context.Context, entryID string, index int) (string, error) {
-	if index < 0 || index > 7 {
+	if index < 0 {
 		return "", nil
 	}
 	src, err := s.workImage(entryID, index)
@@ -324,6 +324,10 @@ func (s *Service) fetchPicture(file, src string, minWidth int) string {
 		get = fetch.New(6).Fetch
 	}
 	res, err := get(context.Background(), src, func(string) bool { return true }, 12*1024*1024)
+	if err != nil {
+		// A connection dropped on the way is tried once more: a picture that fails is not asked for again this session.
+		res, err = get(context.Background(), src, func(string) bool { return true }, 12*1024*1024)
+	}
 	if err != nil || res.Status < 200 || res.Status >= 300 {
 		return ""
 	}

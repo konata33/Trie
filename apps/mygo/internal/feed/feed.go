@@ -6,12 +6,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"regexp"
 	"strings"
 
 	"trie/internal/fetch"
 	"trie/internal/library"
+	"trie/internal/locales"
 	"trie/internal/web"
 )
 
@@ -149,17 +149,19 @@ func units16(s string) string {
 var gallery = regexp.MustCompile(`^(?:website|landing page|portfolio|template) inspiration:[` + web.Space + `]+`)
 
 var (
-	errTooBig   = errors.New("订阅源过大或包含不支持的 XML 声明")
 	doctype     = regexp.MustCompile(`<!doctype|<!entity`)
 	ansi        = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
 	controls    = regexp.MustCompile(`[\x00-\x08\x0b\x0c\x0e-\x1f]`)
-	errNotFeed  = errors.New("这个地址不是 RSS 或 Atom 订阅源")
-	errHuge     = errors.New("订阅源结构过大")
-	errDeep     = errors.New("订阅源嵌套过深")
-	errChannel  = errors.New("订阅源缺少频道信息")
-	errTooMany  = errors.New("单次订阅返回超过 1000 条文章，请使用较小的订阅源")
 	textEscaped = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
 )
+
+// The errors of a feed refused, said in the app's language when they are made.
+func errTooBig() error  { return errors.New(locales.SubscribeFeedTooLarge()) }
+func errNotFeed() error { return errors.New(locales.SubscribeNotFeed()) }
+func errHuge() error    { return errors.New(locales.SubscribeFeedTooComplex()) }
+func errDeep() error    { return errors.New(locales.SubscribeFeedTooDeep()) }
+func errChannel() error { return errors.New(locales.SubscribeFeedNoChannel()) }
+func errTooMany() error { return errors.New(locales.SubscribeFeedTooMany()) }
 
 // Parse reads the feed at feedURL, whose document is xml.
 func Parse(xml, feedURL string) (library.ParsedFeed, error) {
@@ -169,12 +171,12 @@ func Parse(xml, feedURL string) (library.ParsedFeed, error) {
 	}
 	feedURL = u.Href()
 	if len(xml) > 5*1024*1024 || doctype.MatchString(lower(xml)) {
-		return library.ParsedFeed{}, errTooBig
+		return library.ParsedFeed{}, errTooBig()
 	}
 	cleaned := controls.ReplaceAllString(ansi.ReplaceAllString(xml, ""), "")
 	warnings := []string{}
 	if cleaned != xml {
-		warnings = append(warnings, "订阅源包含无效字符，已清理后读取")
+		warnings = append(warnings, locales.SubscribeInvalidCharacters())
 	}
 	root, count, deepest, err := parseXML(cleaned)
 	if err != nil {
@@ -183,11 +185,11 @@ func Parse(xml, feedURL string) (library.ParsedFeed, error) {
 	kind := strings.ToLower(root.local)
 	switch {
 	case kind != "rss" && kind != "rdf" && kind != "feed":
-		return library.ParsedFeed{}, errNotFeed
+		return library.ParsedFeed{}, errNotFeed()
 	case count > 50000:
-		return library.ParsedFeed{}, errHuge
+		return library.ParsedFeed{}, errHuge()
 	case deepest > 80:
-		return library.ParsedFeed{}, errDeep
+		return library.ParsedFeed{}, errDeep()
 	}
 	atom := kind == "feed"
 	channel := root
@@ -195,7 +197,7 @@ func Parse(xml, feedURL string) (library.ParsedFeed, error) {
 		channel = child(root, "channel")
 	}
 	if channel == nil {
-		return library.ParsedFeed{}, errChannel
+		return library.ParsedFeed{}, errChannel()
 	}
 	channelBase := baseOf(channel, feedURL)
 	var home *string
@@ -226,7 +228,7 @@ func Parse(xml, feedURL string) (library.ParsedFeed, error) {
 		items = children(channel, "item")
 	}
 	if len(items) > 1000 {
-		return library.ParsedFeed{}, errTooMany
+		return library.ParsedFeed{}, errTooMany()
 	}
 	articles := []library.FeedEntry{}
 	seen := map[string]bool{}
@@ -337,7 +339,7 @@ func Parse(xml, feedURL string) (library.ParsedFeed, error) {
 			Image: library.MaybeString{Set: true, Value: attached(item, base)}})
 	}
 	if skipped > 0 {
-		warnings = append(warnings, fmt.Sprintf("%d 条内容没有可用的公开网页地址，未导入", skipped))
+		warnings = append(warnings, locales.SubscribeSkippedItems(skipped))
 	}
 	return library.ParsedFeed{FeedURL: feedURL, HomeURL: homeURL, Title: title, Articles: articles, FetchedAt: web.Now(), Warnings: warnings,
 		Description: library.MaybeString{Set: true, Value: description}}, nil

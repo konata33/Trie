@@ -19,12 +19,14 @@ package explore
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -34,18 +36,22 @@ import (
 	"trie/internal/feed"
 	"trie/internal/fetch"
 	"trie/internal/library"
+	"trie/internal/locales"
 	"trie/internal/reading"
 	"trie/internal/web"
 )
 
 const (
 	// version is STATS: bumped when stats gain a field the page relies on (2: post excerpts, 3 to 8: cleaner, longer
-	// excerpts, 9: post pictures, 10: galleries' sites); older stats are shown at once and read again behind them.
-	version = 11
+	// excerpts, 9: post pictures, 10: galleries' sites, 12: feedKept items); older stats are shown at once and read again
+	// behind them.
+	version = 12
 	fresh   = 6 * 60 * 60_000
 	retry   = 10 * 60_000
 	// picksKept is PICKS: posts kept from each upstream feed, newest first.
 	picksKept = 10
+	// feedKept is how many of a feed's latest items an entry keeps, as posts and as works.
+	feedKept = 30
 	// thinText is THIN: a recommended post whose feed gives less text than this (a member teaser, a digest's
 	// one-paragraph summary) is shown only once its page reads; the same bar the page read is held to (Open).
 	thinText = 400
@@ -60,7 +66,7 @@ var now = time.Now
 
 func nowMS() int64 { return now().UnixMilli() }
 
-var errNotListed = errors.New("推荐里没有这篇文章")
+func errNotListed() error { return errors.New(locales.ExploreNotListed()) }
 
 // catalogEntry is a site of catalog.json.
 type catalogEntry struct {
@@ -72,6 +78,83 @@ type catalogEntry struct {
 	FeedURL *string `json:"feedURL"`
 	Intro   string  `json:"intro"`
 	Section string  `json:"section,omitempty"`
+	Kinds   []Shelf `json:"kinds,omitempty"`
+}
+
+// Shelf is one kind of thing a gallery is good for (landing, portfolio,
+// motion, type or brand) and where its works of that kind come from: the
+// feed of the gallery's own section for it; else its works whose title
+// Match finds; else all its works.
+type Shelf struct {
+	Kind  string `json:"kind"`
+	Feed  string `json:"feed,omitempty"`
+	Match string `json:"match,omitempty"`
+}
+
+// shelfFeeds are the feeds of a gallery's own sections.
+func (e catalogEntry) shelfFeeds() []string {
+	var out []string
+	for _, sh := range e.Kinds {
+		if sh.Feed != "" && !slices.Contains(out, sh.Feed) {
+			out = append(out, sh.Feed)
+		}
+	}
+	return out
+}
+
+// shelved is a gallery's work with the kinds it is shelved under, and the feed that lists it.
+type shelved struct {
+	work
+	kinds []string
+	feed  string
+}
+
+// works are a gallery's works and its sections', each once, newest first, with the kinds they are shelved under.
+// Work's pictures go by their place here. s.mu is held.
+func (s *Service) works(e catalogEntry) []shelved {
+	var out []shelved
+	at := map[string]int{}
+	add := func(w work, feed, kind string) {
+		i, ok := at[w.URL]
+		if !ok {
+			i = len(out)
+			at[w.URL] = i
+			out = append(out, shelved{work: w, feed: feed})
+		}
+		if kind != "" && !slices.Contains(out[i].kinds, kind) {
+			out[i].kinds = append(out[i].kinds, kind)
+		}
+	}
+	if st := s.stats[e.feed()]; e.feed() != "" && st != nil {
+		for _, w := range st.Works {
+			add(w, e.feed(), "")
+			for _, sh := range e.Kinds {
+				if sh.Holds(w.Title) {
+					add(w, e.feed(), sh.Kind)
+				}
+			}
+		}
+	}
+	for _, sh := range e.Kinds {
+		if st := s.stats[sh.Feed]; sh.Feed != "" && st != nil {
+			for _, w := range st.Works {
+				add(w, sh.Feed, sh.Kind)
+			}
+		}
+	}
+	slices.SortStableFunc(out, func(x, y shelved) int { return cmp.Compare(parse(y.PublishedAt), parse(x.PublishedAt)) })
+	return out
+}
+
+// Holds tells whether a work of the gallery's own feed titled title is on this shelf; a section's feed says so itself.
+func (sh Shelf) Holds(title string) bool {
+	return sh.Feed == "" && (sh.Match == "" || titled(sh.Match, title))
+}
+
+// titled tells whether title has what a shelf's Match looks for, in any case.
+func titled(pattern, title string) bool {
+	re, err := regexp.Compile("(?i)" + pattern)
+	return err == nil && re.MatchString(title)
 }
 
 // gallery tells an inspiration gallery, which sells works; a showcase site's own page is its work.
@@ -115,8 +198,10 @@ type Entry struct {
 	FetchError *string `json:"fetchError"`
 	// The library source that already subscribes to this feed, if any.
 	SubscribedSourceID *string `json:"subscribedSourceID"`
-	// A design gallery's latest featured works (at most 8), whose pictures Work gives. Empty for others.
+	// A design gallery's latest featured works (at most feedKept), whose pictures Work gives. Empty for others.
 	Works []Post `json:"works"`
+	// What a design gallery is good for, and where its works of each kind come from.
+	Shelves []Shelf `json:"shelves,omitempty"`
 }
 
 // siteInfo is what stands behind an entry. A design site shows its own first screen, captured from
@@ -508,7 +593,7 @@ func (s *Service) remember(url string, feed library.ParsedFeed) {
 	catalog, _ := s.catalogEntries()
 	gallery := false
 	for _, e := range catalog {
-		if e.feed() == url {
+		if e.feed() == url || slices.Contains(e.shelfFeeds(), url) {
 			gallery = e.gallery()
 			break
 		}
@@ -554,7 +639,7 @@ func (s *Service) ReadTarget(ctx context.Context, entryID, postURL string) (read
 		_, isShown := s.shown[postURL]
 		s.mu.Unlock()
 		if from == nil {
-			return reading.Target{}, errNotListed
+			return reading.Target{}, errNotListed()
 		}
 		if !isShown {
 			if f, err := s.o.FetchFeed(ctx, from.FeedURL); err == nil {
@@ -574,18 +659,28 @@ func (s *Service) ReadTarget(ctx context.Context, entryID, postURL string) (read
 	}
 	entry := find(catalog, entryID)
 	var st *stats
+	var shelf *shelved // a gallery's work, from its own feed or a section's
+	feedURL := ""
 	if entry != nil && entry.feed() != "" {
-		st = s.stats[entry.feed()]
+		st, feedURL = s.stats[entry.feed()], entry.feed()
 	}
-	listed := st != nil && (slices.ContainsFunc(st.Posts, func(p Post) bool { return p.URL == postURL }) || slices.ContainsFunc(st.Works, func(w work) bool { return w.URL == postURL }))
+	listed := st != nil && slices.ContainsFunc(st.Posts, func(p Post) bool { return p.URL == postURL })
+	if entry != nil && entry.gallery() {
+		for _, w := range s.works(*entry) {
+			if w.URL == postURL {
+				listed, feedURL, shelf = true, w.feed, &w
+				break
+			}
+		}
+	}
 	_, isShown := s.shown[postURL]
 	s.mu.Unlock()
 	if !listed {
-		return reading.Target{}, errNotListed
+		return reading.Target{}, errNotListed()
 	}
 	if !isShown {
-		if f, err := s.o.FetchFeed(ctx, entry.feed()); err == nil {
-			s.remember(entry.feed(), f)
+		if f, err := s.o.FetchFeed(ctx, feedURL); err == nil {
+			s.remember(feedURL, f)
 		}
 	}
 	s.mu.Lock()
@@ -599,8 +694,8 @@ func (s *Service) ReadTarget(ctx context.Context, entryID, postURL string) (read
 	// page gives none. Its work is looked up in the stats as they were before the feed was read again.
 	if entry.gallery() {
 		var w *work
-		if i := slices.IndexFunc(st.Works, func(w work) bool { return w.URL == postURL }); i >= 0 {
-			w = &st.Works[i]
+		if shelf != nil {
+			w = &shelf.work
 		}
 		card := reading.Card{}
 		if hasPost && post.Title != "" {
@@ -658,9 +753,9 @@ func (s *Service) workImage(entryID string, index int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if e := find(catalog, entryID); e != nil && e.feed() != "" {
-		if st := s.stats[e.feed()]; st != nil && index >= 0 && index < len(st.Works) {
-			return st.Works[index].Image, nil
+	if e := find(catalog, entryID); e != nil && e.gallery() {
+		if ws := s.works(*e); index >= 0 && index < len(ws) {
+			return ws[index].Image, nil
 		}
 	}
 	return "", nil
@@ -887,6 +982,11 @@ func (s *Service) List(ctx context.Context) ([]Entry, error) {
 	t := float64(nowMS())
 	var missing, stale, upstream []string
 	for _, e := range catalog {
+		for _, f := range e.shelfFeeds() {
+			if st := s.stats[f]; st == nil || !s.warmed || t-st.At > fresh || st.V != version {
+				stale = append(stale, f)
+			}
+		}
 		url := e.feed()
 		if url == "" {
 			continue
@@ -958,10 +1058,11 @@ func (s *Service) entry(e catalogEntry, sources []library.Source) Entry {
 			msg := st.Error
 			out.FetchError = &msg
 		}
-		if e.gallery() {
-			for _, w := range st.Works {
-				out.Works = append(out.Works, Post{Title: w.Title, URL: w.URL, PublishedAt: w.PublishedAt})
-			}
+	}
+	if e.gallery() {
+		out.Shelves = e.Kinds
+		for _, w := range s.works(e) {
+			out.Works = append(out.Works, Post{Title: w.Title, URL: w.URL, PublishedAt: w.PublishedAt, Kinds: w.kinds})
 		}
 	}
 	var match *library.Source
@@ -1042,7 +1143,7 @@ func (s *Service) writers(catalog []catalogEntry, sources []library.Source) ([]E
 			i, ok := at[key]
 			if !ok {
 				name := up.Name
-				w := Entry{ID: "pick:" + key, Name: p.Author, Kind: "blog", Section: up.Name, Intro: up.Name + " 推荐", HomeURL: p.HomeURL, Host: site,
+				w := Entry{ID: "pick:" + key, Name: p.Author, Kind: "blog", Section: up.Name, Intro: locales.ExploreFeaturedOn(up.Name), HomeURL: p.HomeURL, Host: site,
 					Icon: s.icons[site], Posts: []Post{}, Upstream: &name, Works: []Post{}}
 				if !onPlatform {
 					// Subscribing reads the writer's home page and finds the feed it declares.
@@ -1122,7 +1223,7 @@ func (s *Service) features(catalog []catalogEntry) ([]Entry, [][2]string) {
 		if web.JSLen(title) > 32 {
 			title = name
 		}
-		found = append(found, Entry{ID: "featured:" + name, Name: title, Kind: "site", Section: from, Intro: from + " 推荐", HomeURL: site.URL, Host: name,
+		found = append(found, Entry{ID: "featured:" + name, Name: title, Kind: "site", Section: from, Intro: locales.ExploreFeaturedOn(from), HomeURL: site.URL, Host: name,
 			Thumb: s.captured(name, 400), Icon: s.icons[name], Posts: []Post{}, Upstream: &from, FeaturedAt: library.MaybeString{Set: true, Value: site.PublishedAt},
 			Works: []Post{}})
 		if _, looked := s.icons[name]; !looked && !s.unreached[name] {

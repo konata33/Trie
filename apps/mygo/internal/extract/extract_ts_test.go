@@ -65,6 +65,41 @@ func TestReactPlacementsRestoreSegments(t *testing.T) {
 	must(t, r.Status == "ready" && strings.Contains(r.HTML, "useful public article") && !match(`Ordinary hidden secret|\$RS|\$RC|return a`, r.HTML), "%s %s", r.Status, r.HTML)
 }
 
+// A completed boundary's content replaces its fallback (innei.in's code blocks streamed in after "CodeBlock
+// Loading..."); a nested boundary's markers do not end it early, and without the closing marker the fallback stays.
+func TestReactBoundaryDropsFallback(t *testing.T) {
+	page := `<html><body><article><p>` + prose3 + `</p><div><!--$?--><template id="B:3"></template><div class="h-[500px]">CodeBlock Loading...</div><!--$--><p>Nested fallback</p><!--/$--><!--/$--></div><p>After the code.</p></article>` +
+		`<div hidden id="S:3"><pre><code>const styles = stylex.create({})</code></pre></div><script>$RC("B:3","S:3")</script></body></html>`
+	r := ExtractPage(page, tsBase, false)
+	must(t, r.Status == "ready" && strings.Contains(r.HTML, "stylex.create") && strings.Contains(r.HTML, "After the code.") && !match(`Loading|Nested fallback`, r.HTML), "%s %s", r.Status, r.HTML)
+	open := strings.Replace(page, `<!--/$--><!--/$-->`, ``, 1)
+	r = ExtractPage(open, tsBase, false)
+	must(t, strings.Contains(r.HTML, "stylex.create") && strings.Contains(r.HTML, "CodeBlock Loading"), "an unclosed boundary lost its fallback: %s", r.HTML)
+}
+
+// A feed that wrote its h2s as bare lines between paragraphs (Smashing Magazine) gets them back, a level above its own
+// h3s; a line ending as a sentence, or text running on in a paragraph, stays as it is.
+func TestFeedLooseLinesAreHeadings(t *testing.T) {
+	body := `<p>` + prose3 + `</p>
+Finding The Break-even Line
+<p>Every interface change costs the user something.</p>
+<h3>Question 1: Does This Reduce The Effort?</h3>
+<p>Count everything the task asks.</p>
+This line ends as a sentence.
+<p>More words.</p>`
+	r := ExtractFeedBody(body, tsBase, "body")
+	must(t, strings.Contains(r.HTML, "<h2>Finding The Break-even Line</h2>") && strings.Contains(r.HTML, "<h3>Question 1") &&
+		!strings.Contains(r.HTML, "<h2>This line"), "%s", r.HTML)
+}
+
+// A code box's language label above its pre becomes the code's language; a pre naming its own keeps it and its label.
+func TestCodeBoxLabelIsLanguage(t *testing.T) {
+	page := `<html><body><article><p>` + prose3 + `</p><div><div><div><span>TSX</span><button type="button">复制</button></div><div><pre><code>const a = 1</code></pre></div></div></div>` +
+		`<div><p>CSS</p><pre><code class="language-scss">.a{}</code></pre></div></article></body></html>`
+	r := ExtractPage(page, tsBase, false)
+	must(t, strings.Contains(r.HTML, `class="language-tsx"`) && !match(`TSX|复制`, r.HTML) && strings.Contains(r.HTML, "language-scss") && strings.Contains(r.HTML, ">CSS<"), "%s", r.HTML)
+}
+
 func TestReactPlacementsIgnoredUnlessDirect(t *testing.T) {
 	for _, script := range []string{``, `if(false)$RS("S:1","P:1");`, `$RS=function(){};if(false)$RS("S:1","P:1");`, `if(false){noop();$RS("S:1","P:1");}`, `setTimeout(()=>{$RS("S:1","P:1")},0)`, `const text='$RS("S:1","P:1");';`, `function later(){noop();$RS("S:1","P:1");}`, strings.Repeat(`$RS("S:1","P:1");`, 101)} {
 		page := `<template id="P:1"></template><div hidden id="S:1"><article><p>` + prose3 + `</p></article></div><script>` + script + `</script>`

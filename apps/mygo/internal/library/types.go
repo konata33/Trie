@@ -51,6 +51,8 @@ type ArticleSnapshot struct {
 	Aliases           []string `json:"aliases"`
 	BodyStatus        string   `json:"bodyStatus"`
 	VerificationLabel string   `json:"verificationLabel"`
+	// What a design work kept from Explore is shelved under there (landing, portfolio, motion, type, brand).
+	Kinds []string `json:"kinds,omitempty"`
 }
 
 type ReviewItem struct {
@@ -230,12 +232,24 @@ type DeleteClip struct {
 	ID string `json:"id"`
 }
 
+// Keep keeps an article met outside the subscriptions (a post read from
+// Explore) under its author's source, which is added unsubscribed when the
+// library has none. An article the library already has at the address
+// stays as it is.
+type Keep struct {
+	Source  SourceSnapshot  `json:"source"`
+	Name    string          `json:"name"`
+	FeedURL string          `json:"feedURL"` // "" for an author without a feed
+	Article ArticleSnapshot `json:"article"`
+}
+
 func (ToggleFavorite) action() string  { return "toggle-favorite" }
 func (SetFavorites) action() string    { return "set-favorites" }
 func (MarkRead) action() string        { return "mark-read" }
 func (SetReadBatch) action() string    { return "set-read-batch" }
 func (RenameSource) action() string    { return "rename-source" }
 func (SetSubscription) action() string { return "set-subscription" }
+func (Keep) action() string            { return "keep" }
 func (AddClip) action() string         { return "add-clip" }
 func (UpdateClipNote) action() string  { return "update-clip-note" }
 func (DeleteClip) action() string      { return "delete-clip" }

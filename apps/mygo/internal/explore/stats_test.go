@@ -2,6 +2,7 @@ package explore
 
 import (
 	"net/http"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -60,7 +61,7 @@ func TestFeedStats(t *testing.T) {
 		t.Fatalf("an Atom feed's <updated> is its date: %v %v", st.Last90, st.Recent30)
 	}
 	bare := feedStats(parsed(t, rss([2]string{"x", ""}), "https://writer.example/feed"), nowMS(), false)
-	if !slices.Equal(bare.Posts, []Post{{Title: "x", URL: "https://writer.example/x/"}}) || bare.Last90 != nil || bare.Recent30 != nil ||
+	if !reflect.DeepEqual(bare.Posts, []Post{{Title: "x", URL: "https://writer.example/x/"}}) || bare.Last90 != nil || bare.Recent30 != nil ||
 		bare.Works == nil || len(bare.Works) != 0 || bare.Pictures == nil || len(bare.Pictures) != 0 || bare.Sites != nil || bare.Picks != nil {
 		t.Fatalf("%+v", bare)
 	}

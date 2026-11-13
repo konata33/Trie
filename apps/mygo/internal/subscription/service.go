@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"regexp"
 	"strings"
 	"sync"
@@ -17,6 +16,7 @@ import (
 	"trie/internal/feed"
 	"trie/internal/fetch"
 	"trie/internal/library"
+	"trie/internal/locales"
 	"trie/internal/web"
 )
 
@@ -138,7 +138,7 @@ func (s *Service) FetchFeed(ctx context.Context, input string) (library.ParsedFe
 		// Raw socket errors are English and technical; the reader only needs to know it was the connection.
 		res, err = get(ctx, url, anywhere, fetch.MaxBytes)
 		if errors.As(err, &ne) {
-			return nil, errors.New("连接被中断，请稍后重试")
+			return nil, errors.New(locales.SubscribeConnectionLost())
 		}
 		return res, err
 	}
@@ -147,7 +147,7 @@ func (s *Service) FetchFeed(ctx context.Context, input string) (library.ParsedFe
 		return library.ParsedFeed{}, err
 	}
 	if first.Status < 200 || first.Status >= 300 {
-		return library.ParsedFeed{}, fmt.Errorf("订阅地址暂时无法读取（HTTP %d），已有文章未受影响", first.Status)
+		return library.ParsedFeed{}, errors.New(locales.SubscribeFeedHTTPError(first.Status))
 	}
 	text := decode(first.Body, first.Type)
 	if low := lower(text); feedRoot.MatchString(low) || !strings.Contains(lower(first.Type), "html") && !htmlStart.MatchString(low) {
@@ -158,7 +158,7 @@ func (s *Service) FetchFeed(ctx context.Context, input string) (library.ParsedFe
 		return library.ParsedFeed{}, err
 	}
 	if len(candidates) == 0 {
-		return library.ParsedFeed{}, errors.New("这个网页没有提供可识别的订阅入口，请填写完整的 RSS/Atom 地址")
+		return library.ParsedFeed{}, errors.New(locales.SubscribeNoFeedOnPage())
 	}
 	for _, url := range candidates {
 		// A failure tries the next explicitly declared feed.
@@ -168,7 +168,7 @@ func (s *Service) FetchFeed(ctx context.Context, input string) (library.ParsedFe
 			}
 		}
 	}
-	return library.ParsedFeed{}, errors.New("发现了订阅入口，但暂时无法读取，请稍后重试或直接填写订阅源地址")
+	return library.ParsedFeed{}, errors.New(locales.SubscribeFeedUnreadable())
 }
 
 // key is the feed address as the library matches it.
@@ -186,40 +186,63 @@ func homeKey(value string) (string, error) {
 	return u.Hostname(), nil
 }
 
-// existing is the source the feed already is: the same feed address, or a
-// source without a feed on the feed's own host. The feed's own addresses
-// are public, so only a stored address can fail here.
+// existing is the source the feed already is (SourceID), nil for none.
 func (s *Service) existing(f library.ParsedFeed) (*string, error) {
 	state, err := s.store.Library()
 	if err != nil {
 		return nil, err
 	}
-	feedKey, _ := key(f.FeedURL)
-	feedHome, _ := homeKey(f.FeedURL)
-	home, _ := homeKey(f.HomeURL)
-	for _, src := range state.Sources {
+	id, known, err := SourceID(state.Sources, f.FeedURL, f.HomeURL)
+	if err != nil || !known {
+		return nil, err
+	}
+	return &id, nil
+}
+
+// SourceID is the source of sources a feed at feedURL, of the site at
+// homeURL, already is: the same feed address, or a source without a feed on
+// the feed's own host, other than a person kept without a feed of their own
+// (PersonID). Known is false when there is none, and id is then the one a
+// new source takes, from the feed's address.
+func SourceID(sources []library.Source, feedURL, homeURL string) (id string, known bool, err error) {
+	feedKey, err := key(feedURL)
+	if err != nil {
+		return "", false, err
+	}
+	feedHome, _ := homeKey(feedURL)
+	home, _ := homeKey(homeURL)
+	for _, src := range sources {
 		if src.FeedURL != nil && *src.FeedURL != "" {
 			k, err := key(*src.FeedURL)
 			if err != nil {
-				return nil, err
+				return "", false, err
 			}
 			if k == feedKey {
-				return &src.ID, nil
+				return src.ID, true, nil
 			}
 		}
 	}
-	for _, src := range state.Sources {
-		if src.FeedURL == nil || *src.FeedURL == "" {
+	for _, src := range sources {
+		if (src.FeedURL == nil || *src.FeedURL == "") && !strings.HasPrefix(src.ID, "person:") {
 			k, err := homeKey(src.HomeURL)
 			if err != nil {
-				return nil, err
+				return "", false, err
 			}
 			if k == home && feedHome == home {
-				return &src.ID, nil
+				return src.ID, true, nil
 			}
 		}
 	}
-	return nil, nil
+	sum := sha256.Sum256([]byte(feedKey))
+	return "feed:" + hex.EncodeToString(sum[:])[:16], false, nil
+}
+
+// PersonID is the source of someone kept without a feed of their own (a
+// writer a recommendation names), by who they are where they were found:
+// several write on one site.
+func PersonID(who string) string {
+	sum := sha256.Sum256([]byte(who))
+	return "person:" + hex.EncodeToString(sum[:])[:16]
 }
 
 var scheme = regexp.MustCompile(`^[a-z][a-z\d+.-]*:`)
@@ -228,7 +251,7 @@ var scheme = regexp.MustCompile(`^[a-z][a-z\d+.-]*:`)
 func (s *Service) Preview(ctx context.Context, input string) (Preview, error) {
 	input = web.JSTrim(input)
 	if input == "" || web.JSLen(input) > 4096 {
-		return Preview{}, errors.New("请填写有效的 RSS/Atom 或博客首页地址")
+		return Preview{}, errors.New(locales.SubscribeInvalidAddress())
 	}
 	if !scheme.MatchString(lower(input)) {
 		input = "https://" + input
@@ -273,23 +296,18 @@ func (s *Service) Add(token string, resubscribe bool) (library.SubscriptionResul
 	}
 	s.mu.Unlock()
 	if p == nil || time.Since(p.at) > 10*time.Minute {
-		return library.SubscriptionResult{}, errors.New("订阅预览已过期，请重新识别地址")
+		return library.SubscriptionResult{}, errors.New(locales.SubscribePreviewExpired())
 	}
 	f := p.feed
-	id, err := s.existing(f)
+	state, err := s.store.Library()
 	if err != nil {
 		return library.SubscriptionResult{}, err
 	}
-	if id == nil {
-		k, err := key(f.FeedURL)
-		if err != nil {
-			return library.SubscriptionResult{}, err
-		}
-		sum := sha256.Sum256([]byte(k))
-		made := "feed:" + hex.EncodeToString(sum[:])[:16]
-		id = &made
+	id, _, err := SourceID(state.Sources, f.FeedURL, f.HomeURL)
+	if err != nil {
+		return library.SubscriptionResult{}, err
 	}
-	result, err := s.store.ImportFeed(*id, f, resubscribe, s.iconFor(f.HomeURL), s.nameFor(f.FeedURL, f.HomeURL))
+	result, err := s.store.ImportFeed(id, f, resubscribe, s.iconFor(f.HomeURL), s.nameFor(f.FeedURL, f.HomeURL))
 	if err != nil {
 		return library.SubscriptionResult{}, err
 	}
@@ -320,7 +338,7 @@ func (s *Service) Refresh(ctx context.Context, sourceID string, onProgress func(
 		}
 	}
 	if len(sources) == 0 {
-		return RefreshResult{}, errors.New("还没有可刷新的订阅，请先添加 RSS/Atom 地址")
+		return RefreshResult{}, errors.New(locales.RefreshNothingToRefresh())
 	}
 	if onProgress == nil {
 		onProgress = func(Progress) {}
@@ -350,6 +368,7 @@ func (s *Service) Refresh(ctx context.Context, sourceID string, onProgress func(
 					finished++
 					onProgress(Progress{SourceID: src.ID, State: "done", ImportedCount: &r.ImportedCount, Finished: finished, Total: total})
 				} else {
+					// Kept with the source in Chinese, as libraries hold it; the app translates it where it shows it.
 					const message = "刷新失败，已保留已有文章。请检查网络或订阅地址后重试"
 					if err := s.store.RecordFeedError(src.ID, message); err != nil && stored == nil {
 						stored = err
