@@ -46,6 +46,7 @@ type homeState struct {
 	shows    map[string]titleLook // how the page draws the titles it shows (rowLook)
 	columns  map[string]ui.Rect   // where the people followed are laid out, by article: Press "read" opens one
 	resumed  string               // the article last opened from 接着读: its title is that control's
+	shown    string               // and from the first screen, when it shows a followed article
 	onRow    bool                 // the focus was on a column or a line, the build before
 
 	// What the page draws from, kept until the library or the catalog changes.
@@ -384,8 +385,14 @@ func sentenceOf(e *explore.Entry) string {
 }
 
 // mark is a catalog site's icon, toned as the sidebar's faces, or, without
-// one, a dark disc quieter than the words beside it.
+// one, its first letter on a quiet disc, as the sidebar shows a source
+// without an icon.
 func (a *App) mark(c *ui.Context, e *explore.Entry, size float32) ui.Element {
+	return a.avatar(c, e.Name, a.markIcon(e), size)
+}
+
+// markIcon is a catalog site's icon, toned once; nil for none.
+func (a *App) markIcon(e *explore.Entry) *siteIcon {
 	hs := a.homeSt()
 	ic, ok := hs.faces[e.ID]
 	if !ok && e.Icon != nil {
@@ -394,10 +401,7 @@ func (a *App) mark(c *ui.Context, e *explore.Entry, size float32) ui.Element {
 		}
 		hs.faces[e.ID] = ic
 	}
-	if ic == nil {
-		return ui.Box(c).Size(size, size).Radius(size/2).Background(theme.Selected).InsetShadow(0, 0, 0, 1, theme.LineSoft).Shrink(0).AccessHidden(true)
-	}
-	return a.face(c, ic, "mark", size)
+	return ic
 }
 
 // homePage builds 首页.
@@ -498,21 +502,29 @@ func (a *App) homePage(c *ui.Context, live bool) {
 			ui.Column(c.Key("band-float")).Absolute().Top(0).Left(0).Right(0).ZIndex(3).AlignItems(ui.Center).PassThrough().Children(func() {
 				frame(c).PassThrough().Children(band)
 			})
-			if example != nil {
+			// Without the catalog (offline, or not read yet) the page stands on what is followed, and says nothing of what is missing.
+			shown := true
+			switch {
+			case example != nil:
 				a.showcase(c, example, now, live)
+			case ex.loaded || ex.failed != "" || a.opt.Explore == nil:
+				shown = a.ownShow(c, follows, now, live)
+			default:
+				// The catalog on its way (read from disk, a moment): its place is kept, so the example does not push the page down.
+				_, vh := c.Size()
+				ph := ui.Box(c.Key("show")).FillWidth().Height(clampf(vh-150, 480, 860)).Background(theme.Surface).AccessHidden(true)
+				if !a.still(c) {
+					ph.Opacity(1 - 0.45*breathe(ph.Loop("breathe", 2*motion.Breathe, ui.Linear)))
+				}
 			}
 			g := frame(c)
 			if len(strangers) == 0 {
 				g.Padding(0, 32, 140, 32)
 			}
-			if example == nil {
+			if !shown {
 				g.Padding(64, 32, map[bool]float32{true: 140, false: 0}[len(strangers) == 0], 32)
 			}
 			g.Children(func() {
-				// Offline on a first start Explore has nothing yet; Home says so once instead of leaving gaps.
-				if ex.failed != "" && !ex.loaded {
-					ui.Text(c, "流行和设计例子暂时读不到，联网后会自己更新").FontSize(theme.Body).LineHeight(1.5).TextColor(theme.Muted).Margin(0, 0, 24, 0)
-				}
 				if len(trending) > 0 {
 					a.trending(c, trending, now, live)
 				}
@@ -528,11 +540,19 @@ func (a *App) homePage(c *ui.Context, live bool) {
 }
 
 // homeTitle is an article's title as the page shows it, for the title to
-// travel from and back to (openAs, rowLook). Opened from 接着读, the title
-// is that control's; otherwise its row's.
-func (a *App) homeTitle(t ui.Element, id string, look titleLook, resume bool) {
+// travel from and back to (openAs, rowLook). Opened from 接着读 ("resume")
+// or the first screen ("show"), the title is that control's; otherwise its
+// row's ("").
+func (a *App) homeTitle(t ui.Element, id string, look titleLook, from string) {
 	hs := a.homeSt()
-	if resume != (hs.resumed == id) {
+	owner := ""
+	switch id {
+	case hs.resumed:
+		owner = "resume"
+	case hs.shown:
+		owner = "show"
+	}
+	if from != owner {
 		return
 	}
 	a.end(t, page{kind: "home"}, "title:"+id)
@@ -638,7 +658,7 @@ func (a *App) resume(c *ui.Context, follows []*library.Article, now time.Time, l
 	b.Children(func() {
 		a.moonOf(c, art, "")
 		t := resumeTitle(c, titleOf(art.Title)).Shrink(1).MinWidth(0)
-		a.homeTitle(t, art.ID, titleLook{resumeTitle, theme.Label}, true)
+		a.homeTitle(t, art.ID, titleLook{resumeTitle, theme.Label}, "resume")
 		ui.Text(c, fmt.Sprintf("%d%%", pct)).TextColor(theme.Muted).FontFeatures(theme.Numbers).NoWrap()
 	})
 	tip := nameOf(a.sourceOf(art)) + fmt.Sprintf(" · 读到 %d%%", pct)
@@ -652,14 +672,8 @@ func resumeTitle(c *ui.Context, s string) ui.Element {
 	return ui.Text(c, s).FontSize(theme.Label).LineHeight(16.0 / 12).SingleLine().Ellipsis("…")
 }
 
-// showcase is today's design example: the work fills the page's width from
-// the top of the window, the band floating on it; its name and source sit
-// in the lower-left corner, only that corner darkened and softened, the
-// work carrying on beside and behind them; its foot dissolves into the
-// window.
+// showcase is today's design example (show).
 func (a *App) showcase(c *ui.Context, it *homeItem, now time.Time, live bool) {
-	_, vh := c.Size()
-	h, w := clampf(vh-150, 480, 860), a.area.W
 	svc, id, index := a.opt.Explore, it.entry.ID, it.index
 	pic := a.favPicture(fmt.Sprintf("work:%s:%d", id, index), func() image.Image {
 		if svc == nil {
@@ -668,9 +682,103 @@ func (a *App) showcase(c *ui.Context, it *homeItem, now time.Time, live bool) {
 		data, _ := svc.Work(bg, id, index)
 		return dataImage(data)
 	})
-	ui.Box(c.Key("show")).FillWidth().Height(h).Role(ui.RoleRegion).Label("今天的设计例子").Children(func() {
-		b := ui.ButtonBase(c.Key("open")).Label(it.post.Title).Absolute().Fill().ClipX().ClipY().FocusRing(false)
-		a.opener(b, it.post.URL)
+	a.show(c, pic, false, "今天的设计例子", it.post.Title, live, func(b ui.Element) { a.opener(b, it.post.URL) }, func() ui.Element {
+		a.showSource(c, func() {
+			if p := a.ex.pics["icon:"+it.entry.ID]; p != nil && p.bmp != nil {
+				ui.Image(c, p.bmp).Fit(ui.Cover).Size(18, 18).Radius(6)
+			}
+		}, it.entry.Name, homeWhen(it.post.PublishedAt, now))
+		title := showTitle(c, it.post.Title)
+		a.end(title, page{kind: "home"}, "title:"+trialID(it.post.URL))
+		return title
+	}, func(b, title ui.Element) { a.openFrom(c, it, b, title, showTitle, 40) })
+}
+
+// ownShow is the first screen without Explore's catalog (offline, or before
+// it is first read): the newest piece of someone followed that has a
+// picture, else the newest one on its writer's own first screen, laid out
+// as the design example is. False when there is nothing to stand it on.
+func (a *App) ownShow(c *ui.Context, follows []*library.Article, now time.Time, live bool) bool {
+	hs := a.homeSt()
+	var art *library.Article
+	var pic *favPic
+	site := false
+	for _, x := range follows[:min(6, len(follows))] {
+		if x.Preview == nil || !x.Preview.HasImage {
+			continue
+		}
+		p := a.keepPic(x.ID)
+		if p == nil || !p.done {
+			// Still on its way: the screen waits for it rather than changing its mind once it comes.
+			art, pic = x, p
+			break
+		}
+		if p.bmp != nil {
+			art, pic = x, p
+			break
+		}
+	}
+	if art == nil && len(follows) > 0 {
+		art, site = follows[0], true
+		pic = a.sitePic(a.sourceOf(art))
+		if pic != nil && pic.done && pic.bmp == nil {
+			return false
+		}
+	}
+	if art == nil {
+		return false
+	}
+	p := page{kind: "home"}
+	title := titleOf(art.Title)
+	a.show(c, pic, site, "最新一篇", title, live, func(b ui.Element) {
+		if hs.shown == art.ID {
+			a.layInto(p, art.ID, b.LayoutBounds())
+			// Back from the keys, the focus comes back here, ahead of the piece's own column further down.
+			if live && hs.focus == art.ID {
+				hs.focus = ""
+				b.Focus()
+			}
+		}
+	}, func() ui.Element {
+		src := a.sourceOf(art)
+		d := art.PublishedAt
+		if d == nil || *d == "" {
+			d = art.ModifiedAt
+		}
+		a.showSource(c, func() { a.avatar(c, nameOf(src), a.iconOf(src), 18) }, nameOf(src), homeWhen(d, now))
+		t := showTitle(c, title)
+		a.homeTitle(t, art.ID, titleLook{showTitle, 40}, "show")
+		return t
+	}, func(b, t ui.Element) {
+		hs.cursor, hs.resumed, hs.shown = art.ID, "", art.ID
+		a.openAs(c, art.ID, b.LayoutBounds(), showTitle, 40)
+		a.homeTitle(t, art.ID, titleLook{showTitle, 40}, "show") // built before the press was known
+	})
+	return true
+}
+
+// showSource is the line over the first screen's title: a mark, a name, when.
+func (a *App) showSource(c *ui.Context, mark func(), name, when string) {
+	ui.Row(c).Gap(8).AlignItems(ui.Center).FontSize(theme.Body).LineHeight(18.0 / 13).TextColor(theme.Text2).FontFeatures(theme.Numbers).Children(func() {
+		mark()
+		ui.Text(c, name)
+		ui.Text(c, "·").AccessHidden(true)
+		ui.Text(c, when)
+	})
+}
+
+// show is the first screen: a picture filling the page's width from the top
+// of the window, the band floating on it, resting as bright as the picture
+// allows (toneOf, as 收藏's do) and coming up under the pointer; the words
+// sit in the lower-left corner, only that corner darkened and softened, the
+// picture carrying on beside and behind them; its foot dissolves into the
+// window. words builds the words and gives the title; open opens it.
+func (a *App) show(c *ui.Context, pic *favPic, site bool, region, label string, live bool, each func(b ui.Element), words func() ui.Element, open func(b, title ui.Element)) {
+	_, vh := c.Size()
+	h, w := clampf(vh-150, 480, 860), a.area.W
+	ui.Box(c.Key("show")).FillWidth().Height(h).Role(ui.RoleRegion).Label(region).Children(func() {
+		b := ui.ButtonBase(c.Key("open")).Label(label).Absolute().Fill().ClipX().ClipY().FocusRing(false)
+		each(b)
 		hover := b.Hovered()
 		if b.FocusVisible() {
 			b.FocusRing(true).FocusRingOffset(-4)
@@ -678,51 +786,55 @@ func (a *App) showcase(c *ui.Context, it *homeItem, now time.Time, live bool) {
 		var title ui.Element
 		b.Children(func() {
 			fade := a.picFade(c, pic)
-			lean := float32(1)
+			lean, bright := float32(1), float32(1)
+			if pic != nil && pic.bmp != nil {
+				bright = pic.rest
+				if hover || b.FocusVisible() {
+					bright = pic.lit
+				}
+			}
 			if hover && !a.still(c) {
 				lean = 1.03
 			}
 			if a.kbd {
-				lean = b.Jump("lean", lean)
+				lean, bright = b.Jump("lean", lean), b.Jump("bright", bright)
 			} else {
 				lean = b.AnimateTo("lean", lean, ui.Animation{Duration: motion.Lean, Ease: motion.Ease})
+				bright = b.AnimateTo("bright", bright, a.ease(motion.Lean))
 			}
 			ph := ui.Box(c.Key("picture")).Absolute().Fill().Background(theme.Surface).IgnoreInput(true).AccessHidden(true)
+			if (pic == nil || !pic.done) && !a.still(c) {
+				ph.Opacity(1 - 0.45*breathe(ph.Loop("breathe", 2*motion.Breathe, ui.Linear)))
+			}
 			ph.Children(func() {
-				if pic != nil && pic.bmp != nil {
-					ui.Box(c).Absolute().Fill().TransformOrigin(0.5, 0.5).Scale(lean, lean).Children(func() { picImage(c, pic.bmp, false, fade) })
+				if pic == nil || pic.bmp == nil {
+					return
+				}
+				ui.Box(c).Absolute().Fill().TransformOrigin(0.5, 0.5).Scale(lean, lean).Children(func() { picImage(c, pic.bmp, site, fade) })
+				if pic.soft != nil && w > 0 {
+					ui.Box(c.Key("soft")).Absolute().Fill().Children(func() {
+						picImage(c, pic.pool(w, h, posOf(site), 0, h, 0.6*w, 0.4*h, 0.45, 1), site, fade)
+					})
+				}
+				// Dimmed to its brightness, as 收藏's pictures are: a white site never glares out of the dark window.
+				if v := (1 - bright) * fade; v > 0.001 {
+					ui.Box(c).Absolute().Fill().Background(theme.Darken).Opacity(v)
 				}
 			})
-			// The band's grey words need a little more than the title's 0.9 to read on a white work.
+			// The band's grey words need a little more than the title's 0.9 to read on a white picture.
 			ui.Box(c).Absolute().Left(0).Top(0).Right(0).Height(144).IgnoreInput(true).LinearGradient(ui.LinearGradient{Angle: 180, Stops: []ui.GradientStop{
 				{Color: theme.Window.Alpha(0.94), At: 0}, {Color: theme.Window.Alpha(0.94), At: 56.0 / 144}, {Color: theme.Window.Alpha(0), At: 1}}})
-			if pic != nil && pic.soft != nil && w > 0 {
-				ui.Box(c.Key("soft")).Absolute().Fill().IgnoreInput(true).AccessHidden(true).Children(func() {
-					picImage(c, pic.pool(w, h, posOf(false), 0, h, 0.6*w, 0.4*h, 0.45, 1), false, fade)
-				})
-			}
 			if w > 0 {
 				a.shade(c, w, h, 1.1*w, 0.72*h, [][2]float32{{0, 0.9}, {0.42, 0.82}, {1, 0}}).Absolute().Fill()
 			}
 			ui.Box(c).Absolute().Fill().IgnoreInput(true).LinearGradient(ui.LinearGradient{Angle: 180, Stops: []ui.GradientStop{
 				{Color: theme.Window.Alpha(0), At: (h - 64) / h}, {Color: theme.Window, At: 1}}})
 			ui.Column(c.Key("words")).Absolute().Left(0).Right(0).Bottom(64).AlignItems(ui.Center).PassThrough().Children(func() {
-				frame(c).Gap(12).PassThrough().Children(func() {
-					ui.Row(c).Gap(8).AlignItems(ui.Center).FontSize(theme.Body).LineHeight(18.0 / 13).TextColor(theme.Text2).FontFeatures(theme.Numbers).Children(func() {
-						if p := a.ex.pics["icon:"+it.entry.ID]; p != nil && p.bmp != nil {
-							ui.Image(c, p.bmp).Fit(ui.Cover).Size(18, 18).Radius(6)
-						}
-						ui.Text(c, it.entry.Name)
-						ui.Text(c, "·").AccessHidden(true)
-						ui.Text(c, homeWhen(it.post.PublishedAt, now))
-					})
-					title = showTitle(c, it.post.Title)
-					a.end(title, page{kind: "home"}, "title:"+trialID(it.post.URL))
-				})
+				frame(c).Gap(12).PassThrough().Children(func() { title = words() })
 			})
 		})
 		if b.Clicked() && live {
-			a.openFrom(c, it, b, title, showTitle, 40)
+			open(b, title)
 		}
 	})
 }
@@ -748,19 +860,30 @@ func (a *App) trending(c *ui.Context, items []homeItem, now time.Time, live bool
 		}
 		var title ui.Element
 		b.Children(func() {
-			if pic != nil && pic.bmp != nil {
+			if pic != nil {
 				fade := a.picFade(c, pic)
 				lean := float32(1)
 				if hover && !a.still(c) {
 					lean = 1.03
 				}
 				lean = b.AnimateTo("lean", lean, ui.Animation{Duration: motion.Lean, Ease: motion.Ease})
-				ui.Box(c.Key("picture")).AlignSelf(ui.Stretch).Grow(1).Shrink(1).Basis(0).MinHeight(128).Margin(0, 0, 12, 0).Radius(10).ClipX().ClipY().
-					Background(theme.Surface).InsetShadow(0, 0, 0, 1, theme.LineSoft).IgnoreInput(true).AccessHidden(true).Children(func() {
+				slot := ui.Box(c.Key("picture")).AlignSelf(ui.Stretch).Grow(1).Shrink(1).Basis(0).MinHeight(128).Margin(0, 0, 12, 0).Radius(10).ClipX().ClipY().
+					Background(theme.Surface).InsetShadow(0, 0, 0, 1, theme.LineSoft).IgnoreInput(true).AccessHidden(true)
+				slot.Children(func() {
 					ui.Box(c).Absolute().Fill().TransformOrigin(0.5, 0.5).Scale(lean, lean).Children(func() {
-						img := ui.Image(c, pic.bmp).Fit(ui.Cover).Absolute().Fill()
-						if fade < 1 {
-							img.Opacity(fade)
+						switch {
+						case pic.bmp != nil:
+							img := ui.Image(c, pic.bmp).Fit(ui.Cover).Absolute().Fill()
+							if fade < 1 {
+								img.Opacity(fade)
+							}
+						case pic.done:
+							// A post without a picture of its own stands as Explore's writer covers do without one: their
+							// quiet grey glow, the site's mark small in the corner.
+							if r := slot.LayoutBounds(); r.W > 0 && r.H > 0 {
+								ui.Image(c, a.ex.aura(grey, inkCover, r.W, r.H)).Fit(ui.FillBox).Absolute().Fill()
+							}
+							a.mark(c, lead.entry, 32).Absolute().Left(20).Bottom(20)
 						}
 					})
 				})
@@ -770,9 +893,6 @@ func (a *App) trending(c *ui.Context, items []homeItem, now time.Time, live bool
 			a.end(title, page{kind: "home"}, "title:"+trialID(lead.post.URL))
 			if lead.post.Excerpt != "" {
 				lines := 4
-				if pic != nil && pic.done && pic.bmp == nil {
-					lines = 9 // without a picture, more of the opening fills the height
-				}
 				color := theme.Text2
 				if hover {
 					color = theme.Text
@@ -908,7 +1028,7 @@ func (a *App) followsView(c *ui.Context, follows []*library.Article, now time.Ti
 						hs.columns[art.ID] = r
 					}
 					if b.Clicked() && live {
-						hs.cursor, hs.resumed = art.ID, ""
+						hs.cursor, hs.resumed, hs.shown = art.ID, "", ""
 						a.openAs(c, art.ID, r, followTitle, theme.Subtitle)
 					}
 					if live && hs.focus == art.ID {
@@ -929,7 +1049,7 @@ func (a *App) followsView(c *ui.Context, follows []*library.Article, now time.Ti
 						src := a.sourceOf(art)
 						ui.Row(c).Gap(8).AlignItems(ui.Center).MinWidth(0).MaxWidthPercent(100).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).
 							FontFeatures(theme.Numbers).Children(func() {
-							a.face(c, a.iconOf(src), "face", 24)
+							a.avatar(c, nameOf(src), a.iconOf(src), 24)
 							ui.Text(c, nameOf(src)).FontSize(theme.Body).FontWeight(600).TextColor(theme.Text).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
 							d := art.PublishedAt
 							if d == nil || *d == "" {
@@ -937,7 +1057,7 @@ func (a *App) followsView(c *ui.Context, follows []*library.Article, now time.Ti
 							}
 							ui.Text(c, homeWhen(d, now)).NoWrap().Shrink(0)
 						})
-						a.homeTitle(followTitle(c, titleOf(art.Title)), art.ID, titleLook{followTitle, theme.Subtitle}, false)
+						a.homeTitle(followTitle(c, titleOf(art.Title)), art.ID, titleLook{followTitle, theme.Subtitle}, "")
 						if pv := art.Preview; pv != nil && pv.Excerpt != nil && *pv.Excerpt != "" {
 							color := theme.Text2
 							if hover {
@@ -968,7 +1088,7 @@ func (a *App) homeLine(c *ui.Context, art *library.Article, cursor, live bool) {
 		r := b.LayoutBounds()
 		a.layInto(p, art.ID, r)
 		if b.Clicked() && live {
-			hs.cursor, hs.resumed = art.ID, ""
+			hs.cursor, hs.resumed, hs.shown = art.ID, "", ""
 			a.openAs(c, art.ID, r, lineTitle, theme.Item)
 		}
 		if live && hs.focus == art.ID {
@@ -995,7 +1115,7 @@ func (a *App) homeLine(c *ui.Context, art *library.Article, cursor, live bool) {
 					color = theme.Text
 				}
 				t := lineTitle(c, titleOf(art.Title)).Shrink(1).MinWidth(0).TextColor(b.AnimateColor("fg", color, a.ease(motion.Hover)))
-				a.homeTitle(t, art.ID, titleLook{lineTitle, theme.Item}, false)
+				a.homeTitle(t, art.ID, titleLook{lineTitle, theme.Item}, "")
 				if art.Favorite {
 					a.orbit(c, "badge", 11, true).AccessHidden(false).Label("已收藏")
 				}
@@ -1216,7 +1336,7 @@ func (a *App) homeKeys(c *ui.Context) {
 		a.toggleFav(items[at])
 		return
 	case c.Shortcut(0, ui.KeyEnter):
-		hs.cursor, hs.resumed = items[at].ID, ""
+		hs.cursor, hs.resumed, hs.shown = items[at].ID, "", ""
 		a.openAs(c, items[at].ID, ui.Rect{}, followTitle, theme.Subtitle)
 		return
 	default:

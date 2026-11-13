@@ -383,6 +383,46 @@ func (a *App) frame(c *ui.Context, w exWork, width, height float32) {
 	})
 }
 
+// roster is the front page before any writer's posts were read (offline on
+// a first start): the writers themselves, three across, each a face and a
+// name that opens their panel. It says nothing of what is missing.
+func (a *App) roster(c *ui.Context, g exGeometry, on bool) {
+	people := a.ex.index[:min(12, len(a.ex.index))]
+	ui.Box(c.Key("paper")).Height(g.front).Radius(10).Background(theme.Surface).InsetShadow(0, 0, 0, 1, theme.LineSoft).Padding(32, 48).ClipY().
+		Role(ui.RoleRegion).Label("博主").Children(func() {
+		rows := make([]ui.Track, (len(people)+2)/3)
+		for i := range rows {
+			rows[i] = ui.Fr(1)
+		}
+		// The rows share the page's height, as a front page's columns fill it.
+		ui.Grid(c.Key("roster")).ColumnTracks(ui.Fr(1), ui.Fr(1), ui.Fr(1)).RowTracks(rows...).FillHeight().GapX(32).AlignItems(ui.Center).JustifyItems(ui.Start).Children(func() {
+			for i, e := range people {
+				b := ui.ButtonBase(c.Key(e.ID)).Label(e.Name).Row().Gap(14).AlignItems(ui.Center).Radius(6).FocusRing(false).MinWidth(0).MaxWidthPercent(100)
+				a.enterIn(c, b, i%3, on)
+				if b.FocusVisible() {
+					b.FocusRing(true).FocusRingOffset(4)
+				}
+				if a.ex.focus == "who:"+e.ID {
+					a.ex.focus = ""
+					b.Focus()
+				}
+				name := glow(e)
+				if b.Hovered() {
+					name = theme.Text
+				}
+				b.Children(func() {
+					a.exFace(c, e, 40, isPress(e), 15)
+					ui.Text(c, e.Name).FontSize(20).LineHeight(1.3).FontWeight(600).TextColor(b.AnimateColor("name", name, a.ease(140*time.Millisecond))).
+						MaxLines(2).Ellipsis("…").Balance().Shrink(1).MinWidth(0)
+				})
+				if b.Clicked() {
+					a.showSheet(c, e, "who", b.LayoutBounds())
+				}
+			}
+		})
+	})
+}
+
 // breathing is a placeholder breathing while its picture is on its way.
 func (a *App) breathing(c *ui.Context, color ui.Color) {
 	o := float32(1)
@@ -403,10 +443,7 @@ func (a *App) frontPaper(c *ui.Context, g exGeometry, on bool) {
 	ex := a.ex
 	items := ex.fresh
 	if len(items) == 0 {
-		ui.Box(c.Key("paper")).Height(g.front).Radius(10).Background(theme.Surface).InsetShadow(0, 0, 0, 1, theme.LineSoft).Center().
-			Role(ui.RoleRegion).Label("博主的最新文章").Children(func() {
-			ui.Text(c, "博主的新文章暂时读不到，联网后会自己更新。").MaxWidth(320).FontSize(theme.Body).LineHeight(20.0 / 13).TextColor(theme.Muted).TextAlign(ui.Center)
-		})
+		a.roster(c, g, on)
 		return
 	}
 	unit := (g.w - 32) / 3.3
@@ -1132,12 +1169,7 @@ func (a *App) cover(c *ui.Context, e *explore.Entry, w, h float32) {
 				ui.Text(c, e.Name).FontSize(theme.Item).LineHeight(20.0 / 15).FontWeight(600).TextColor(glow(e)).SingleLine().Shrink(1)
 			})
 			if len(posts) == 0 {
-				text := "没有订阅源"
-				if e.FeedURL != nil {
-					text = "暂时读不到这个订阅源的文章"
-				}
-				ui.Text(c, text).FontSize(theme.Body).LineHeight(20.0 / 13).TextColor(theme.Muted)
-				return
+				return // nothing of theirs read yet: their name on the paper, no apology
 			}
 			latest := posts[0]
 			lb := ui.ButtonBase(c.Key("lead")).Label(latest.Title).Grow(1).Shrink(1).MinHeight(0).Column().AlignItems(ui.Stretch).Justify(ui.Start).Gap(10).

@@ -242,7 +242,8 @@ func (a *App) shotOf(e *explore.Entry) *exPic {
 	return nil
 }
 
-// sheetList is their works or their latest posts.
+// sheetList is their works or their latest posts; with nothing of theirs
+// read yet, nothing: the panel ends at its head, whose link goes to their site.
 func (a *App) sheetList(c *ui.Context, e *explore.Entry) {
 	ex := a.ex
 	var works []exWork
@@ -314,12 +315,6 @@ func (a *App) sheetList(c *ui.Context, e *explore.Entry) {
 				})
 			}
 		})
-	default:
-		text := "没有订阅源"
-		if e.FeedURL != nil {
-			text = "暂时读不到这个订阅源的文章"
-		}
-		ui.Text(c.Key("none"), text).FontSize(theme.Body).TextColor(theme.Muted)
 	}
 }
 

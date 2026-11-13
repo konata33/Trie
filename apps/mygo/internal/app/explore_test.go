@@ -705,3 +705,35 @@ func TestExploreNextWindow(t *testing.T) {
 		t.Error("the rooms do not cross in the next window")
 	}
 }
+
+// Before any writer's posts were read (offline on a first start), the
+// writing room's front page is the writers themselves, opening their
+// panels; covers and panels say where they write, never that it cannot be
+// read.
+func TestExploreNothingRead(t *testing.T) {
+	a, _ := newExploreApp(t, nil)
+	tt := exploreTester(a)
+	toExplore(t, a, tt)
+	ex := a.ex
+	for _, e := range ex.writers {
+		e.Posts = nil
+	}
+	ex.fresh = nil
+	must(t, tt.Click("去写作：博主的最新文章"))
+	rest(tt)
+	for _, s := range []string{"博主的新文章暂时读不到，联网后会自己更新。", "暂时读不到这个订阅源的文章", "没有订阅源"} {
+		if tt.HasText(s) {
+			t.Errorf("no word of what is missing: %q", s)
+		}
+	}
+	if _, ok := tt.AccessByRole(ui.RoleRegion, "博主"); !ok {
+		t.Fatal("the front page is the writers")
+	}
+	e := ex.index[0]
+	r, _ := tt.AccessByRole(ui.RoleRegion, "博主")
+	tt.ClickAt(r.Bounds.X+48+20, r.Bounds.Y+32+(r.Bounds.H-64)/8) // the first: its face, in the middle of the first of four rows
+	rest(tt)
+	if ex.open == nil || ex.open.id != e.ID {
+		t.Fatalf("their panel opens: %+v", ex.open)
+	}
+}

@@ -610,3 +610,47 @@ func TestHomeFrames(t *testing.T) {
 		writeGIF(t, filepath.Join(dir, s.name+".gif"), frames, step)
 	}
 }
+
+// Offline, before Explore was ever read: the page says nothing of what is
+// missing; the first screen stands on the newest piece of someone followed,
+// on its writer's own site, and opens it; without even that the people
+// followed start the page.
+func TestHomeOffline(t *testing.T) {
+	a, tt, _, _ := newHomeApp(t, ui.Preferences{})
+	ex := a.ex
+	ex.entries, ex.loaded, ex.failed = nil, false, "offline"
+	settle(tt)
+	if tt.HasText("流行和设计例子暂时读不到，联网后会自己更新") {
+		t.Error("no line about what cannot be read")
+	}
+	if _, ok := tt.AccessByRole(ui.RoleRegion, "今天的设计例子"); ok {
+		t.Error("no design example without the catalog")
+	}
+	follows := followsOf(a.homeItems(""))
+	if r, ok := tt.Find(titleOf(follows[0].Title)); !ok || r.Y > 200 {
+		t.Errorf("with nothing to stand on, the people followed start the page: %v %v", ok, r)
+	}
+	art := follows[0]
+	site := image.NewNRGBA(image.Rect(0, 0, 64, 40))
+	a.favs().pics["site:"+art.SourceID] = &favPic{done: true, bmp: ui.NewBitmap(site), rest: 0.84, lit: 1}
+	settle(tt)
+	show, ok := tt.AccessByRole(ui.RoleRegion, "最新一篇")
+	if !ok {
+		t.Fatal("the first screen stands on someone followed")
+	}
+	tt.ClickAt(show.Bounds.X+show.Bounds.W/2, show.Bounds.Y+show.Bounds.H/3)
+	tt.Frame()
+	if a.page != (page{"reader", art.ID}) {
+		t.Fatalf("it opens their piece: %v", a.page)
+	}
+	settle(tt)
+	// From the keys the focus comes back to the first screen, not the piece's column.
+	tt.Key(0, ui.KeyEscape)
+	settle(tt)
+	if a.page.kind != "home" {
+		t.Fatalf("back to 首页: %v", a.page)
+	}
+	if b, ok := tt.AccessByRole(ui.RoleButton, titleOf(art.Title)); !ok || !b.Focused || b.Bounds.Y > 100 {
+		t.Errorf("the focus is back on the first screen: %v %v %v", ok, b.Focused, b.Bounds)
+	}
+}
