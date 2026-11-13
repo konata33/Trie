@@ -16,7 +16,9 @@ import (
 	"golang.org/x/net/html"
 
 	"trie/internal/library"
+	"trie/internal/locales"
 	"trie/internal/motion"
+	"trie/internal/reader"
 	"trie/internal/theme"
 	"trie/internal/web"
 )
@@ -65,10 +67,17 @@ func (a *App) favs() *favState {
 	return a.fav
 }
 
-// favGroup is an author's keeps, newest kept first.
+// favGroup is an author's keeps, or a kind's (kind set, src standing for
+// the kind), newest kept first.
 type favGroup struct {
 	src  *library.Source
 	list []*library.Article
+	kind string
+}
+
+// kindSource is a kind as 收藏 shows it: a group named for it, with no site.
+func kindSource(k string) *library.Source {
+	return &library.Source{SourceSnapshot: library.SourceSnapshot{ID: "kind:" + k, Title: kindName(k)}, DisplayName: kindName(k)}
 }
 
 // keeperOf is whose a keep is as 收藏 shows it, every source counting: the
@@ -117,7 +126,9 @@ func (a *App) favMatches(art *library.Article, q string) bool {
 }
 
 // kept is what 收藏 shows for query: the keeps it lets through, newest kept
-// first, and their authors in the order of their newest keep.
+// first, and their groups: the kinds the designs among them are shelved
+// under, then the authors of the rest, each in the order of their newest
+// keep.
 func (a *App) kept(query string) (shown []*library.Article, groups []*favGroup) {
 	q := strings.ToLower(strings.TrimSpace(query))
 	for i := range a.lib.Articles {
@@ -128,7 +139,20 @@ func (a *App) kept(query string) (shown []*library.Article, groups []*favGroup) 
 	slices.SortStableFunc(shown, byDate)
 	slices.SortStableFunc(shown, func(x, y *library.Article) int { return cmp.Compare(keptAt(y), keptAt(x)) })
 	by := map[string]*favGroup{}
+	var kinds []*favGroup
 	for _, art := range shown {
+		if ks := a.kindsOf(art); len(ks) > 0 {
+			for _, k := range ks {
+				g := by["kind:"+k]
+				if g == nil {
+					g = &favGroup{src: kindSource(k), kind: k}
+					by["kind:"+k] = g
+					kinds = append(kinds, g)
+				}
+				g.list = append(g.list, art)
+			}
+			continue
+		}
 		s := a.keeperOf(art)
 		if s == nil {
 			continue
@@ -141,7 +165,7 @@ func (a *App) kept(query string) (shown []*library.Article, groups []*favGroup) 
 		}
 		g.list = append(g.list, art)
 	}
-	return shown, groups
+	return shown, append(kinds, groups...)
 }
 
 func (a *App) anyKept() bool {
@@ -191,6 +215,10 @@ func groundHeight(vh float32) float32 { return clampf(vh-96, 480, 900) }
 func (a *App) favoritesPage(c *ui.Context, id string, live bool) {
 	fs := a.favs()
 	p := page{"favorites", id}
+	// What the designs kept are shelved under is Explore's to say.
+	if ex := a.ex; live && !ex.loaded && !ex.loading && ex.failed == "" && a.opt.Explore != nil {
+		a.loadExplore()
+	}
 	searching := strings.TrimSpace(fs.query) != ""
 	shown, groups := a.kept(fs.query)
 	var cur *favGroup
@@ -223,7 +251,10 @@ func (a *App) favoritesPage(c *ui.Context, id string, live bool) {
 	}
 	found := shown
 	if searching && id != "" {
-		found = slices.DeleteFunc(slices.Clone(shown), func(art *library.Article) bool { s := a.keeperOf(art); return s == nil || s.ID != id })
+		found = nil
+		if cur != nil {
+			found = cur.list
+		}
 	}
 	st := &fs.shelves
 	if id != "" {
@@ -236,20 +267,20 @@ func (a *App) favoritesPage(c *ui.Context, id string, live bool) {
 	sc.Children(func() {
 		ui.Column(c).FillWidth().MinHeight(view.H).Children(func() {
 			if cur == nil {
-				ui.Text(c, "收藏").Role(ui.RoleHeading).Level(1).Absolute().Size(1, 1).ClipX().ClipY().Opacity(0)
+				ui.Text(c, locales.TabFavorites()).Role(ui.RoleHeading).Level(1).Absolute().Size(1, 1).ClipX().ClipY().Opacity(0)
 			}
 			band := func() {
 				a.band(c, func() {
 					if id != "" {
-						a.backLink(c, "收藏")
+						a.backLink(c, locales.TabFavorites())
 					}
 					if searching {
-						ui.Text(c, fmt.Sprintf("匹配 %d 篇", len(found))).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).
+						ui.Text(c, locales.FavoritesMatches(len(found))).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).
 							FontFeatures(theme.Numbers).NoWrap().Role(ui.RoleStatus)
 					}
 				}, func() {
 					if anyKept || searching {
-						a.searchField(c, &fs.query, &fs.search, "搜索收藏的文章", "搜索标题、作者")
+						a.searchField(c, &fs.query, &fs.search, locales.FavoritesSearch(), locales.FavoritesSearchPlaceholder())
 					}
 				})
 			}
@@ -263,17 +294,17 @@ func (a *App) favoritesPage(c *ui.Context, id string, live bool) {
 			case !anyKept:
 				frame(c).Padding(0, 32, 140, 32).Children(func() {
 					band()
-					a.emptyState(c, "favorites", "留一篇，慢慢读", "收藏的文章，会按作者收在这里", nil)
+					a.emptyState(c, "favorites", locales.FavoritesEmptyTitle(), locales.FavoritesEmptyText(), nil)
 				})
 			case searching:
 				frame(c).Padding(0, 32, 140, 32).Children(func() {
 					band()
 					if len(found) == 0 {
-						a.emptyState(c, "", "", "没有匹配的收藏", nil)
+						a.emptyState(c, "", "", locales.FavoritesNoMatches(), nil)
 						return
 					}
 					drawn = found
-					a.tiles(c, p, "搜索结果", found, true, cols, quiet, stop, live)
+					a.tiles(c, p, locales.FavoritesSearchResults(), found, true, cols, quiet, stop, live)
 				})
 			case cur != nil:
 				a.scene(c, p, cur, sceneHead, quiet, stop, live)
@@ -286,15 +317,27 @@ func (a *App) favoritesPage(c *ui.Context, id string, live bool) {
 						return cmp.Compare(ty, tx)
 					})
 					drawn = list
-					a.tiles(c, p, nameOf(cur.src)+" 的收藏", list, false, cols, quiet, stop, live)
+					a.tiles(c, p, locales.FavoritesFrom(nameOf(cur.src)), list, cur.kind != "", cols, quiet, stop, live)
 				})
 			default:
-				ui.Column(c.Key("shelves")).FillWidth().Padding(0, 0, 96, 0).Role(ui.RoleList).Label("收藏的作者").Children(func() {
-					for i, g := range groups {
+				// The designs kept, by kind, are the first screen's board; the writers kept from follow, one picture each.
+				var kinds, people []*favGroup
+				for _, g := range groups {
+					if g.kind != "" {
+						kinds = append(kinds, g)
+					} else {
+						people = append(people, g)
+					}
+				}
+				if len(kinds) > 0 {
+					a.favBoard(c, p, kinds, len(people) == 0, stop, live)
+				}
+				ui.Column(c.Key("shelves")).FillWidth().Padding(0, 0, 96, 0).Role(ui.RoleList).Label(locales.FavoritesWriters()).Children(func() {
+					for i, g := range people {
 						k := sceneRest
-						if i == 0 {
+						if i == 0 && len(kinds) == 0 {
 							k = sceneFirst
-							if len(groups) == 1 {
+							if len(people) == 1 {
 								k = sceneOnly
 							}
 						}
@@ -465,7 +508,7 @@ func (a *App) sceneWay(c *ui.Context, p page, g *favGroup, h float32, head bool,
 	ring := false
 	if !head {
 		// The whole picture opens the author.
-		enter := ui.ButtonBase(c.Key("enter")).Label(fmt.Sprintf("%s，收藏 %d 篇", nameOf(g.src), len(g.list))).Absolute().Fill().FocusRing(false).
+		enter := ui.ButtonBase(c.Key("enter")).Label(locales.FavoritesWriterCount(nameOf(g.src), len(g.list))).Absolute().Fill().FocusRing(false).
 			KeyShortcuts(0, ui.KeyEnter).KeyShortcuts(ui.Cmd, ui.KeyBackspace)
 		a.card(enter, key, stop, live)
 		if enter.Clicked() && live {
@@ -543,12 +586,14 @@ func (a *App) sceneWords(c *ui.Context, p page, g *favGroup, h float32, head, ri
 				by := ui.Row(c.Key("by")).Gap(8).AlignItems(ui.Center).FontSize(theme.Body).LineHeight(20.0 / 13).TextColor(theme.Text2).FontFeatures(theme.Numbers)
 				a.share(c, by, p, favByMatch{id}, live)
 				by.Children(func() {
-					f := a.face(c, a.iconOf(g.src), "face", 20)
-					if live {
-						a.shelfFaces[id] = f.LayoutBounds()
-					}
-					if a.tripping("shelf:" + id) {
-						f.Opacity(0)
+					if g.kind == "" {
+						f := a.face(c, a.iconOf(g.src), "face", 20)
+						if live {
+							a.shelfFaces[id] = f.LayoutBounds()
+						}
+						if a.tripping("shelf:" + id) {
+							f.Opacity(0)
+						}
 					}
 					if host := g.src.Host; host != "" {
 						if head && g.src.HomeURL != "" {
@@ -570,13 +615,13 @@ func (a *App) sceneWords(c *ui.Context, p page, g *favGroup, h float32, head, ri
 									t.Underline().UnderlineOffset(3)
 								}
 							})
-							a.tip(c, site, "在浏览器打开", false)
+							a.tip(c, site, locales.CommonOpenInBrowserTip(), false)
 						} else {
 							ui.Text(c, host)
 						}
 						ui.Text(c, "·").AccessHidden(true)
 					}
-					ui.Text(c, fmt.Sprintf("收藏 %d 篇", len(g.list)))
+					ui.Text(c, locales.FavoritesCount(len(g.list)))
 				})
 				ui.Row(c.Key("name-row")).Gap(8).AlignItems(ui.Center).MaxWidthPercent(100).Children(func() {
 					level := 2
@@ -586,12 +631,12 @@ func (a *App) sceneWords(c *ui.Context, p page, g *favGroup, h float32, head, ri
 					name := ui.Text(c.Key("name"), nameOf(g.src)).FontSize(40).LineHeight(1.15).FontWeight(650).LetterSpacing(-0.015 * 40).
 						TextColor(theme.Text).Balance().Shrink(1).MinWidth(0).Role(ui.RoleHeading).Level(level)
 					a.share(c, name, p, favNameMatch{id}, live)
-					a.moreMenu(c, "shelf:"+id, nameOf(g.src)+" 的收藏操作", head || shown, func(m ui.MenuParts) { a.shelfMenu(c, m, g, false) }).Margin(0, 0, 0, 0)
+					a.moreMenu(c, "shelf:"+id, locales.FavoritesWriterActions(nameOf(g.src)), head || shown, func(m ui.MenuParts) { a.shelfMenu(c, m, g, false) }).Margin(0, 0, 0, 0)
 				})
 				if head {
 					return
 				}
-				ui.Column(c.Key("titles")).Width(480).MaxWidthPercent(100).Margin(8, 0, 0, 0).Role(ui.RoleList).Label(nameOf(g.src) + " 最近收藏的文章").Children(func() {
+				ui.Column(c.Key("titles")).Width(480).MaxWidthPercent(100).Margin(8, 0, 0, 0).Role(ui.RoleList).Label(locales.FavoritesRecentFrom(nameOf(g.src))).Children(func() {
 					for i, art := range g.list[:min(3, len(g.list))] {
 						a.shelfTitle(c, p, art, i == 0, live)
 					}
@@ -630,14 +675,14 @@ func (a *App) shelfTitle(c *ui.Context, p page, art *library.Article, first, liv
 }
 
 func shelfTitleText(c *ui.Context, s string) ui.Element {
-	return ui.Text(c, s).FontSize(theme.Item).LineHeight(22.0 / 15).FontWeight(500).TextColor(theme.Text).SingleLine().Ellipsis("…")
+	return ui.Text(c, s).Font(reader.TitleFont(s)).FontSize(theme.Item).LineHeight(22.0 / 15).FontWeight(500).TextColor(theme.Text).SingleLine().Ellipsis("…")
 }
 
 // progress is the moon, only while an article is part-read.
 func (a *App) progress(c *ui.Context, art *library.Article) {
 	if inProgress(art) {
 		ui.Box(c).Padding(0, 0, 0, 2).Shrink(0).Children(func() {
-			a.moonOf(c, art, fmt.Sprintf("读到 %d%%", percentOf(art)))
+			a.moonOf(c, art, locales.ReaderProgress(percentOf(art)))
 		})
 	}
 }
@@ -693,14 +738,14 @@ func (a *App) shelfMenu(c *ui.Context, m ui.MenuParts, g *favGroup, pointer bool
 			panel.AttachTo(m.Trigger, ui.AnchorBottomLeft, ui.AnchorTopLeft).Margin(8, 0, 0, 0)
 		}
 		if g.src.HomeURL != "" {
-			if a.menuItem(c, m.Item(), "在浏览器打开", false, "openArrow").Clicked() {
+			if a.menuItem(c, m.Item(), locales.CommonOpenInBrowser(), false, "openArrow").Clicked() {
 				a.openExternal(c, g.src.HomeURL)
 			}
 			ui.Box(c).Height(1).Margin(4, 8).Background(theme.Line).AccessHidden(true)
 		}
-		label := "取消收藏"
+		label := locales.CommonRemoveFavorite()
 		if len(g.list) > 1 {
-			label = fmt.Sprintf("取消收藏全部 %d 篇", len(g.list))
+			label = locales.FavoritesRemoveAll(len(g.list))
 		}
 		// No confirmation: the notice that follows offers 撤销.
 		if a.menuItem(c, m.Item(), label, true, "").Clicked() {
@@ -716,11 +761,11 @@ func (a *App) keepMenu(c *ui.Context, m ui.MenuParts, p page, art *library.Artic
 		if !pointer {
 			panel.AttachTo(m.Trigger, ui.AnchorBottomRight, ui.AnchorTopRight).Margin(8, 0, 0, 0)
 		}
-		if a.menuItem(c, m.Item(), "在浏览器打开原文", false, "openArrow").Clicked() {
+		if a.menuItem(c, m.Item(), locales.ReaderOpenOriginal(), false, "openArrow").Clicked() {
 			a.openExternal(c, art.URL)
 		}
 		ui.Box(c).Height(1).Margin(4, 8).Background(theme.Line).AccessHidden(true)
-		if a.menuItem(c, m.Item(), "取消收藏", true, "").Clicked() {
+		if a.menuItem(c, m.Item(), locales.CommonRemoveFavorite(), true, "").Clicked() {
 			a.letGo(c, p, art)
 		}
 	})
@@ -794,14 +839,19 @@ func (a *App) favPicture(key string, load func() image.Image) *favPic {
 	return p
 }
 
-// sitePic is an author's own site's first screen (loadSourceShot).
+// sitePic is an author's own site's first screen (loadSourceShot); for
+// someone only Explore has, what Explore shows of them.
 func (a *App) sitePic(src *library.Source) *favPic {
 	svc, id := a.opt.Explore, src.ID
 	return a.favPicture("site:"+id, func() image.Image {
 		if svc == nil {
 			return nil
 		}
-		data, err := svc.SourceShot(bg, id)
+		shot := svc.SourceShot
+		if eid, ok := strings.CutPrefix(id, "explore:"); ok {
+			id, shot = eid, svc.Shot
+		}
+		data, err := shot(bg, id)
 		if err != nil {
 			return nil
 		}
@@ -935,13 +985,17 @@ func gaussian(m *image.NRGBA, sigma float64) *image.NRGBA {
 // that, their face. Nothing is asked for until the place is near the view.
 func (a *App) shelfPicture(g *favGroup, near bool) (pic *favPic, site, waiting bool) {
 	fs := a.favs()
-	if !near && fs.pics["site:"+g.src.ID] == nil {
+	// A kind has no site: it stands on its newest keep's picture.
+	switch {
+	case g.kind != "":
+	case !near && fs.pics["site:"+g.src.ID] == nil:
 		return nil, false, true
-	}
-	if sp := a.sitePic(g.src); sp == nil || !sp.done {
-		return nil, true, true
-	} else if sp.bmp != nil {
-		return sp, true, false
+	default:
+		if sp := a.sitePic(g.src); sp == nil || !sp.done {
+			return nil, true, true
+		} else if sp.bmp != nil {
+			return sp, true, false
+		}
 	}
 	for _, art := range g.list {
 		if art.Preview != nil && art.Preview.HasImage {
@@ -1114,17 +1168,18 @@ func (a *App) tile(c *ui.Context, p page, art *library.Article, byline, wide boo
 			}
 			ui.Row(c.Key("when")).Gap(8).AlignItems(ui.Center).MinWidth(0).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(color).
 				FontFeatures(theme.Numbers).Children(func() {
+				d := articleDate(art, false)
 				if byline {
 					au := a.keeperOf(art)
 					a.face(c, a.iconOf(au), "face", 16)
 					ui.Text(c, nameOf(au)).FontWeight(500).TextColor(theme.Text).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
-					ui.Text(c, "·").AccessHidden(true)
+					if d != "" {
+						ui.Text(c, "·").AccessHidden(true)
+					}
 				}
-				d := art.PublishedAt
-				if d == nil || *d == "" {
-					d = art.ModifiedAt
+				if d != "" {
+					ui.Text(c, d).NoWrap()
 				}
-				ui.Text(c, dateLabel(d)).NoWrap()
 				a.progress(c, art)
 			})
 		}
@@ -1204,7 +1259,7 @@ func (a *App) tile(c *ui.Context, p page, art *library.Article, byline, wide boo
 		menu := ui.ContextMenuBase(c, b, &ctx)
 		a.keepMenu(c, menu, p, art, true)
 		fs.ctx = keepOpen(fs.ctx, key, ctx)
-		a.moreMenu(c, key, "「"+titleOf(art.Title)+"」的收藏操作", hover || cell.FocusWithin(), func(m ui.MenuParts) { a.keepMenu(c, m, p, art, false) }).
+		a.moreMenu(c, key, locales.FavoritesArticleActions(titleOf(art.Title)), hover || cell.FocusWithin(), func(m ui.MenuParts) { a.keepMenu(c, m, p, art, false) }).
 			Absolute().Top(12).Right(12).ZIndex(1)
 	})
 }
@@ -1212,7 +1267,7 @@ func (a *App) tile(c *ui.Context, p page, art *library.Article, byline, wide boo
 // tileTitle is a pictured keep's title: 20, or 32 across the whole row.
 func tileTitle(wide bool) func(*ui.Context, string) ui.Element {
 	return func(c *ui.Context, s string) ui.Element {
-		t := ui.Text(c, s).FontSize(theme.Subtitle).LineHeight(1.4).FontWeight(600).TextColor(theme.Text).Balance().MaxLines(3).Ellipsis("…")
+		t := ui.Text(c, s).Font(reader.TitleFont(s)).FontSize(theme.Subtitle).LineHeight(1.4).FontWeight(600).TextColor(theme.Text).Balance().MaxLines(3).Ellipsis("…")
 		if wide {
 			t.FontSize(theme.Headline).LineHeight(1.3).LetterSpacing(-0.012 * 32)
 		}
@@ -1459,13 +1514,13 @@ func (a *App) unkeep(c *ui.Context, list []*library.Article, whose *library.Sour
 	fs := a.favs()
 	src := a.keeperOf(list[0])
 	ic := a.iconOf(src)
-	text := fmt.Sprintf("已取消收藏 %s 的 %d 篇", nameOf(src), len(list))
+	text := locales.FavoritesRemovedFrom(nameOf(src), len(list))
 	if len(list) == 1 {
 		t := []rune(titleOf(list[0].Title))
 		if len(t) > 18 {
 			t = append(t[:17], '…')
 		}
-		text = "已取消收藏「" + string(t) + "」"
+		text = locales.FavoritesRemoved(string(t))
 	}
 	now := web.Now()
 	off := library.SetFavorites{}

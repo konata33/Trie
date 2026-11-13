@@ -28,6 +28,7 @@ func must(t *testing.T, err error) {
 // The sidebar changes the content area's page: an author's page, 探索,
 // and back to 首页.
 func TestPagesChange(t *testing.T) {
+	pinNow(t)
 	a, _ := newTestApp(t)
 	tt := ui.NewTester(a.View, 1280, 850)
 	settle(tt)
@@ -40,16 +41,17 @@ func TestPagesChange(t *testing.T) {
 		t.Errorf("into an author: page %v, %d flights (the name travels)", a.page, len(a.flights))
 	}
 	settle(tt)
-	if !tt.HasText("innei.in") || !tt.HasText("2026") || len(a.flights) != 0 || a.left != nil {
-		t.Errorf("Innei's page: %v %v, %d flights, left %v", tt.HasText("innei.in"), tt.HasText("2026"), len(a.flights), a.left)
+	_, named := tt.AccessByRole(ui.RoleHeading, "Innei")
+	if !named || !tt.HasText("11月4日") || len(a.flights) != 0 || a.left != nil {
+		t.Errorf("Innei's page: %v %v, %d flights, left %v", named, tt.HasText("11月4日"), len(a.flights), a.left)
 	}
 	if acc, ok := tt.AccessByRole(ui.RoleButton, "Innei"); !ok || acc.Current != ui.CurrentPage {
 		t.Errorf("the sidebar row is not current: %+v", acc)
 	}
 	must(t, tt.Click("探索"))
 	settle(tt)
-	if a.page.kind != "explore" || tt.HasText("innei.in") {
-		t.Errorf("Explore: page %v, author still showing %v", a.page, tt.HasText("innei.in"))
+	if _, named := tt.AccessByRole(ui.RoleHeading, "Innei"); a.page.kind != "explore" || named {
+		t.Errorf("Explore: page %v, author still showing %v", a.page, named)
 	}
 	must(t, tt.Click("首页"))
 	settle(tt)
@@ -85,8 +87,8 @@ func TestOpenArticleAndBack(t *testing.T) {
 		t.Error("the ground did not find its row")
 	}
 	settle(tt)
-	if !tt.HasText("innei.in") || a.lay != nil || len(a.flights) != 0 {
-		t.Errorf("back on the author's page: %v, ground %v, flights %d", tt.HasText("innei.in"), a.lay != nil, len(a.flights))
+	if _, named := tt.AccessByRole(ui.RoleHeading, "Innei"); !named || a.lay != nil || len(a.flights) != 0 {
+		t.Errorf("back on the author's page: %v, ground %v, flights %d", named, a.lay != nil, len(a.flights))
 	}
 	if tt.FramePending() {
 		t.Error("the window keeps asking for frames once the crossing is over")
@@ -180,15 +182,15 @@ func TestKeyboard(t *testing.T) {
 	if a.page.kind != "favorites" {
 		t.Errorf("⌘2: page %v", a.page)
 	}
-	tt.TypeKey(ui.Shift, ui.KeySlash, "?")
+	tt.Key(ui.Cmd, ui.KeyComma)
 	tt.Frame()
-	if !a.layers.sheet || !tt.HasText("打开或关闭这张表") {
-		t.Error("? did not open the shortcut sheet")
+	if !a.layers.sheet || !tt.HasText("界面语言") {
+		t.Error("⌘, did not open the settings panel")
 	}
 	tt.Key(0, ui.KeyEscape)
 	tt.Frame()
 	if a.layers.sheet {
-		t.Error("Esc did not close the sheet")
+		t.Error("Esc did not close the settings panel")
 	}
 }
 
@@ -239,6 +241,9 @@ func TestPictureRetry(t *testing.T) {
 	settle(tt)
 	must(t, tt.Click("Anthony Fu"))
 	settle(tt)
+	// The article's entry is past the window's foot, under the head: bring it up.
+	tt.Scroll(700, 500, 0, 400)
+	settle(tt)
 	must(t, tt.Click("Categorize Your Dependencies"))
 	settle(tt)
 	if _, ok := tt.Find("重试"); !ok {
@@ -258,7 +263,7 @@ func TestPictureRetry(t *testing.T) {
 	if asked.Load() == 0 {
 		t.Error("重试 did not read the article again")
 	}
-	if !tt.HasText("更新失败，继续显示本机保存的版本。") {
+	if !tt.HasText("没能更新，仍显示已保存的版本。") {
 		t.Error("a read that failed does not say so")
 	}
 }
@@ -279,7 +284,7 @@ func TestClip(t *testing.T) {
 	tt.Move(700, 290)
 	tt.Release(700, 290)
 	tt.Advance(400 * time.Millisecond)
-	acc, ok := tt.AccessByRole(ui.RoleToolbar, "选中文字的操作")
+	acc, ok := tt.AccessByRole(ui.RoleToolbar, "选中文字的工具条")
 	if !ok {
 		t.Fatalf("no clip bar over the selection: %q", tt.Texts())
 	}
@@ -294,7 +299,7 @@ func TestClip(t *testing.T) {
 	if len(lib.Clips) != before+1 || len(a.lib.Clips) != before+1 {
 		t.Fatalf("clips %d → %d (app %d)", before, len(lib.Clips), len(a.lib.Clips))
 	}
-	if _, ok := tt.AccessByRole(ui.RoleToolbar, "选中文字的操作"); ok {
+	if _, ok := tt.AccessByRole(ui.RoleToolbar, "选中文字的工具条"); ok {
 		t.Error("the bar stays once the clip is kept")
 	}
 	// Selecting inside the clip offers to take it back.
@@ -302,14 +307,14 @@ func TestClip(t *testing.T) {
 	tt.Move(600, 290)
 	tt.Release(600, 290)
 	tt.Advance(400 * time.Millisecond)
-	acc, ok = tt.AccessByRole(ui.RoleToolbar, "这段摘录的操作")
+	acc, ok = tt.AccessByRole(ui.RoleToolbar, "摘录工具条")
 	if !ok {
 		t.Fatalf("no 取消摘录 inside the clip: %q", tt.Texts())
 	}
 	tt.ClickAt(acc.Bounds.X+acc.Bounds.W/2, acc.Bounds.Y+acc.Bounds.H/2)
 	settle(tt)
-	if len(a.lib.Clips) != before || !tt.HasText("摘录已删除") {
-		t.Errorf("taking the clip back: %d clips, notice %v", len(a.lib.Clips), tt.HasText("摘录已删除"))
+	if len(a.lib.Clips) != before || !tt.HasText("已删除摘录") {
+		t.Errorf("taking the clip back: %d clips, notice %v", len(a.lib.Clips), tt.HasText("已删除摘录"))
 	}
 }
 

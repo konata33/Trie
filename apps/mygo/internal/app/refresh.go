@@ -9,6 +9,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"trie/internal/library"
+	"trie/internal/locales"
 	"trie/internal/motion"
 	"trie/internal/subscription"
 	"trie/internal/theme"
@@ -48,12 +49,12 @@ func (a *App) failure(au *author) string {
 	}
 	if f, ok := a.refresh.failed[id]; ok {
 		if f == "" {
-			return "订阅源无响应"
+			return locales.RefreshNoResponse()
 		}
-		return f
+		return storedText(f)
 	}
 	if !a.refresh.busy && au.src.LastError != nil && *au.src.LastError != "" {
-		return *au.src.LastError
+		return storedText(*au.src.LastError)
 	}
 	return ""
 }
@@ -92,10 +93,10 @@ func (a *App) refreshFeeds(sourceID string) {
 		before[a.lib.Articles[i].ID] = true
 	}
 	r.busy = true
-	a.said = append(a.said, "正在从订阅源获取更新…")
-	one := "订阅"
+	a.said = append(a.said, locales.RefreshChecking())
+	one := locales.RefreshFeedUpdated()
 	if src := a.source(sourceID); src != nil && src.DisplayName != "" {
-		one = src.DisplayName
+		one = locales.RefreshWriterUpdated(src.DisplayName)
 	}
 	if sourceID == "" {
 		clear(a.fresh)
@@ -146,7 +147,7 @@ func (a *App) refreshFeeds(sourceID string) {
 				var names []string
 				for _, f := range res.Failures {
 					r.failed[f.SourceID] = f.Message
-					name := "订阅源"
+					name := locales.RefreshUnnamedFeed()
 					if i := slices.IndexFunc(res.Library.Sources, func(s library.Source) bool { return s.ID == f.SourceID }); i >= 0 && res.Library.Sources[i].DisplayName != "" {
 						name = res.Library.Sources[i].DisplayName
 					}
@@ -154,11 +155,11 @@ func (a *App) refreshFeeds(sourceID string) {
 				}
 				switch {
 				case len(names) > 0:
-					a.said = append(a.said, fmt.Sprintf("%d / %d 已更新，%s 未能更新", len(ids)-len(names), len(ids), strings.Join(names, "、")))
+					a.said = append(a.said, locales.RefreshSomeFailed(len(ids)-len(names), len(ids), strings.Join(names, locales.CommonListSeparator())))
 				case sourceID != "":
-					a.said = append(a.said, one+" 已更新")
+					a.said = append(a.said, one)
 				default:
-					a.said = append(a.said, "全部已更新")
+					a.said = append(a.said, locales.RefreshAllUpdated())
 				}
 				for _, id := range ids {
 					if _, failed := r.failed[id]; !settled[id] && !failed {

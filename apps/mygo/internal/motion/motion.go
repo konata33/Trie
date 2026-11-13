@@ -533,19 +533,16 @@ const (
 	Glow               = 200 * time.Millisecond                         // the favourite's glow
 	Orbit              = 460 * time.Millisecond                         // the favourite's arc closing, its satellite coming round
 
-	Focus, FocusIn, FocusOut = 400 * time.Millisecond, 300 * time.Millisecond, 200 * time.Millisecond // 专注阅读: the sidebar sliding away, fading
-	BarAway, BarFade         = 260 * time.Millisecond, 200 * time.Millisecond                         // the reader's bar sent away
-	BarTitle, BarTitleRise   = 180 * time.Millisecond, 240 * time.Millisecond                         // the bar taking the title
-	SelectionSettle          = 250 * time.Millisecond                                                 // a selection settling before its bar shows
-	ClipBarIn                = 150 * time.Millisecond                                                 // the clip bar coming
-	FeedbackIn, FeedbackFor  = 160 * time.Millisecond, 3 * time.Second                                // the reader's status line
-	PositionSave             = 500 * time.Millisecond                                                 // a reading position saved after it stops
-	Arrived                  = 200 * time.Millisecond                                                 // a body that kept the reader waiting this long arrives in focus
-	ThumbFade, ThumbFocus    = 280 * time.Millisecond, 560 * time.Millisecond                         // a list's picture coming into focus
-	WorkIn, WorkDim          = 360 * time.Millisecond, 280 * time.Millisecond                         // a work's recording fading in over its first screen; dimming as it pauses
-	WorkMark, WorkMarkGrow   = 180 * time.Millisecond, 200 * time.Millisecond                         // the recording's play mark fading, and growing to size or pressed
-	WorkTrail, WorkTrailGrow = 300 * time.Millisecond, 160 * time.Millisecond                         // the trail under it fading, and thickening under the pointer
-	WorkShot                 = 160 * time.Millisecond                                                 // a work's shot under the pointer brightening, and pressed
+	BarAway, BarFade         = 260 * time.Millisecond, 200 * time.Millisecond // the reader's bar sent away
+	SelectionSettle          = 250 * time.Millisecond                         // a selection settling before its bar shows
+	ClipBarIn                = 150 * time.Millisecond                         // the clip bar coming
+	FeedbackIn, FeedbackFor  = 160 * time.Millisecond, 3 * time.Second        // the reader's status line
+	PositionSave             = 500 * time.Millisecond                         // a reading position saved after it stops
+	Arrived                  = 200 * time.Millisecond                         // a body that kept the reader waiting this long arrives in focus
+	WorkIn, WorkDim          = 360 * time.Millisecond, 280 * time.Millisecond // a work's recording fading in over its first screen; dimming as it pauses
+	WorkMark, WorkMarkGrow   = 180 * time.Millisecond, 200 * time.Millisecond // the recording's play mark fading, and growing to size or pressed
+	WorkTrail, WorkTrailGrow = 300 * time.Millisecond, 160 * time.Millisecond // the trail under it fading, and thickening under the pointer
+	WorkShot                 = 160 * time.Millisecond                         // a work's shot under the pointer brightening, and pressed
 
 	NoticeFor, UndoFor = 4 * time.Second, 8 * time.Second // a notice, and one offering 撤销
 
@@ -566,7 +563,6 @@ const (
 
 	// The reader.
 	ReflowOut, ReflowIn = 100 * time.Millisecond, 180 * time.Millisecond // the text letting go of its old size or measure, the new coming in
-	SwipeSettle         = 250 * time.Millisecond                         // the swipe's back mark arming, and the mark and the page settling back
 	MoonWane            = 420 * time.Millisecond                         // a list's moon going from where it was to where the reader left it
 )
 

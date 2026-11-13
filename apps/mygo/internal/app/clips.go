@@ -12,7 +12,9 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"trie/internal/library"
+	"trie/internal/locales"
 	"trie/internal/motion"
+	"trie/internal/reader"
 	"trie/internal/theme"
 )
 
@@ -114,7 +116,7 @@ func clipAuthor(cl *library.Clip) string {
 		}
 	}
 	if len(names) > 0 {
-		return strings.Join(names, "、")
+		return strings.Join(names, locales.ClipsAuthorSeparator())
 	}
 	return cl.Citation.SourceName
 }
@@ -133,7 +135,7 @@ func clipMarkdown(cl *library.Clip) string {
 	author, site := clipAuthor(cl), cl.Citation.SourceName
 	by := author
 	if site != "" && author != site {
-		by = author + "（" + site + "）"
+		by = locales.ClipsAuthorAtSite(author, site)
 	}
 	date := ""
 	if p := cl.Citation.PublishedAt; p != nil && len(*p) >= 10 && dateOnly((*p)[:10]) {
@@ -141,13 +143,9 @@ func clipMarkdown(cl *library.Clip) string {
 	}
 	note := ""
 	if n := strings.TrimSpace(cl.Note); n != "" {
-		note = "\n\n备注：" + n
+		note = "\n\n" + locales.ClipsMarkdownNote(n)
 	}
-	title := cl.Citation.Title
-	if title == "" {
-		title = "未命名文章"
-	}
-	return strings.Join(quote, "\n") + "\n\n— " + by + ", " + title + date + "\n" + cl.Citation.URL + note + "\n"
+	return strings.Join(quote, "\n") + "\n\n— " + by + ", " + clipTitle(cl) + date + "\n" + cl.Citation.URL + note + "\n"
 }
 
 func personOf(cl *library.Clip) string {
@@ -159,7 +157,7 @@ func personOf(cl *library.Clip) string {
 
 func clipTitle(cl *library.Clip) string {
 	if cl.Citation.Title == "" {
-		return "未命名文章"
+		return locales.ClipsUntitled()
 	}
 	return cl.Citation.Title
 }
@@ -547,16 +545,16 @@ func (a *App) clipsPage(c *ui.Context, live bool) {
 		ui.Column(c).FillWidth().MaxWidth(1200).MinHeight(view.H).AlignSelf(ui.Center).Padding(0, 32, 140, 32).Children(func() {
 			a.band(c, func() {}, func() {
 				if len(clips) > 0 {
-					a.searchField(c, &cs.query, &cs.search, "搜索摘录、想法、文章和作者", "搜索摘录")
+					a.searchField(c, &cs.query, &cs.search, locales.ClipsSearch(), locales.ClipsSearchPlaceholder())
 				}
 			})
 			switch {
 			case len(clips) == 0:
-				a.emptyState(c, "clips", "留住一句好文字", "摘下的段落，连同出处收在这里", nil)
+				a.emptyState(c, "clips", locales.ClipsEmptyTitle(), locales.ClipsEmptyText(), nil)
 			case layout == nil:
-				a.emptyState(c, "", "", "没有找到「"+strings.TrimSpace(cs.query)+"」", nil)
+				a.emptyState(c, "", "", locales.ClipsNoResults(strings.TrimSpace(cs.query)), nil)
 			default:
-				ui.Column(c.Key("people")).FillWidth().Role(ui.RoleRegion).Label("摘录，按作者").Children(func() {
+				ui.Column(c.Key("people")).FillWidth().Role(ui.RoleRegion).Label(locales.ClipsByWriter()).Children(func() {
 					a.personPage(c, p, layout.hero, true, full, terms, live)
 					if len(layout.rest) == 0 {
 						return
@@ -823,8 +821,9 @@ func (a *App) clipLead(c *ui.Context, p page, cl *library.Clip, hero, alone bool
 						lines = 5
 					}
 					sz := stepSize[st]
+					fam, k := reader.PassageFace(cl.Text)
 					q := washed(c, "quote", wash, func() ui.Element {
-						t := ui.RichText(c, hits(excerpt(cl.Text, terms), terms, ui.Span{})...).FontSize(sz[0]).LineHeight(sz[1] / sz[0]).TextColor(theme.Text).
+						t := ui.RichText(c, hits(excerpt(cl.Text, terms), terms, ui.Span{})...).Font(fam).FontSize(sz[0] * k).LineHeight(sz[1] / (sz[0] * k)).TextColor(theme.Text).
 							MaxLines(lines).Ellipsis("…").Pretty()
 						switch st {
 						case stepXL:
@@ -897,7 +896,8 @@ func (a *App) clipRow(c *ui.Context, p page, cl *library.Clip, article string, b
 						SingleLine().Ellipsis("…").Margin(0, 0, 4, 0)
 				}
 				washed(c, "excerpt", wash, func() ui.Element {
-					return ui.RichText(c, hits(excerpt(cl.Text, terms), terms, ui.Span{})...).FontSize(theme.Item).LineHeight(24.0 / 15).TextColor(theme.Text).
+					fam, k := reader.PassageFace(cl.Text)
+					return ui.RichText(c, hits(excerpt(cl.Text, terms), terms, ui.Span{})...).Font(fam).FontSize(theme.Item * k).LineHeight(24 / (theme.Item * k)).TextColor(theme.Text).
 						MaxLines(2).Ellipsis("…").Pretty()
 				}).FillWidth()
 				if note != "" {
@@ -971,7 +971,7 @@ func (a *App) clipTools(c *ui.Context, cl *library.Clip, hover, lead bool) {
 		}
 	}
 	bar := ui.Row(c.Key("tools")).Absolute().ZIndex(1).Padding(4).Gap(4).Radius(10).Background(theme.Elevated).AlignItems(ui.Center).
-		InsetShadow(0, 0, 0, 1, theme.Line).Shadow(0, 0, 0, 1, theme.ShadowEdge).Shadow(0, 12, 32, 0, theme.ShadowFloat).Role(ui.RoleToolbar).Label("这段摘录的操作")
+		InsetShadow(0, 0, 0, 1, theme.Line).Shadow(0, 0, 0, 1, theme.ShadowEdge).Shadow(0, 12, 32, 0, theme.ShadowFloat).Role(ui.RoleToolbar).Label(locales.ClipsActions())
 	// It stays while the pointer is on it, above the passage's edge.
 	show := hover || held || bar.Hovered()
 	if lead {
@@ -988,9 +988,9 @@ func (a *App) clipTools(c *ui.Context, cl *library.Clip, hover, lead bool) {
 		bar.IgnoreInput(true)
 	}
 	bar.Children(func() {
-		icon, label := "copy", "复制引文"
+		icon, label := "copy", locales.ClipsCopyQuote()
 		if held {
-			icon, label = "check", "已复制"
+			icon, label = "check", locales.CommonCopied()
 		}
 		cp := a.toolButton(c, "copy", icon, label, held)
 		if cp.Clicked() {
@@ -998,7 +998,7 @@ func (a *App) clipTools(c *ui.Context, cl *library.Clip, hover, lead bool) {
 			cs.copied[cl.ID] = now
 			a.wash(c, cl.ID)
 		}
-		del := a.toolButton(c, "delete", "trash", "删除", false)
+		del := a.toolButton(c, "delete", "trash", locales.CommonDelete(), false)
 		if del.Clicked() {
 			a.foldClip(c, cl.ID)
 		}
@@ -1134,7 +1134,7 @@ func (a *App) deleteClip(id string) {
 	}
 	restore := library.AddClip{Clip: library.ClipInput{ID: cl.ID, ArticleID: cl.ArticleID, Text: cl.Text, Note: cl.Note, UnitID: cl.UnitID,
 		ContentRevision: cl.ContentRevision, CreatedAt: cl.CreatedAt}}
-	a.mutate(library.DeleteClip{ID: id}, func() { a.notify("摘录已删除", nil, restore) })
+	a.mutate(library.DeleteClip{ID: id}, func() { a.notify(locales.ClipsDeleted(), nil, restore) })
 }
 
 // --- The card.
@@ -1192,7 +1192,7 @@ func (a *App) clipCard(c *ui.Context, p page) {
 		// Kept as one bitmap (Cache): it grows out of its line and shrinks back scaled, which would cut what it holds
 		// at its rounded corners with a mask drawn on the CPU every frame.
 		panel.ClipX().ClipY().Width(min(800, w-96)).MaxHeight(h-96).Padding(24, 48, 32, 48).InsetShadow(0, 0, 0, 1, theme.Line).Shadow(0, 24, 64, 0, theme.ShadowDialog).
-			FontSize(theme.Body).LineHeight(1.5).Label("摘录").Cache()
+			FontSize(theme.Body).LineHeight(1.5).Label(locales.ClipsCard()).Cache()
 	}, func() {
 		if at < 0 {
 			return
@@ -1239,15 +1239,15 @@ func (a *App) cardContent(c *ui.Context, p page, cl *library.Clip, at, total int
 			a.avatar(c, who, ic, 24)
 			ui.Text(c, who).FontSize(theme.Item).LineHeight(20.0 / 15).FontWeight(600).TextColor(theme.Text).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
 		})
-		if d := cl.Citation.PublishedAt; d != nil && *d != "" {
+		if d := dateText(cl.Citation.PublishedAt); d != "" {
 			// When it was written sits by who wrote it, small and quiet.
-			t := ui.Text(c.Key("date:"+cl.ID), metaDate(*d)).Margin(0, 0, 0, 4).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).
+			t := ui.Text(c.Key("date:"+cl.ID), d).Margin(0, 0, 0, 4).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).
 				FontFeatures(theme.Numbers).NoWrap().Shrink(0)
 			swap(t, cs.turns)
 		}
 		ui.Box(c).Grow(1)
 		if total > 1 {
-			prev := a.iconBtn(c, "prev", iconOpt{icon: "back", label: "上一段", tip: "上一段 · ←"}).Size(28, 28)
+			prev := a.iconBtn(c, "prev", iconOpt{icon: "back", label: locales.ClipsPrevious(), tip: locales.ClipsPreviousTip()}).Size(28, 28)
 			if at == 0 {
 				prev.Opacity(0.4)
 			}
@@ -1256,7 +1256,7 @@ func (a *App) cardContent(c *ui.Context, p page, cl *library.Clip, at, total int
 			}
 			ui.Text(c, fmt.Sprintf("%d / %d", at+1, total)).MinWidth(40).TextAlign(ui.Center).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).
 				FontFeatures(theme.Numbers)
-			next := a.iconBtn(c, "next", iconOpt{icon: "forward", label: "下一段", tip: "下一段 · →"}).Size(28, 28)
+			next := a.iconBtn(c, "next", iconOpt{icon: "forward", label: locales.ClipsNext(), tip: locales.ClipsNextTip()}).Size(28, 28)
 			if at == total-1 {
 				next.Opacity(0.4)
 			}
@@ -1264,7 +1264,7 @@ func (a *App) cardContent(c *ui.Context, p page, cl *library.Clip, at, total int
 				a.showClip(cs.order[at+1].ID, ui.Rect{})
 			}
 		}
-		if a.iconBtn(c, "close", iconOpt{icon: "close", label: "关闭", tip: "关闭 · Esc"}).Size(28, 28).Clicked() {
+		if a.iconBtn(c, "close", iconOpt{icon: "close", label: locales.CommonClose(), tip: locales.CommonCloseTip()}).Size(28, 28).Clicked() {
 			a.closeClip(c, false)
 		}
 	})
@@ -1285,6 +1285,8 @@ func (a *App) cardContent(c *ui.Context, p page, cl *library.Clip, at, total int
 		ui.Column(c.Key("quote")).MinWidth(0).Children(func() {
 			st := cardStep(cl.Text)
 			sz := stepSize[st]
+			fam, k := reader.PassageFace(cl.Text)
+			size := sz[0] * k
 			var paras []string
 			for _, line := range paragraphBreaks.Split(cl.Text, -1) {
 				if line = strings.TrimSpace(line); line != "" {
@@ -1299,11 +1301,11 @@ func (a *App) cardContent(c *ui.Context, p page, cl *library.Clip, at, total int
 					// Later paragraphs hang a Western opening quote the same way.
 					first, _ := utf8.DecodeRuneInString(line)
 					if i > 0 && strings.ContainsRune("“‘\"'", first) {
-						ui.Text(c, string(first)).Absolute().Top(0).Left(-textWidth(string(first), sz[0])).FontSize(sz[0]).LineHeight(sz[1] / sz[0]).TextColor(theme.Text)
+						ui.Text(c, string(first)).Absolute().Top(0).Left(-textWidthIn(string(first), fam, size)).Font(fam).FontSize(size).LineHeight(sz[1] / size).TextColor(theme.Text)
 						line = line[utf8.RuneLen(first):]
 					}
 					washed(c, "p", wash, func() ui.Element {
-						return ui.Text(c, line).FontSize(sz[0]).LineHeight(sz[1] / sz[0]).TextColor(theme.Text).Pretty()
+						return ui.Text(c, line).Font(fam).FontSize(size).LineHeight(sz[1] / size).TextColor(theme.Text).Pretty()
 					}).FillWidth()
 				})
 			}
@@ -1332,7 +1334,7 @@ func (a *App) cardContent(c *ui.Context, p page, cl *library.Clip, at, total int
 					})
 					a.end(t, p, "title:"+cl.ArticleID)
 				})
-				a.tip(c, link, "在原文中看这一段", false)
+				a.tip(c, link, locales.ClipsShowInArticle(), false)
 				if hanTitle {
 					ui.Text(c, "》")
 				}
@@ -1341,9 +1343,9 @@ func (a *App) cardContent(c *ui.Context, p page, cl *library.Clip, at, total int
 		a.cardMargin(c, cl, wash)
 	})
 	ui.Row(c.Key("foot")).Gap(12).Margin(32, 0, 0, 0).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, "摘于 "+metaDate(cl.CreatedAt)).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).FontFeatures(theme.Numbers)
+		ui.Text(c, locales.ClipsClippedOn(dateText(&cl.CreatedAt))).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).FontFeatures(theme.Numbers)
 		ui.Box(c).Grow(1)
-		del := a.toolButton(c, "delete", "trash", "删除", false).Size(32, 32).TabStop(true)
+		del := a.toolButton(c, "delete", "trash", locales.CommonDelete(), false).Size(32, 32).TabStop(true)
 		if del.Clicked() && !a.busy {
 			// Focus goes back to a neighbouring passage, since this one is about to fold away.
 			cs := a.clipsSt()
@@ -1373,14 +1375,14 @@ func (a *App) cardMargin(c *ui.Context, cl *library.Clip, wash float32) {
 	n := &cs.note
 	note := strings.TrimSpace(cl.Note)
 	editing := n.editing && n.id == cl.ID
-	m := ui.Column(c.Key("margin")).Gap(12).MinWidth(0).AlignItems(ui.Start).Padding(8, 0, 0, 20).Role(ui.RoleRegion).Label("我的想法")
+	m := ui.Column(c.Key("margin")).Gap(12).MinWidth(0).AlignItems(ui.Start).Padding(8, 0, 0, 20).Role(ui.RoleRegion).Label(locales.ClipsNote())
 	m.Children(func() {
 		if note != "" || editing {
 			ui.Box(c).Absolute().Top(18).Left(0).Size(12, 1).Background(theme.Accent).IgnoreInput(true)
 		}
 		switch {
 		case editing:
-			in := ui.TextAreaBase(c.Key("editor"), &n.draft).Label("我的想法").Placeholder("为什么摘它，打算用在哪里").MaxLength(4000).Lines(1, 40).
+			in := ui.TextAreaBase(c.Key("editor"), &n.draft).Label(locales.ClipsNote()).Placeholder(locales.ClipsNotePlaceholder()).MaxLength(4000).Lines(1, 40).
 				FillWidth().FontSize(theme.Body).LineHeight(20.0 / 13).TextColor(theme.Text).PlaceholderColor(theme.Muted).CaretColor(theme.Accent).AutoFocus()
 			if in.OverlayShortcut(0, ui.KeyEscape) {
 				n.cancel = true
@@ -1400,7 +1402,7 @@ func (a *App) cardMargin(c *ui.Context, cl *library.Clip, wash float32) {
 				n.cancel = false
 			}
 		case note != "":
-			b := ui.ButtonBase(c.Key("note")).Label("我的想法：" + note).FillWidth().FocusRing(false)
+			b := ui.ButtonBase(c.Key("note")).Label(locales.ClipsNoteLabel(note)).FillWidth().FocusRing(false)
 			if b.Clicked() {
 				*n = clipNote{id: cl.ID, draft: cl.Note, editing: true}
 			}
@@ -1417,7 +1419,7 @@ func (a *App) cardMargin(c *ui.Context, cl *library.Clip, wash float32) {
 				}).FillWidth()
 			})
 		default:
-			if a.button(c, "写下为什么摘它", btnOpt{kind: ghost, inset: true}).Margin(-6, 0, -6, -8).Clicked() {
+			if a.button(c, locales.ClipsAddNote(), btnOpt{kind: ghost, inset: true}).Margin(-6, 0, -6, -8).Clicked() {
 				*n = clipNote{id: cl.ID, draft: cl.Note, editing: true}
 			}
 		}
@@ -1434,12 +1436,12 @@ func (a *App) handOff(c *ui.Context, cl *library.Clip) {
 	if said {
 		c.After(motion.Copied - now.Sub(cs.copy))
 	}
-	tip := "连同出处和链接，复制为 Markdown"
+	tip := locales.ClipsCopyTip()
 	if strings.TrimSpace(cl.Note) != "" {
-		tip = "连同出处、链接和想法，复制为 Markdown"
+		tip = locales.ClipsCopyTipWithNote()
 	}
 	var b ui.Element
-	b = a.button(c, "复制引文", btnOpt{kind: primary, inset: true, words: func(color ui.Color, weight int) {
+	b = a.button(c, locales.ClipsCopyQuote(), btnOpt{kind: primary, inset: true, words: func(color ui.Color, weight int) {
 		// The wordings share one cell, so the button keeps its width as they cross.
 		ui.Grid(c.Key("says")).Children(func() {
 			for i, on := range []bool{!said, said} {
@@ -1463,7 +1465,7 @@ func (a *App) handOff(c *ui.Context, cl *library.Clip) {
 				}
 				w.Children(func() {
 					if i == 0 {
-						ui.Text(c, "复制引文").TextColor(color).FontWeight(weight).NoWrap()
+						ui.Text(c, locales.ClipsCopyQuote()).TextColor(color).FontWeight(weight).NoWrap()
 						return
 					}
 					tick := a.icon(c, "check", 16, false).TextColor(color)
@@ -1473,7 +1475,7 @@ func (a *App) handOff(c *ui.Context, cl *library.Clip) {
 							tick.ClipInset(0, 16*(1-d), 0, 0, 0)
 						}
 					}
-					ui.Text(c, "已复制").TextColor(color).FontWeight(weight).NoWrap()
+					ui.Text(c, locales.CommonCopied()).TextColor(color).FontWeight(weight).NoWrap()
 				})
 			}
 		})
@@ -1493,7 +1495,7 @@ func (a *App) handOff(c *ui.Context, cl *library.Clip) {
 // the passage, at the scroll it had, which takes the focus.
 func (a *App) openClip(c *ui.Context, cl *library.Clip) {
 	if a.article(cl.ArticleID) == nil {
-		a.fail("这条摘录的文章已不在阅读库中。")
+		a.fail(locales.ClipsArticleGone())
 		return
 	}
 	cs := a.clipsSt()

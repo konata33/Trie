@@ -7,6 +7,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
+	"trie/internal/locales"
 	"trie/internal/motion"
 	"trie/internal/reader"
 	"trie/internal/theme"
@@ -72,7 +73,7 @@ func (a *App) pictures(c *ui.Context, rp *readerPage, live bool) {
 	if live {
 		now := c.Now()
 		r.OnPicture = func(p reader.Pic) {
-			a.viewer = viewer{open: true, pic: p, rp: rp, label: "图片预览", run: a.viewer.run + 1, since: now, instant: a.kbd}
+			a.viewer = viewer{open: true, pic: p, rp: rp, label: locales.ViewerImagePreview(), run: a.viewer.run + 1, since: now, instant: a.kbd}
 		}
 	}
 	if v := &a.viewer; v.rp == rp && v.shot == 0 && (v.open || c.Now().Before(v.until)) {
@@ -204,14 +205,14 @@ func (a *App) viewerView(c *ui.Context) {
 	picture := func(key any, p reader.Pic, box ui.Rect) ui.Element {
 		var e ui.Element
 		if p.W <= 0 || p.H <= 0 {
-			name := "图片没能载入"
+			name := locales.ReaderImageFailed()
 			if p.Alt != "" {
-				name += "：" + p.Alt
+				name = locales.ReaderImageFailedAlt(p.Alt)
 			}
 			e = ui.Column(c.Key(key)).Role(ui.RoleImage).Label(name).Center().Gap(8).FontSize(theme.Body).LineHeight(1.5).TextColor(theme.Muted).
 				Background(theme.Surface).InsetShadow(0, 0, 0, 1, theme.LineSoft).Children(func() {
 				a.icon(c, "brokenImage", 20, false)
-				ui.Text(c, "图片没能载入").AccessHidden(true)
+				ui.Text(c, locales.ReaderImageFailed()).AccessHidden(true)
 			})
 		} else {
 			e = p.View(c.Key(key)).Unselectable().Label(p.Alt)
@@ -240,14 +241,14 @@ func (a *App) viewerView(c *ui.Context) {
 		}
 		stage.Children(func() {
 			if shots > 1 {
-				if a.roundButton(c, "prev", "back", "上一张", "上一张 · ←").Absolute().Left(24).Top(h/2 - 20).Clicked() {
+				if a.roundButton(c, "prev", "back", locales.ViewerPrevious(), locales.ViewerPreviousTip()).Absolute().Left(24).Top(h/2 - 20).Clicked() {
 					ask(-1)
 				}
-				if a.roundButton(c, "next", "forward", "下一张", "下一张 · →").Absolute().Right(24).Top(h/2 - 20).Clicked() {
+				if a.roundButton(c, "next", "forward", locales.ViewerNext(), locales.ViewerNextTip()).Absolute().Right(24).Top(h/2 - 20).Clicked() {
 					ask(1)
 				}
 			}
-			b := a.roundButton(c, "close", "close", "关闭", "关闭 · Esc").Absolute().Top(24).Right(24)
+			b := a.roundButton(c, "close", "close", locales.CommonClose(), locales.CommonCloseTip()).Absolute().Top(24).Right(24)
 			if b.Clicked() {
 				closed = true
 			}

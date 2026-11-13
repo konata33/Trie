@@ -3,6 +3,7 @@ package reader
 import (
 	"strings"
 
+	"trie/internal/locales"
 	"trie/internal/theme"
 
 	"github.com/egoist/mygo/ui"
@@ -39,15 +40,20 @@ const (
 	roleComment
 )
 
-var calloutLabels = map[string]string{"NOTE": "Note", "TIP": "Tip", "IMPORTANT": "Important", "WARNING": "Warning", "CAUTION": "Caution"}
+// plainText is the label of a pre whose code names no language, which the header says in the interface's language.
+const plainText = "text"
+
+var calloutLabels = map[string]func() string{"NOTE": locales.ReaderCalloutNote, "TIP": locales.ReaderCalloutTip, "IMPORTANT": locales.ReaderCalloutImportant,
+	"WARNING": locales.ReaderCalloutWarning, "CAUTION": locales.ReaderCalloutCaution}
 
 // codeView is a pre: its code, highlighted.
 type codeView struct {
 	id    string // the code's id, which the copy button's state follows
-	label string // the header's: the language, or 纯文本; empty for a pre without one
+	label string // the header's: the language, or plainText (纯文本); empty for a pre without one
 	code  string // what the copy button copies
 	spans []ui.Span
-	side  ui.ScrollState // its sideways scrolling
+	marks map[int]lineMark // the lines its notations set apart, by index
+	side  ui.ScrollState   // its sideways scrolling
 }
 
 func (b *builder) pre(n *node, unit, id string) *block {
@@ -61,10 +67,11 @@ func (b *builder) pre(n *node, unit, id string) *block {
 				blk.unit = u
 			}
 			label := cb.Language
-			if label == "text" || label == "" {
-				label = "纯文本"
+			if label == "" {
+				label = plainText
 			}
-			blk.code = &codeView{id: cb.ID, label: label, code: cb.Code, spans: cjkSpans(b.highlight(cb))}
+			sp, code, marks := notations(b.highlight(cb), cb.Code)
+			blk.code = &codeView{id: cb.ID, label: label, code: code, spans: cjkSpans(sp), marks: marks}
 			return blk
 		}
 		break

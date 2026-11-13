@@ -76,22 +76,34 @@ var (
 // piece of an article is, not the interface.
 var (
 	CodeBackground = ui.Hex("#171717")
-	LinkUnderline  = ui.RGBA(255, 255, 255, 0.32)
-	QuoteRule      = ui.RGBA(255, 255, 255, 0.16)
+	// The foot of a link's light, the glow under its words, and the same pointed at or focused.
+	LinkGround    = ui.RGBA(227, 176, 97, 0.34)
+	LinkGroundLit = ui.RGBA(227, 176, 97, 0.46)
+	QuoteRule     = ui.RGBA(255, 255, 255, 0.16)
+	TableHeadRule = ui.RGBA(255, 255, 255, 0.16) // under a table's head; its rows part on Line
 	// A callout's label by its kind; CAUTION takes Danger.
 	CalloutNote      = ui.Hex("#8DB4F5")
 	CalloutTip       = ui.Hex("#9CC69B")
 	CalloutImportant = ui.Hex("#B7A3EA")
 	CalloutWarning   = ui.Hex("#D7B46A")
-	// Code tokens by role (reader-token-1 to -8).
-	CodeString      = ui.Hex("#D9B98C")
-	CodeNumber      = ui.Hex("#A9BCD0")
-	CodeKeyword     = ui.Hex("#B9B9B9")
-	CodeFunction    = ui.Hex("#ECECEC")
-	CodeKey         = ui.Hex("#E6E6E6")
-	CodeType        = ui.Hex("#C8C8C8")
-	CodePunctuation = ui.Hex("#7A7A7A")
-	CodeComment     = ui.Hex("#8A8A8A")
+	// Code, as Vitesse Dark colours it: its text, then its tokens by role (reader-token-1 to -8).
+	CodeText        = ui.RGBA(219, 215, 202, 0.93)
+	CodeString      = ui.Hex("#C98A7D")
+	CodeNumber      = ui.Hex("#4C9A91")
+	CodeKeyword     = ui.Hex("#4D9375")
+	CodeFunction    = ui.Hex("#80A665")
+	CodeKey         = ui.Hex("#B8A965")
+	CodeType        = ui.Hex("#5DA994")
+	CodePunctuation = ui.Hex("#666666")
+	CodeComment     = ui.RGBA(117, 133, 117, 0.87)
+	// The lines and words a code's notations set apart: a line's ground, with a rule at its start (the accent for a
+	// highlighted one), and a word's.
+	CodeLine         = ui.RGBA(227, 176, 97, 0.08)
+	CodeInserted     = ui.RGBA(133, 232, 157, 0.08)
+	CodeInsertedRule = ui.Hex("#85E89D")
+	CodeDeleted      = ui.RGBA(253, 174, 183, 0.08)
+	CodeDeletedRule  = ui.Hex("#FDAEB7")
+	CodeWord         = ui.RGBA(227, 176, 97, 0.18)
 	// ChipLight is the disc behind a site's icon in the reader's byline.
 	ChipLight = ui.Hex("#EDEDED")
 	// Swatches are a gallery's colour tags drawn as the colour the word
@@ -131,6 +143,15 @@ const (
 	ReadingLineHeight = 1.85
 	ReadingMin        = 15
 	ReadingMax        = 23
+)
+
+// English bodies are set in Serif, New York, at 20 where Chinese is at 17
+// (its letters are smaller than SF Pro's: at 20 they look as large), on 1.6
+// lines. Serif is the name the app registers New York under.
+const (
+	Serif                    = "New York"
+	EnglishReadingSize       = 20
+	EnglishReadingLineHeight = 1.6
 )
 
 // ReaderColumn is the reading column, 640 (PAGES.md 阅读器); ReaderWide is

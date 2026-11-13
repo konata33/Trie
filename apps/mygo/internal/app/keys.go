@@ -44,7 +44,7 @@ func (a *App) shortcuts(c *ui.Context) {
 	if a.layers.dialog != nil || a.layers.menu != "" {
 		return
 	}
-	if c.Shortcut(0, ui.KeySlash) || c.Shortcut(ui.Shift, ui.KeySlash) {
+	if c.Shortcut(ui.Cmd, ui.KeyComma) {
 		a.toggleSheet(ui.Rect{})
 		return
 	}
@@ -59,29 +59,32 @@ func (a *App) shortcuts(c *ui.Context) {
 		switch {
 		case c.Shortcut(0, ui.KeyEscape):
 			if rp := a.readers[a.page.id]; rp != nil && (rp.aa || rp.more) {
-				return
-			}
-			if a.focused {
-				a.focused = false
+				rp.aa = false // the options fold back into Aa
 				return
 			}
 			a.back(c)
 		case art == nil:
-		case c.Shortcut(0, ui.KeyS) && !isTrial(art.ID):
+		case c.Shortcut(0, ui.KeyS) && a.libArticle(art.ID) != nil:
 			a.toggleFav(art)
 		case c.Shortcut(0, ui.KeyO):
 			a.openExternal(c, art.URL)
+		case c.Shortcut(ui.Cmd|ui.Shift, ui.KeyC):
+			if rp := a.readers[art.ID]; rp != nil {
+				a.copyLink(c, rp, art)
+			}
 		}
 	case "author":
 		a.listKeys(c, a.page.id)
+	case "kind":
+		if c.Shortcut(0, ui.KeyEscape) {
+			a.back(c)
+		}
 	case "favorites":
 		a.favKeys(c)
 	case "clips":
 		a.clipsKeys(c)
 	case "home":
 		a.homeKeys(c)
-	case "explore":
-		a.exploreKeys(c)
 	}
 }
 

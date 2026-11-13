@@ -54,7 +54,7 @@ func TestElasticFrames(t *testing.T) {
 	}
 
 	// A press held 300 ms and let go, on the add button and on a tab.
-	for _, target := range []string{"添加订阅", "收藏"} {
+	for _, target := range []string{"订阅博客…", "收藏"} {
 		_, tt := newTT()
 		r, ok := tt.Find(target)
 		if !ok {
@@ -200,21 +200,15 @@ func TestElasticMore(t *testing.T) {
 		return ui.Rect{X: r.X - 8, Y: r.Y - 8, W: r.W + 16, H: r.H + 16}
 	}
 
-	// 字号 up a step, the switch on, and the reader's favourite kept.
+	// 字号 up a step, and the reader's favourite kept.
 	{
 		_, tt, _ := openOptions(t)
 		tt.SetScale(2)
 		settle(tt)
-		plus, _ := tt.Access("放大正文字号")
-		minus, _ := tt.Access("缩小正文字号")
+		plus, _ := tt.Access("放大字号")
+		minus, _ := tt.Access("缩小字号")
 		tt.ClickAt(center(plus.Bounds))
 		write("count", film(tt, around(minus.Bounds, plus.Bounds), 2, 500*time.Millisecond))
-		sw, ok := tt.AccessByRole(ui.RoleSwitch, "专注阅读")
-		if !ok {
-			t.Fatal("no 专注阅读")
-		}
-		tt.ClickAt(center(sw.Bounds))
-		write("switch", film(tt, ui.Rect{}, 0, 500*time.Millisecond)) // the panel moves as the sidebar goes
 	}
 	{
 		_, tt, _ := openLobehub(t)

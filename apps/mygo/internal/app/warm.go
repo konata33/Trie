@@ -5,6 +5,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
+	"trie/internal/locales"
 	"trie/internal/theme"
 )
 
@@ -19,6 +20,7 @@ func warmFonts() {
 		{Family: theme.Sans, Size: theme.Label}, {Family: theme.Sans, Size: theme.Body}, {Family: theme.Sans, Size: theme.Item}, {Family: theme.Sans, Size: theme.ReadingSize},
 		{Family: theme.Sans, Size: theme.Headline, Weight: 600}, {Family: theme.Sans, Size: theme.Title, Weight: 600}, {Family: theme.Sans, Size: theme.Subtitle},
 		{Family: theme.Mono, Size: theme.Body}, {Family: theme.Mono, Size: theme.Label}, {Family: "PingFang SC", Size: theme.ReadingSize}, {Family: "PingFang SC", Size: theme.Headline, Weight: 600},
+		{Family: theme.Serif, Size: theme.EnglishReadingSize}, {Family: theme.Serif, Size: theme.Headline, Weight: 600},
 	} {
 		ui.Shape("订阅一个博客 Trie 0123456789 快捷键", f)
 	}
@@ -57,26 +59,12 @@ func (a *App) warmDialog(c *ui.Context) {
 		ui.Column(c.Key("warm-dialog")).Absolute().Left(320).Top(160).Width(480).Padding(24).Radius(12).Background(theme.Elevated).
 			Shadow(0, 0, 0, 1, theme.Line).Shadow(0, 24, 64, 0, theme.ShadowDialog).Opacity(0.01).Blur(3).TransformOrigin(0.5, 0.5).
 			Scale(0.75, 0.75).IgnoreInput(true).AccessHidden(true).Children(func() {
-			ui.Text(c, "订阅一个博客").FontSize(theme.Subtitle).FontWeight(600).LineHeight(1.4)
-			ui.Text(c, "博客或订阅地址").FontSize(theme.Label).TextColor(theme.Text2)
+			ui.Text(c, locales.SubscribeTitle()).FontSize(theme.Subtitle).FontWeight(600).LineHeight(1.4)
+			ui.Text(c, locales.SubscribeAddress()).FontSize(theme.Label).TextColor(theme.Text2)
 			ui.Row(c).Height(32).Padding(0, 12).Radius(6).Background(theme.Field).InsetShadow(0, 0, 0, 1, theme.Line).Children(func() {
 				ui.Text(c, "https://antfu.me").FontSize(theme.Body).TextColor(theme.Muted)
 			})
-			ui.Text(c, "识别 取消 确认订阅").FontSize(theme.Body)
-		})
-		// And the shortcut sheet, its keycaps and its words.
-		ui.Column(c.Key("warm-sheet")).Absolute().Left(460).Top(220).Width(360).Padding(16).Gap(8).Radius(12).Background(theme.Elevated).
-			InsetShadow(0, 0, 0, 1, theme.Line).Shadow(0, 12, 32, 0, theme.ShadowFloat).Opacity(0.01).Blur(3).TransformOrigin(0.5, 0.5).
-			Scale(0.75, 0.75).IgnoreInput(true).AccessHidden(true).Children(func() {
-			ui.Text(c, "快捷键").FontSize(theme.Item).FontWeight(600)
-			for _, k := range shortcuts {
-				ui.Row(c.Key(k.text)).Gap(4).Children(func() {
-					for _, key := range k.keys {
-						kbd(c, key)
-					}
-					ui.Text(c, k.text).TextColor(theme.Text2)
-				})
-			}
+			ui.Text(c, locales.SubscribeFind()+" "+locales.CommonCancel()+" "+locales.SubscribeFollow()).FontSize(theme.Body)
 		})
 	})
 }

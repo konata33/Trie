@@ -3,12 +3,14 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
 
 	"trie/internal/library"
+	"trie/internal/locales"
 	"trie/internal/motion"
 	"trie/internal/reader"
 	"trie/internal/reading"
@@ -16,10 +18,9 @@ import (
 	"trie/internal/web"
 )
 
-// The reader: the bar
-// at the top, the headline and the byline, the body internal/reader shows,
-// the author's sign-off and the end mark; the outline in the left margin,
-// and the bar that clips a selection.
+// The reader: the bar at the top, the headline and the byline, the body
+// internal/reader shows, its headings as stepping stones (stones.go), and the
+// bar that clips a selection.
 
 // readerPage is an article's reader, kept while the session lasts.
 type readerPage struct {
@@ -36,12 +37,10 @@ type readerPage struct {
 	away, lifted bool // the bar: sent up and away, lifted off the page
 	left         bool // not shown since it was left, or yet: the bar starts over
 	focus        bool // the reader is to take the keyboard focus
-	titled       bool // it carries the title
 	lastY        float32
 	run          float32   // how far this scroll has gone one way
 	runAt        time.Time // when it last moved
 	barY         float32   // where the bar is, sent away or not
-	titleBottom  float32   // the headline's foot in the window, the frame before
 
 	// The screenshot the strip's amber line went to last, and whether it
 	// went back along the strip to it (workStrip).
@@ -52,9 +51,11 @@ type readerPage struct {
 	saveAt   time.Time
 	restored bool
 
-	aa, more   bool
-	feedback   string
-	feedbackAt time.Time
+	aa, more              bool    // the reading options open; the open button's menu open
+	optW                  float32 // the reading options' width as laid out, which their row opens to
+	progW, shareW, digitW float32 // the progress's, its share's and a digit's widths as laid out, which they open to
+	feedback              string
+	feedbackAt            time.Time
 
 	// A work's pictures fetched after the read (work.go): those on their way, and those just landed.
 	lateAsked bool
@@ -71,8 +72,10 @@ type readerPage struct {
 	pickFrom ui.Rect
 	stageBox ui.Rect
 
-	lit   float32   // the moon as the article was opened, for its row's to wane from
-	swipe backSwipe // the two-finger swipe back
+	lit         float32 // the moon as the article was opened, for its row's to wane from
+	foot        int     // the heading being read, under foot at the top edge (stones.go); -1 for none
+	stonePlaces []place // where its headings were, kept while the text settles (stones.go)
+	barOp       float32 // how opaque the bar is, sent away or not
 
 	selKey   string    // the selection, to see it settle
 	selAt    time.Time // when it last changed
@@ -84,7 +87,7 @@ type readerPage struct {
 func (a *App) reading(id string) *readerPage {
 	rp := a.readers[id]
 	if rp == nil {
-		rp = &readerPage{id: id, left: true}
+		rp = &readerPage{id: id, left: true, foot: -1}
 		a.readers[id] = rp
 	}
 	if rp.content == nil && !rp.loading && rp.err == "" {
@@ -105,7 +108,7 @@ func (a *App) loadReader(rp *readerPage, refresh bool, source string) {
 	svc, id := a.opt.Reading, rp.id
 	art := a.article(id)
 	if art == nil {
-		rp.loading, rp.err = false, "文章不在当前阅读库中"
+		rp.loading, rp.err = false, locales.ReaderNotInLibrary()
 		return
 	}
 	src := nameOf(a.sourceOf(art))
@@ -128,6 +131,7 @@ func (a *App) loadReader(rp *readerPage, refresh bool, source string) {
 		if err == nil {
 			data, _ := json.Marshal(content)
 			if rc, err = reader.FromJSON(data); err == nil {
+				rc.Message = storedText(rc.Message) // the reader's own header shows it
 				body = reader.Prepare(rc)
 			}
 			if len(content.Work) > 0 && string(content.Work) != "null" {
@@ -194,7 +198,9 @@ func (a *App) keepPosition(c *ui.Context, rp *readerPage) {
 		return
 	}
 	pos := r.Position()
-	if pos.ScrollTop != rp.measured.ScrollTop || pos.ContentVersion != rp.measured.ContentVersion {
+	// The progress too: a frame whose body is not laid out yet (a jump far down) measures none, and the next, at
+	// the same scroll, must not keep it.
+	if m := rp.measured; pos.ScrollTop != m.ScrollTop || pos.ContentVersion != m.ContentVersion || pos.Progress != m.Progress {
 		rp.measured = pos
 		a.positions[rp.id] = pos
 		rp.saveAt = c.Now().Add(motion.PositionSave)
@@ -207,7 +213,7 @@ func (a *App) keepPosition(c *ui.Context, rp *readerPage) {
 
 // savePosition writes the reader's place to the library at once.
 func (a *App) savePosition(rp *readerPage) {
-	if rp.saveAt.IsZero() || isTrial(rp.id) {
+	if rp.saveAt.IsZero() || a.libArticle(rp.id) == nil {
 		rp.saveAt = time.Time{}
 		return
 	}
@@ -220,7 +226,7 @@ func (a *App) savePosition(rp *readerPage) {
 		err := store.SaveReadingPosition(in)
 		return func() {
 			if err != nil {
-				a.say(rp, "阅读位置保存失败；本次会话仍可继续阅读")
+				a.say(rp, locales.ReaderPositionNotSaved())
 				return
 			}
 			// The lists see it at once.
@@ -243,11 +249,10 @@ func (a *App) leaveReader(left, to page) {
 		rp.aa, rp.more, rp.left = false, false, true
 		// Left by the pointer, the row's moon goes from where it was to
 		// where the reader left it.
-		if !a.kbd && !isTrial(left.id) {
+		if !a.kbd {
 			a.moonBack = &moonBack{id: left.id, from: rp.lit}
 		}
 	}
-	a.focused = false
 }
 
 func (a *App) say(rp *readerPage, text string) { rp.feedback, rp.feedbackAt = text, time.Time{} }
@@ -268,7 +273,7 @@ func (a *App) readerPage(c *ui.Context, id string, from []page, live bool) {
 	fresh := live && rp.left
 	if fresh {
 		rp.left, rp.away, rp.run, rp.focus = false, false, 0, true
-		rp.lit, rp.swipe = litOf(art), backSwipe{}
+		rp.lit = litOf(art)
 	}
 	// Arrived, the reader takes the focus, so that the keys scrolling it
 	// are the keyboard's wherever the pointer is.
@@ -278,22 +283,17 @@ func (a *App) readerPage(c *ui.Context, id string, from []page, live bool) {
 	p := page{"reader", id}
 	src := a.sourceOf(art)
 	col := a.column()
-	// The page, in the box the two-finger swipe holds as it pulls; the
-	// page left keeps the pull it went with, and laid out unseen it has none.
-	if !live && (a.left == nil || a.left.page != p) {
-		rp.swipe = backSwipe{}
-	}
-	sw := ui.Column(c.Key("swipe")).Grow(1).FillWidth().MinHeight(0).Role(ui.RoleRegion).Label(map[bool]string{true: "文章预览", false: "文章阅读"}[isTrial(id)])
-	a.swipeView(c, sw, rp, live)
+	sw := ui.Column(c.Key("page")).Grow(1).FillWidth().MinHeight(0).Role(ui.RoleRegion).Label(locales.ReaderRegion())
 	sw.Children(func() {
 		if r := rp.r; r != nil {
-			r.Width, r.Size = col, a.fontSize
+			r.Width, r.Size, r.Live = a.measure(c, sw, live)
+			r.Flow = r.Live
 			r.Bar = func() {
 				a.readerBar(c, rp, art, from, fresh)
-				r.Width, r.Size = a.column(), a.fontSize // as its reading options left them
+				r.Width, r.Size, r.Live = a.measure(c, sw, live) // as its reading options left them
+				r.Flow = r.Live
 			}
 			r.Above = func() float32 { return a.readerHead(c, rp, art, src, p) }
-			r.Below = func() { a.readerFoot(c, rp, art, src) }
 			// A work's facts go before the body's first h2, or after it.
 			r.Insert = nil
 			if w := rp.work; w != nil && hasWorkFacts(w) {
@@ -304,7 +304,7 @@ func (a *App) readerPage(c *ui.Context, id string, from []page, live bool) {
 			r.Button = func(c *ui.Context, label string) ui.Element { return a.button(c, label, btnOpt{}) }
 			r.Missing = func(c *ui.Context) ui.Element { return a.pictogram(c, "picture") }
 			r.Instant = a.kbd
-			r.Name = titleOf(art.Title) + " · 正文"
+			r.Name = locales.ReaderTextName(titleOf(art.Title))
 			a.pictures(c, rp, live)
 			r.SetMarks(a.marksOf(id))
 			r.View(c)
@@ -319,7 +319,7 @@ func (a *App) readerPage(c *ui.Context, id string, from []page, live bool) {
 			})
 		}
 		if live && rp.r != nil {
-			a.outline(c, rp)
+			a.stoneView(c, rp)
 		}
 	})
 	if live {
@@ -331,13 +331,25 @@ func (a *App) readerPage(c *ui.Context, id string, from []page, live bool) {
 			a.scrolling = nil
 		}
 	}
-	if live && rp.r != nil && !isTrial(id) {
+	if live && rp.r != nil && a.libArticle(id) != nil {
 		a.clipBar(c, rp, art)
 	}
-	a.swipeMark(c, rp)
 	if rp.feedback != "" && live {
 		a.feedbackView(c, rp)
 	}
+}
+
+// measure is the reader's column width and type size as the page shows them, on el: a new size glides there
+// on the following spring, the text laid out anew each frame (live); a new width is there at once, the text
+// flowing over to it (the reader's Flow), so that it moves rather than flashes over. From the keyboard, under
+// less motion, or for a page laid out unseen, both are there at once, and the reader crosses over to them as
+// it does (a fade, under less motion).
+func (a *App) measure(c *ui.Context, el ui.Element, live bool) (width, size float32, glide bool) {
+	width, size = a.column(), a.fontSize
+	if !live || a.kbd || a.still(c) {
+		return width, el.Jump("size", size), false
+	}
+	return width, el.AnimateTo("size", size, motion.Follow), true
 }
 
 // marksOf are the library's clips of an article, for the body to mark.
@@ -354,15 +366,13 @@ func (a *App) marksOf(id string) []reader.Mark {
 // trackBar follows the scroll for the bar: reading down past 200
 // sends it up and away, scrolling up brings it back, by more than 6 a
 // scroll either way; a move the reader was sent on (the saved place, a
-// heading) is not reading down. Past 4 it lifts off the page; once the
-// headline has passed under it, it carries the title.
+// heading) is not reading down. Past 4 it lifts off the page.
 func (a *App) trackBar(c *ui.Context, rp *readerPage) {
 	r := rp.r
 	y := r.Scroll.Y
 	delta := y - rp.lastY
 	rp.lastY = y
 	rp.lifted = y > 4
-	rp.titled = rp.titleBottom < a.area.Y+52+rp.barY
 	if r.Sent() {
 		rp.run = 0
 		return
@@ -382,8 +392,7 @@ func (a *App) trackBar(c *ui.Context, rp *readerPage) {
 	}
 }
 
-// scrollGap is how long a scroll may pause and stay one scroll (the swipe
-// back reads its gestures so).
+// scrollGap is how long a scroll may pause and stay one scroll.
 const scrollGap = 160 * time.Millisecond
 
 // readerHead is the column above the body: the headline, the byline, and
@@ -397,25 +406,18 @@ func (a *App) readerHead(c *ui.Context, rp *readerPage, art *library.Article, sr
 	ui.Column(c.Key("head")).Children(func() {
 		h := a.headline(c, title).Role(ui.RoleHeading).Level(1)
 		a.end(h, p, "title:"+art.ID)
-		rp.titleBottom = h.LayoutBounds().Y + h.LayoutBounds().H
-		ui.Row(c).Margin(12, 0, 0, 0).Wrap().Gap(8).AlignItems(ui.Center).FontSize(theme.Body).LineHeight(1.5).TextColor(theme.Muted).Children(func() {
-			a.sourceChip(c, src, 18, 14)
-			ui.Text(c, nameOf(src)).TextColor(theme.Text2)
-			ui.Text(c, "·").AccessHidden(true)
-			switch {
-			case art.PublishedAt != nil && *art.PublishedAt != "":
-				ui.Text(c, metaDate(*art.PublishedAt))
-			case art.ModifiedAt != nil && *art.ModifiedAt != "":
-				ui.Text(c, "更新于 "+metaDate(*art.ModifiedAt))
-			default:
-				ui.Text(c, "未提供日期")
+		ui.Row(c).Margin(12, 0, 0, 0).Wrap().Gap(8).AlignItems(ui.Center).FontSize(theme.Body).LineHeight(1.5).TextColor(theme.Muted).FontFeatures(theme.Numbers).Children(func() {
+			a.sourceByline(c, src)
+			if d := articleDate(art, false); d != "" {
+				ui.Text(c, "·").AccessHidden(true)
+				ui.Text(c, d)
 			}
 			// The reading time is the library's, not counted again.
 			if m := art.Preview; m != nil && m.Minutes != nil && rp.work == nil && rp.hasBody() {
 				ui.Text(c, "·").AccessHidden(true)
 				ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
 					a.icon(c, "time", 12, false)
-					ui.Text(c, fmt.Sprintf("约 %d 分钟", *m.Minutes))
+					ui.Text(c, locales.ReaderMinutes(*m.Minutes))
 				})
 			}
 		})
@@ -429,18 +431,18 @@ func (a *App) readerHead(c *ui.Context, rp *readerPage, art *library.Article, sr
 		reason := rp.err
 		if reason == "" && rp.content != nil {
 			if rp.content.RefreshError != nil {
-				reason = *rp.content.RefreshError
+				reason = storedText(*rp.content.RefreshError)
 			} else if n := notice(rp.content); n != "" {
 				reason = n
 			}
 		}
 		if reason == "" {
-			reason = "暂时无法获取正文。"
+			reason = locales.ReaderTextUnavailableNow()
 		}
 		a.pending(c, func() {
-			a.emptyState(c, "unreachable", "正文暂时读不出来", reason, func() {
+			a.emptyState(c, "unreachable", locales.ReaderUnreachableTitle(), reason, func() {
 				ui.Row(c).Gap(8).Margin(4, 0, 0, 0).Children(func() {
-					if a.button(c, "重试", btnOpt{}).Clicked() {
+					if a.button(c, locales.CommonTryAgain(), btnOpt{}).Clicked() {
 						a.loadReader(rp, true, "")
 					}
 					a.originalButton(c, art)
@@ -449,22 +451,19 @@ func (a *App) readerHead(c *ui.Context, rp *readerPage, art *library.Article, sr
 		}, &reason)
 	default:
 		failed, n := rp.err != "" || rp.content.RefreshError != nil, notice(rp.content)
-		if !rp.loading && !failed && n == "" && rp.work == nil {
+		if !failed && n == "" && rp.work == nil {
 			return 36
 		}
 		gap := float32(36)
 		ui.Column(c.Key("before")).Margin(36, 0, 0, 0).Gap(24).Children(func() {
-			if rp.loading {
-				ui.Text(c, "正在更新正文…").FontSize(theme.Label).TextColor(theme.Muted).Role(ui.RoleStatus)
-			}
 			if failed {
-				a.readerNotice(c, rp, art, "更新失败，继续显示本机保存的版本。", false)
+				a.readerNotice(c, rp, art, locales.ReaderUpdateFailed(), false)
 			}
 			if n != "" {
 				a.readerNotice(c, rp, art, n, true)
 			}
 			if rp.work != nil {
-				gap = a.workHero(c, rp, art, rp.loading || failed || n != "")
+				gap = a.workHero(c, rp, art, failed || n != "")
 			}
 		})
 		return gap
@@ -482,13 +481,13 @@ func notice(c *library.ArticleContent) string {
 	case c == nil || c.Status == "ready":
 		return ""
 	case c.Message != nil && *c.Message != "":
-		return *c.Message
+		return storedText(*c.Message)
 	case c.Status == "summary":
-		return "当前来源仅提供摘要，可前往作者网站继续阅读。"
+		return locales.ReaderSummaryOnly()
 	case c.Status == "restricted":
-		return "来源内容受限，请前往作者网站查看访问方式。"
+		return locales.ReaderRestricted()
 	}
-	return "暂时无法获取正文，请稍后重试。"
+	return locales.ReaderTextUnavailable()
 }
 
 // pending is the space below the title holding the waiting or failed state,
@@ -499,7 +498,7 @@ func (a *App) pending(c *ui.Context, fn func(), reason *string) {
 	if reason != nil {
 		p.Role(ui.RoleAlert)
 	} else {
-		p.Role(ui.RoleStatus).Label("正在读取正文…")
+		p.Role(ui.RoleStatus).Label(locales.ReaderLoading())
 	}
 	p.Children(fn)
 }
@@ -510,11 +509,11 @@ func (a *App) readerNotice(c *ui.Context, rp *readerPage, art *library.Article, 
 	ui.Row(c.Key("notice:"+text)).Wrap().AlignItems(ui.Center).Padding(12, 0).BorderWidth(1, 0, 1, 0).BorderColor(theme.LineSoft).
 		FontSize(theme.Body).LineHeight(1.7).TextColor(theme.Text2).Role(ui.RoleAlert).Children(func() {
 		ui.Text(c, text)
-		if a.linkButton(c, "retry", "重试", true, rp.loading).Margin(0, 0, 0, 12).Clicked() && !rp.loading {
+		if a.linkButton(c, "retry", locales.CommonTryAgain(), true, rp.loading).Margin(0, 0, 0, 12).Clicked() && !rp.loading {
 			a.loadReader(rp, true, "")
 		}
 		if original {
-			b := a.linkButton(c, "original", "阅读原文", true, false).Margin(0, 0, 0, 12)
+			b := a.linkButton(c, "original", locales.ReaderReadOriginal(), true, false).Margin(0, 0, 0, 12)
 			if b.Clicked() {
 				a.openExternal(c, art.URL)
 			}
@@ -524,7 +523,7 @@ func (a *App) readerNotice(c *ui.Context, rp *readerPage, art *library.Article, 
 
 // originalButton is 在浏览器打开 with its arrow: the page opens outside the app.
 func (a *App) originalButton(c *ui.Context, art *library.Article) {
-	b := a.button(c, "在浏览器打开", btnOpt{kind: ghost})
+	b := a.button(c, locales.CommonOpenInBrowser(), btnOpt{kind: ghost})
 	if b.Clicked() {
 		a.openExternal(c, art.URL)
 	}
@@ -546,119 +545,13 @@ func (a *App) sourceChip(c *ui.Context, src *library.Source, size, img float32) 
 	})
 }
 
-// readerFoot is what follows the body: the author signing off, set to the
-// right as an essay or a letter ends, and the end mark.
-func (a *App) readerFoot(c *ui.Context, rp *readerPage, art *library.Article, src *library.Source) {
-	if !rp.hasBody() {
-		return
-	}
-	name := nameOf(src)
-	var byline []string
-	for _, n := range art.Authors {
-		if strings.TrimSpace(strings.ToLower(n)) != strings.TrimSpace(strings.ToLower(name)) {
-			byline = append(byline, n)
-		}
-	}
-	signer := name
-	if len(byline) > 0 {
-		signer = strings.Join(byline, "、") + " · " + name
-	}
-	sign := ui.Column(c.Key("signoff")).Margin(rp.r.EndGap(), 0, 0, 0).AlignItems(ui.End).Gap(4).Role(ui.RoleGroup).Label("文章信息")
-	// It comes into focus as it scrolls in, from 0.2 and a 3px blur to clear
-	// about 180 up (animation-timeline: view(), cover 0% to 20%).
-	box, vh := sign.LayoutBounds(), a.area.H
-	if box.H > 0 && vh > 0 {
-		k := min(1, max(0, (vh-(box.Y-a.area.Y))/(0.2*(vh+box.H))))
-		if k < 1 {
-			sign.Opacity(0.2 + 0.8*k)
-			if blur := 3 * (1 - k); blur > 0.05 {
-				sign.Blur(blur)
-			}
-		}
-	}
-	sign.Children(func() {
-		ui.Row(c).Gap(8).AlignItems(ui.Center).MinHeight(32).MaxWidthPercent(100).Children(func() {
-			// In a preview the pill (face and 订阅) is the signature: the face
-			// that signs is the one that flies to the sidebar.
-			if t := a.trials[art.ID]; t != nil && t.entry.FeedURL != nil && *t.entry.FeedURL != "" {
-				a.follow(c, &t.entry, "foot")
-				return
-			}
-			a.sourceChip(c, src, 24, 18)
-			ui.Text(c, signer).FontSize(theme.Item).LineHeight(1.45).FontWeight(500).TextColor(theme.Text2).SingleLine().Ellipsis("…").Shrink(1)
-		})
-		ui.Row(c).Wrap().Justify(ui.End).AlignItems(ui.Center).Gap(8).FontSize(theme.Label).LineHeight(20.0 / 12).TextColor(theme.Muted).Children(func() {
-			dated, revised := dayOf(art.PublishedAt), dayOf(art.ModifiedAt)
-			if dated != "" {
-				d := ui.Text(c, dated)
-				a.tip(c, d, fullDate(art.PublishedAt), false)
-			}
-			if revised != "" && revised != dated {
-				ui.Text(c, "·").AccessHidden(true)
-				d := ui.Text(c, metaDate(*art.ModifiedAt)+"更新")
-				a.tip(c, d, fullDate(art.ModifiedAt), false)
-			}
-			if dated != "" {
-				ui.Text(c, "·").AccessHidden(true)
-			}
-			l := ui.ButtonBase(c.Key("site")).Label("在浏览器打开原文：" + art.URL).Gap(4).AlignItems(ui.Center).Radius(6).FocusRing(false)
-			color, line := theme.Muted, ui.Transparent
-			if l.Hovered() {
-				color, line = theme.Text, theme.Accent
-			}
-			if l.FocusVisible() {
-				l.FocusRing(true)
-			}
-			if l.Clicked() {
-				a.openExternal(c, art.URL)
-			}
-			l.TextColor(l.AnimateColor("fg", color, a.ease(motion.SignHover))).Children(func() {
-				ui.Text(c, hostOf(art.URL)).Underline().UnderlineOffset(3).DecorationColor(l.AnimateColor("line", line, a.ease(motion.SignHover)))
-				a.pressIcon(c, "openArrow", 12, false, l.Pressed())
-			})
-			a.tip(c, l, art.URL, false)
-		})
-	})
-	// The end: a hairline either side of one quiet line, only when it has
-	// something to say.
-	status := rp.content.Status
-	minutes := art.Preview != nil && art.Preview.Minutes != nil && rp.work == nil
-	if status != "summary" && status != "restricted" && !minutes {
-		return
-	}
-	ui.Row(c.Key("end")).Margin(48, 0, 0, 0).Gap(12).AlignItems(ui.Center).FontSize(theme.Label).TextColor(theme.Muted).Children(func() {
-		ui.Box(c).Height(1).Grow(1).Background(theme.Line)
-		switch status {
-		case "summary", "restricted":
-			ui.Text(c, map[bool]string{true: "摘要到此结束", false: "公开内容到此结束"}[status == "summary"])
-			if a.linkButton(c, "original", "阅读原文", false, false).Clicked() {
-				a.openExternal(c, art.URL)
-			}
-		default:
-			text := fmt.Sprintf("全文约 %d 分钟 · %s", *art.Preview.Minutes, rp.r.Body.Size)
-			if rp.reached(rp.r) {
-				text = "读完 · " + text
-			}
-			ui.Text(c, text)
-		}
-		ui.Box(c).Height(1).Grow(1).Background(theme.Line)
-	})
-}
-
-// reached reports whether the reader has been near the end (97%).
-func (rp *readerPage) reached(r *reader.Reader) bool {
-	s := r.Scroll
-	return s.MaxY <= 0 || s.Y/s.MaxY >= 0.97
-}
-
 // readerBar is the bar at the top of the reader: back, how far
-// the article has been read, the title once it has scrolled under, and the
-// tools. Reading down sends it away.
+// the article has been read, and the tools. Reading down sends it away.
 func (a *App) readerBar(c *ui.Context, rp *readerPage, art *library.Article, from []page, fresh bool) {
 	// The bar is the column's first child, 8 past it either side, held at
 	// the top of the scrolled page, 32 over the title.
 	bar := ui.Row(c.Key("bar")).Sticky().Top(0).ZIndex(4).Height(52).Margin(0, -8, 32, -8).Padding(14, 0, 6, 0).Gap(4).
-		AlignItems(ui.Center).Background(theme.Window).Role(ui.RoleToolbar).Label("阅读操作")
+		AlignItems(ui.Center).Background(theme.Window).Role(ui.RoleToolbar).Label(locales.ReaderToolbar())
 	// Sent away: up by its height and a pixel, faded, out of the
 	// pointer's way; it stays while a control in it has the focus or its
 	// panel is open. Under less motion it fades where it is; from the
@@ -678,6 +571,7 @@ func (a *App) readerBar(c *ui.Context, rp *readerPage, art *library.Article, fro
 		rp.barY = bar.AnimateTo("y", ty, ui.Animation{Duration: motion.BarAway, Ease: motion.Ease})
 		o = bar.AnimateTo("op", op, a.ease(motion.BarFade))
 	}
+	rp.barOp = o
 	if rp.barY != 0 {
 		bar.Translate(0, rp.barY)
 	}
@@ -694,7 +588,7 @@ func (a *App) readerBar(c *ui.Context, rp *readerPage, art *library.Article, fro
 	}
 	bar.Shadow(0, 1, 0, 0, bar.AnimateColor("lift", lift, a.ease(motion.BarFade)))
 	bar.Children(func() {
-		label := "返回"
+		label := locales.CommonBack()
 		if len(from) > 0 {
 			label = backLabel(a, from[len(from)-1])
 		}
@@ -716,55 +610,134 @@ func (a *App) readerBar(c *ui.Context, rp *readerPage, art *library.Article, fro
 			a.icon(c, "back", 16, false)
 			ui.Text(c, label).SingleLine().Ellipsis("…").Shrink(1)
 		})
-		// How far it was read, as the library keeps it: nothing before it was
-		// started, the moon and the share while being read, at the end the
-		// empty ring and no number.
-		if p := progressOf(art); p >= 0.95 || percentOf(art) > 0 {
-			ui.Row(c).Gap(6).Margin(0, 0, 0, 6).AlignItems(ui.Center).FontSize(theme.Label).TextColor(theme.Muted).Children(func() {
-				label := fmt.Sprintf("读到 %d%%", percentOf(art))
-				if p >= 0.95 {
-					label = "读到结尾"
-				}
-				a.moon(c, 10, litOf(art), label)
-				if p < 0.95 {
-					ui.Text(c, fmt.Sprintf("%d%%", percentOf(art))).AccessHidden(true)
-				}
-			})
-		}
-		// The title, once the headline has passed under the bar.
-		on := rp.titled && rp.r != nil
-		k := b.AnimateTo("title", map[bool]float32{true: 1, false: 0}[on], a.ease(motion.BarTitle))
-		if k > 0.001 {
-			ty := (1 - b.AnimateTo("titleY", map[bool]float32{true: 1, false: 0}[on], ui.Animation{Duration: motion.BarTitleRise, Ease: motion.Ease})) * 4
-			if a.still(c) || a.kbd {
-				ty = 0
-			}
-			ui.Text(c, titleOf(art.Title)).Margin(0, 0, 0, 10).Padding(0, 0, 0, 12).BorderWidth(0, 0, 0, 1).BorderColor(theme.Line).
-				FontSize(theme.Body).LineHeight(16.0/13).TextColor(theme.Text2).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).
-				Opacity(k).Translate(0, ty).AccessHidden(true)
-		}
+		a.readProgress(c, rp, art, fresh)
 		ui.Box(c).Grow(1)
-		// A post outside the library (an Explore preview) offers its author's
-		// pill instead of the favourite, 8 clear of the bar's other buttons.
-		t := a.trials[art.ID]
-		if t != nil {
-			if pill := a.follow(c, &t.entry, "bar"); pill.Valid() {
-				pill.Margin(0, 8)
-				a.control(pill)
-			}
-		}
-		open := a.iconBtn(c, "original", iconOpt{icon: "openOriginal", label: "在浏览器打开原文", tip: "在浏览器打开原文 · O"})
+		open := a.iconBtn(c, "original", iconOpt{icon: "openOriginal", label: locales.ReaderOpenOriginal(), tip: locales.ReaderOpenOriginalTip()})
 		a.control(open)
 		if open.Clicked() {
 			a.openExternal(c, art.URL)
 		}
-		if t == nil {
-			fav := a.favButton(c, art, 32, 18)
+		// Right-clicked, it offers the link itself.
+		m := ui.ContextMenuBase(c, open, &rp.more)
+		m.Popup(func(panel ui.Element) {
+			a.menuPanel(c, panel)
+			if a.menuItem(c, m.Item(), locales.CommonCopyLink(), false, "").Clicked() {
+				a.copyLink(c, rp, art)
+			}
+		})
+		// The favourite, once the library has the article: an Explore post's takes a moment.
+		if kept := a.libArticle(art.ID); kept != nil {
+			fav := a.favButton(c, kept, 32, 18)
 			a.control(fav)
 		}
-		ui.Row(c.Key("tools")).Gap(4).AlignItems(ui.Center).Role(ui.RoleGroup).Label("阅读工具").Children(func() { a.readerTools(c, rp, art) })
+		ui.Row(c.Key("tools")).Gap(4).AlignItems(ui.Center).Role(ui.RoleGroup).Label(locales.ReaderTools()).Children(func() { a.readerTools(c, rp, art) })
+	})
+	// A new width flows the text over to it (the reader's Flow); the bar widens along with the column, from the
+	// frame it is chosen: as narrow as the old column on the right, the column's slide taking its left.
+	if r := rp.r; r != nil {
+		if inset := r.FlowInset(a.column()); inset != 0 {
+			bar.Margin(0, -8+inset, 32, -8)
+		}
+	}
+}
+
+// copyLink puts the article's address on the clipboard (⇧⌘C, or the open button's right-click menu).
+func (a *App) copyLink(c *ui.Context, rp *readerPage, art *library.Article) {
+	c.Services().WriteClipboard(art.URL)
+	a.say(rp, locales.CommonLinkCopied())
+}
+
+// readProgress is how far the article is read, beside the back button: the moon and the share. They follow the
+// reading as it goes, not the place the library keeps once it stops: one value glides to the whole percent read
+// (the following spring), the share's digits turning on it as a counter's wheels do, the ones going round and the
+// tens turning on with them past 9, and the moon waning with it. Unread it is not there, opening out as the first
+// percent is read; past 94 the share folds away and the moon empties: 读到结尾. From the keys, under less motion,
+// as the page opens and while the bar is away, it is there at once.
+func (a *App) readProgress(c *ui.Context, rp *readerPage, art *library.Article, fresh bool) {
+	p := progressOf(art)
+	if rp.r != nil && rp.restored && rp.measured.ContentVersion != "" {
+		p = float64(rp.measured.Progress)
+	}
+	outer := ui.Row(c.Key("progress")).ClipX().Shrink(0).AlignItems(ui.Center)
+	target := float32(math.Round(p * 100))
+	var v float32
+	// Out of sight, the bar sent away, it keeps up with the reading at once, so that it shows where the reading is as
+	// the bar comes back, not turning there from where it last showed.
+	if fresh || a.kbd || a.still(c) || rp.barOp < 0.05 {
+		v = outer.Jump("v", target)
+	} else {
+		v = outer.AnimateTo("v", target, motion.Follow)
+	}
+	show, num := unit(v), unit(95-v)
+	label := locales.ReaderProgress(share(p))
+	if p >= 0.95 {
+		label = locales.ReaderFinished()
+	}
+	if show < 1 {
+		outer.Width(show * rp.progW).Opacity(show)
+	}
+	if show <= 0 {
+		return // the row stays, holding the value
+	}
+	outer.Margin(0, 0, 0, 6*show).Children(func() {
+		in := ui.Row(c.Key("in")).Gap(6 * num).AlignItems(ui.Center).Shrink(0).FontSize(theme.Label).TextColor(theme.Muted)
+		in.Children(func() {
+			a.moon(c, 10, max(0.06, 1-v/100)*num, label)
+			if num <= 0 {
+				return
+			}
+			share := ui.Row(c.Key("share")).ClipX().Shrink(0).AlignItems(ui.Center).AccessHidden(true)
+			if num < 1 {
+				share.Width(num * rp.shareW).Opacity(num)
+			}
+			share.Children(func() {
+				wheels := ui.Row(c.Key("wheels")).Shrink(0).AlignItems(ui.Center).FontFeatures(theme.Numbers)
+				wheels.Children(func() { a.wheels(c, rp, min(v, 99)) })
+				// Its own width, held off at none by the share's: what the share opens to.
+				if w := wheels.LayoutBounds().W; w > 0 {
+					rp.shareW = w
+				}
+			})
+		})
+		if w := in.LayoutBounds().W; w > 0 {
+			rp.progW = w
+		}
 	})
 }
+
+// wheelH is the height of a line of the share's wheels.
+const wheelH = 18
+
+// wheels are the share's digits for v, as a counter's wheels show it: the ones turning with v's fraction, the tens
+// turning on with them from 9 to the next ten and showing nothing below ten, and the %.
+func (a *App) wheels(c *ui.Context, rp *readerPage, v float32) {
+	ones := float32(math.Mod(float64(v), 10))
+	tens := float32(math.Floor(float64(v)/10)) + max(0, ones-9)
+	wheel := func(key string, at float32, faces []string, width float32) {
+		slot := ui.Box(c.Key(key)).Height(wheelH).ClipX().ClipY().Shrink(0)
+		if width >= 0 {
+			slot.Width(width)
+		}
+		slot.Children(func() {
+			col := ui.Column(c).Translate(0, -at*wheelH)
+			col.Children(func() {
+				for _, f := range faces {
+					ui.Text(c, f).Height(wheelH).FixedLineHeight(wheelH)
+				}
+			})
+			if w := col.LayoutBounds().W; w > 0 {
+				rp.digitW = w
+			}
+		})
+	}
+	// Below ten the tens wheel shows nothing and takes no room; it opens as the 1 turns in.
+	wheel("tens", tens, []string{"", "1", "2", "3", "4", "5", "6", "7", "8", "9"}, rp.digitW*min(1, tens))
+	wheel("ones", ones, []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0"}, -1)
+	ui.Text(c, "%")
+}
+
+// unit is v held between 0 and 1.
+func unit(v float32) float32 { return max(0, min(1, v)) }
 
 // backLabel names the page the reader goes back to.
 func backLabel(a *App, p page) string {
@@ -772,177 +745,62 @@ func backLabel(a *App, p page) string {
 	case "author":
 		return nameOf(a.source(p.id))
 	case "favorites":
-		return "收藏"
+		return locales.TabFavorites()
 	case "clips":
-		return "摘录"
+		return locales.TabClips()
 	case "explore":
-		return "探索"
+		return locales.TabExplore()
+	case "kind":
+		return kindName(p.id)
+	case "reader":
+		if art := a.article(p.id); art != nil {
+			return titleOf(art.Title)
+		}
 	}
-	return "首页"
+	return locales.TabHome()
 }
 
-// readerTools are Aa, how the text looks, and ⋯, what one does with the
-// article.
+// readerTools are Aa: how the text looks. Pressed, its options open out of it along the bar, to its left, so that
+// nothing lies over the text they change while it changes; pressed again, or Esc, they fold back into it. What opens
+// and folds is the row's width, the controls held against Aa and cut off at the row's far edge, so that the buttons
+// beside it slide along with it. The controls say what they are to a screen reader; on the bar they need no words.
 func (a *App) readerTools(c *ui.Context, rp *readerPage, art *library.Article) {
-	aa := a.iconBtn(c, "aa", iconOpt{icon: "textSize", label: "阅读选项", tip: "字号、宽度与专注阅读", active: rp.aa})
+	row := ui.Row(c.Key("options")).ClipX().AlignItems(ui.Center).Justify(ui.End).Shrink(0)
+	target := float32(0)
+	if rp.aa {
+		target = rp.optW
+	}
+	var w float32
+	if a.kbd || a.still(c) {
+		w = row.Jump("w", target)
+	} else {
+		w = row.AnimateTo("w", target, ui.Animation{Duration: map[bool]time.Duration{true: motion.PopIn, false: motion.PopOut}[rp.aa], Ease: motion.Ease})
+	}
+	row.Width(w)
+	if rp.aa || w > 0.5 {
+		if rp.optW > 0 {
+			row.Opacity(min(1, w/rp.optW))
+		}
+		row.Role(ui.RoleGroup).Label(locales.ReaderTypography()).Children(func() {
+			controls := ui.Row(c.Key("controls")).Gap(16).Padding(0, 8, 0, 0).AlignItems(ui.Center).Shrink(0).FontSize(theme.Body).TextColor(theme.Text2)
+			controls.Children(func() {
+				a.control(a.stepper(c, "size", locales.ReaderTextSize(), &a.fontSize, theme.ReadingMin, theme.ReadingMax, locales.ReaderTextSmaller(), locales.ReaderTextLarger()))
+				ww := map[bool]int{true: 1, false: 0}[a.wide]
+				a.control(a.segmented(c, "width", locales.ReaderTextWidth(), []string{locales.ReaderWidthComfortable(), locales.ReaderWidthWide()}, &ww))
+				a.wide = ww == 1
+			})
+			// Its width as laid out, which the row opens to; measured the frame after it first shows.
+			if cw := controls.LayoutBounds().W; cw > 0 {
+				rp.optW = cw
+			}
+		})
+	}
+	aa := a.iconBtn(c, "aa", iconOpt{icon: "textSize", label: locales.ReaderOptions(), tip: locales.ReaderOptionsTip(), active: rp.aa})
 	a.control(aa)
 	if aa.Clicked() {
 		rp.aa = !rp.aa
 	}
-	aa.HasPopup(ui.PopupDialog).Expanded(rp.aa)
-	ui.PopoverBase(c, aa, &rp.aa, func(panel ui.Element) {
-		panel.AttachTo(aa, ui.AnchorBottomRight, ui.AnchorTopRight).Margin(8, 0, 0, 0).AttachedOrigin().Transition(a.tr(c, motion.Popover())).
-			ObserveInput(a.observe).Width(280).Padding(8, 0).Radius(12).Background(theme.Elevated).Border(1, theme.Line).TextColor(theme.Text2).
-			Shadow(0, 0, 0, 1, theme.ShadowEdge).Shadow(0, 12, 32, 0, theme.ShadowFloat).Label("阅读选项").FontSize(theme.Body).LineHeight(1.5)
-		setting := func(label string, control func()) {
-			ui.Row(c.Key(label)).MinHeight(48).Padding(0, 16).Gap(8).AlignItems(ui.Center).Justify(ui.SpaceBetween).Children(func() {
-				ui.Text(c, label)
-				control()
-			})
-		}
-		setting("正文字号", func() {
-			a.stepper(c, "size", "正文字号", &a.fontSize, theme.ReadingMin, theme.ReadingMax, "缩小正文字号", "放大正文字号")
-		})
-		setting("正文宽度", func() {
-			w := map[bool]int{true: 1, false: 0}[a.wide]
-			a.segmented(c, "width", "正文宽度", []string{"舒适", "宽松"}, &w)
-			a.wide = w == 1
-		})
-		setting("专注阅读", func() {
-			a.switchControl(c, "focus", "专注阅读", &a.focused)
-		})
-		if a.fontSize != theme.ReadingSize || a.wide {
-			ui.Row(c).Justify(ui.End).Padding(0, 16, 8, 16).FontSize(theme.Label).Children(func() {
-				if a.linkButton(c, "reset", "恢复默认", false, false).Clicked() {
-					a.fontSize, a.wide = theme.ReadingSize, false
-				}
-			})
-		}
-	})
-	open := rp.more
-	m := ui.MenuBase(c.Key("more"), &open)
-	t := m.Trigger.Label("更多").Size(32, 32).Radius(6).Center().FocusRing(false)
-	color, bg := theme.Text2, ui.Transparent
-	switch {
-	case open:
-		color, bg = theme.Text, theme.Selected
-	case t.Hovered():
-		color, bg = theme.Text, theme.Hover
-	}
-	t.Background(t.AnimateColor("bg", bg, a.ease(motion.Hover))).TextColor(t.AnimateColor("fg", color, a.ease(motion.Hover)))
-	if t.FocusVisible() {
-		t.FocusRing(true)
-	}
-	a.control(t)
-	t.Children(func() { a.pressIcon(c, "more", 16, false, open) }) // a menu opens on the press
-	a.tip(c, t, "更多", false)
-	m.Popup(func(panel ui.Element) {
-		a.menuPanel(c, panel).AttachTo(m.Trigger, ui.AnchorBottomRight, ui.AnchorTopRight).Margin(8, 0, 0, 0)
-		if a.menuItem(c, m.Item(), "复制原文链接", false, "").Clicked() {
-			c.Services().WriteClipboard(art.URL)
-			a.say(rp, "已复制到剪贴板")
-		}
-		up := m.Item().Disabled(rp.loading)
-		if a.menuItem(c, up, "更新正文", false, "").Clicked() && !rp.loading {
-			a.loadReader(rp, true, "")
-		}
-		if other := otherSource(rp); other != "" {
-			ui.Box(c).Height(1).Margin(4, 8).Background(theme.Line).AccessHidden(true)
-			label := map[bool]string{true: "改读订阅源的版本", false: "改读原网页的版本"}[other == "feed"]
-			if a.menuItem(c, m.Item().Disabled(rp.loading), label, false, "").Clicked() && !rp.loading {
-				a.loadReader(rp, true, other)
-			}
-		}
-	})
-	rp.more = open
-}
-
-// otherSource is the body's other source the ⋯ menu offers: the feed's
-// version of a page read, or the page of a feed's.
-func otherSource(rp *readerPage) string {
-	c := rp.content
-	if c == nil || rp.work != nil || (c.FeedVersion == nil && c.SourceKind != "feed") {
-		return ""
-	}
-	if c.SourceKind == "feed" {
-		return "page"
-	}
-	return "feed"
-}
-
-// outline is the outline in the left margin (目录): one tick per heading,
-// the section being read brighter; pointed at, the ticks unfold into the
-// headings. Only where the margin has room.
-func (a *App) outline(c *ui.Context, rp *readerPage) {
-	hs := rp.content.Headings
-	if len(hs) < 2 {
-		return
-	}
-	col := min(a.area.W-80, a.column())
-	left := (a.area.W - col) / 2 // the column's left edge, in the content area
-	room := left - 32 - 24
-	if room < 48 {
-		return
-	}
-	width := min(220, room)
-	lo := hs[0].Level
-	for _, h := range hs {
-		lo = min(lo, h.Level)
-	}
-	// The section being read: the last heading that has passed 110 below the top.
-	r := rp.r
-	here := ""
-	for _, h := range hs {
-		if y, ok := r.AnchorY(h.ID); ok && y-r.Scroll.Y <= 110 {
-			here = h.ID
-		}
-	}
-	if r.Scroll.MaxY > 0 && r.Scroll.Y >= r.Scroll.MaxY-2 {
-		here = hs[len(hs)-1].ID
-	}
-	_, winH := c.Size()
-	nav := ui.Scroll(c.Key("outline")).Absolute().Top(120).Left(left - 32 - width).Width(width).MaxHeight(winH - 200).Scrollbars(false).
-		Role(ui.RoleNavigation).Label("文章目录").ZIndex(3)
-	open := nav.Hovered() || nav.FocusWithin()
-	k := nav.AnimateTo("open", map[bool]float32{true: 1, false: 0}[open], a.ease(motion.Hover))
-	dx := float32(0)
-	if !a.still(c) {
-		dx = 4 * (1 - nav.AnimateTo("openX", map[bool]float32{true: 1, false: 0}[open], ui.Animation{Duration: motion.Hover, Ease: motion.Ease}))
-	}
-	nav.Children(func() {
-		ui.Column(c).Children(func() {
-			for _, h := range hs {
-				on := h.ID == here
-				b := ui.ButtonBase(c.Key(h.ID)).Label(h.Text).MinHeight(24).Gap(12).Radius(6).AlignItems(ui.Center).Justify(ui.End).FocusRing(false)
-				if on {
-					b.Current(ui.CurrentLocation)
-				}
-				if b.FocusVisible() {
-					b.FocusRing(true).FocusRingOffset(-2)
-				}
-				if b.Clicked() {
-					r.Jump(h.ID, !a.kbd && !a.still(c))
-				}
-				depth := min(2, max(0, h.Level-lo))
-				tick := [3]float32{16, 10, 6}[depth]
-				tc, lc := theme.Faint, theme.Text2
-				if on {
-					tick, tc, lc = 24, theme.Text, theme.Text
-				}
-				b.Children(func() {
-					ui.Text(c, h.Text).FontSize(theme.Body).LineHeight(20.0/13).TextColor(b.AnimateColor("fg", lc, a.ease(motion.Hover))).
-						SingleLine().Ellipsis("…").Shrink(1).MinWidth(0).Opacity(k).Translate(dx, 0).TextAlign(ui.End)
-					ui.Row(c).Width(24).Justify(ui.End).Shrink(0).Children(func() {
-						w := b.AnimateTo("tick", tick, ui.Animation{Duration: motion.Hover, Ease: motion.Ease})
-						if a.kbd || a.still(c) {
-							w = b.Jump("tick", tick)
-						}
-						ui.Box(c).Width(w).Height(2).Radius(1).Background(b.AnimateColor("tickColor", tc, a.ease(motion.Hover)))
-					})
-				})
-			}
-		})
-	})
+	aa.Expanded(rp.aa)
 }
 
 // clipBar floats over the selection: 摘录 ⌘E, or 取消摘录
@@ -980,7 +838,7 @@ func (a *App) clipBar(c *ui.Context, rp *readerPage, art *library.Article) {
 	below := box.Y-max(a.area.Y, a.area.Y+52) < 56
 	bar := ui.Row(c.Key("clipbar")).Absolute().ZIndex(5).Padding(4).Gap(4).Radius(10).Background(theme.Elevated).AlignItems(ui.Center).
 		InsetShadow(0, 0, 0, 1, theme.Line).Shadow(0, 0, 0, 1, theme.ShadowEdge).Shadow(0, 12, 32, 0, theme.ShadowFloat).
-		Role(ui.RoleToolbar).Label(map[bool]string{true: "这段摘录的操作", false: "选中文字的操作"}[inMark])
+		Role(ui.RoleToolbar).Label(map[bool]string{true: locales.ClipsActions(), false: locales.ReaderSelectionActions()}[inMark])
 	w := bar.LayoutBounds().W
 	bar.Left(x - w/2)
 	if below {
@@ -993,9 +851,9 @@ func (a *App) clipBar(c *ui.Context, rp *readerPage, art *library.Article) {
 	}
 	enter := ui.ElementTransition{Duration: motion.ClipBarIn, Ease: motion.Ease, Enter: &ui.Motion{Y: 4, Scale: 0.97}}
 	bar.Transition(a.tr(c, enter)).Children(func() {
-		label := "摘录"
+		label := locales.ReaderClip()
 		if inMark {
-			label = "取消摘录"
+			label = locales.ReaderUnclip()
 		}
 		b := ui.ButtonBase(c.Key("clip")).Label(label).KeyShortcuts(ui.Cmd, ui.KeyE).Height(32).Padding(0, 12).Gap(8).Radius(6).AlignItems(ui.Center).FocusRing(false)
 		if b.Hovered() {
@@ -1035,7 +893,7 @@ func (a *App) clip(c *ui.Context, rp *readerPage, art *library.Article) {
 		return
 	}
 	if len([]rune(sel.Text)) > 20000 {
-		a.say(rp, "选中的文字太长")
+		a.say(rp, locales.ReaderSelectionTooLong())
 		return
 	}
 	rp.clipBusy = true
@@ -1044,10 +902,10 @@ func (a *App) clip(c *ui.Context, rp *readerPage, art *library.Article) {
 		rp.clipBusy = false
 		r.SetMarks(a.marksOf(art.ID))
 		r.ClearSelection()
-		a.say(rp, "已摘录")
+		a.say(rp, locales.ReaderClipped())
 	}, func() {
 		rp.clipBusy = false
-		a.say(rp, "摘录未保存")
+		a.say(rp, locales.ReaderClipNotSaved())
 	})
 }
 
@@ -1068,7 +926,7 @@ func (a *App) unclip(rp *readerPage, id string) {
 	a.mutate(library.DeleteClip{ID: id}, func() {
 		rp.r.SetMarks(a.marksOf(rp.id))
 		rp.r.ClearSelection()
-		a.notify("摘录已删除", nil, restore)
+		a.notify(locales.ClipsDeleted(), nil, restore)
 	})
 }
 

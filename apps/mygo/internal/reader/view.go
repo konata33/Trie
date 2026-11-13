@@ -1,6 +1,7 @@
 package reader
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"slices"
@@ -11,9 +12,11 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
+	"trie/internal/locales"
 	"trie/internal/motion"
 	"trie/internal/theme"
 
+	"github.com/egoist/mygo/i18n"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -24,11 +27,8 @@ const Column = theme.ReaderColumn
 // measured.
 const guide = 110
 
-// sans is the reading face: the system's, with PingFang SC before the
-// system's own choice for what it lacks, as -apple-system, "PingFang SC".
-const sans = "system-ui, PingFang SC"
-
-// cjkFace draws Chinese and Japanese text (see scripts).
+// cjkFace draws Chinese and Japanese text where no article's face says
+// (Face.CJK): in code (see scripts).
 const cjkFace = "PingFang SC"
 
 // Reader shows an article in the reading column, in a scroll container
@@ -64,6 +64,13 @@ type Reader struct {
 	// Instant shows a new size or measure in the next frame rather than
 	// crossing over to it, as the keyboard asks.
 	Instant bool
+	// Live lays a size or measure that changes from frame to frame (the app
+	// gliding to a new one) out in place, every frame, the top of the block
+	// being read held where it shows, instead of crossing over to it.
+	Live bool
+	// Flow takes a new measure by flowing the text over to it (flow.go):
+	// its lines' pieces glide from where the old measure had them.
+	Flow bool
 	// Name is the body's accessible name: 「标题 · 正文」.
 	Name string
 	// OnPicture shows a picture of the body large, clicked or pressed with
@@ -102,18 +109,17 @@ type Reader struct {
 	paras    map[uint64]*para
 	units    []unitTop
 	anchors  map[string]float32
-	view     ui.Rect // the scroll container
+	anchorH  map[string]float32 // and how tall the anchored elements are
+	view     ui.Rect            // the scroll container
 	body     ui.Rect
 	shownY   float32 // the offset the frame before was laid out at
 	top      float32 // where the body starts in the scrolled content
 	endGap   float32 // between the body and what follows it
 	selected []ui.SelectedText
 	row      int
-	// The top-level blocks' boxes, the sideways scrollers under the
-	// pointer's reach, and the hidden picture's box, as the frame before
-	// laid them out.
+	// The top-level blocks' boxes and the hidden picture's box, as the frame
+	// before laid them out.
 	tops   []ui.Rect
-	asides []aside
 	hidden ui.Rect
 	sides  map[string]*ui.ScrollState // the app's sideways scrollers (Aside), by key
 
@@ -123,14 +129,12 @@ type Reader struct {
 	laidSize, laidWidth float32
 	measures, layouts   int
 	flow                reflow
-	exitInstant         bool // what the text built last would go as
-}
-
-// aside is something in the body that scrolls sideways: a code block, a
-// wide table.
-type aside struct {
-	box  ui.Rect
-	side *ui.ScrollState
+	held                *held    // the block a live change holds in place
+	fl                  *flowing // the text flowing over to a new measure (flow.go)
+	heldTop             float32  // where the held block's top is in the window, as the frame before laid it out
+	heldFound           bool
+	picBox              map[*block]ui.Rect // where the pictures were, as the frame before laid them out
+	exitInstant         bool               // what the text built last would go as
 }
 
 // reflow is the text going over to a new size or measure: a copy of the
@@ -146,6 +150,17 @@ type reflow struct {
 	measured    bool
 	shift       float32
 	pad         float32 // room under the text, so that the scroll stays where the copy was
+}
+
+// held is the top-level block a live change of size or measure keeps where
+// it showed, off below the top of the reader, and how many frames the size
+// and measure have stood still since.
+type held struct {
+	block  *block
+	off    float32
+	still  int
+	glide  *ui.Animation // a flow's scroll gliding there, asked once; nil to line it up at once, every frame
+	called bool
 }
 
 // laid is what a frame's layout told of the body, kept over the frame the
@@ -166,9 +181,10 @@ type para struct {
 	row int    // a table cell's row, whose cells a tab separates; 0 for none
 	// Where the frame before laid it out, and how its text is set, to find
 	// the selection's place in it (SelectionBox).
-	box  ui.Rect
-	segs []segment
-	font ui.Font
+	box   ui.Rect
+	segs  []segment
+	font  ui.Font
+	color ui.Color
 }
 
 type unitTop struct {
@@ -178,11 +194,14 @@ type unitTop struct {
 
 // textCtx is what a container passes on to the text inside it.
 type textCtx struct {
-	size   float32
-	color  ui.Color
-	weight int
-	sep    string
-	row    int
+	size       float32
+	color      ui.Color
+	weight     int
+	sep        string
+	row        int
+	lineHeight float32  // in place of the body's, when set (a table's)
+	align      ui.Align // the lines' alignment (a table's figures to the right)
+	numbers    bool     // figures in even widths
 }
 
 // NewReader makes the reader of an article whose body Prepare made.
@@ -190,7 +209,20 @@ func NewReader(a *Article, c *Content, b *Body) *Reader {
 	return &Reader{Article: a, Content: c, Body: b, Size: theme.ReadingSize}
 }
 
-func (r *Reader) em() float32 { return r.Size }
+// face is how the article's text is set (Face); Chinese's for a body not
+// made by Prepare.
+func (r *Reader) face() Face {
+	if r.Body == nil || r.Body.Face.Family == "" {
+		return chineseFace
+	}
+	return r.Body.Face
+}
+
+// textSize is the size of the body's text: the reader's size (Size), as
+// large as the article's face looks at it.
+func (r *Reader) textSize() float32 { return r.Size * r.face().Scale }
+
+func (r *Reader) em() float32 { return r.textSize() }
 
 // View builds the reader, filling its parent.
 func (r *Reader) View(c *ui.Context) {
@@ -205,7 +237,15 @@ func (r *Reader) View(c *ui.Context) {
 	}
 	r.restoreNow(c)
 	r.landed = r.sending && !r.Scroll.Scrolling()
-	r.asides, r.hidden = r.asides[:0], ui.Rect{}
+	r.hidden = ui.Rect{}
+	// A flow whose time is up ends before the body is built, so that this frame shows the words and the pictures
+	// themselves where the last one painted them on their way (flow.go).
+	if f := r.fl; f != nil {
+		if f.now = c.Now(); f.done {
+			r.fl = nil
+		}
+	}
+	r.heldFound = false
 	sc := ui.Scroll(c.Key(r.Article.ID)).TrackScroll(&r.Scroll).Grow(1).FillWidth().Scrollbars(false).TabStop(false).FocusRing(false)
 	if r.Focus {
 		sc.Focus()
@@ -222,7 +262,7 @@ func (r *Reader) View(c *ui.Context) {
 		if r.Above != nil || r.Bar != nil {
 			top = 0
 		}
-		col := ui.Column(c).FillWidth().AlignSelf(ui.Center).Padding(top, 40, 180, 40).Font(sans)
+		col := ui.Column(c).FillWidth().AlignSelf(ui.Center).Padding(top, 40, 180, 40).Font(theme.Sans)
 		col.Children(func() {
 			// The bar's reading options may change the size or the
 			// measure: the text after it is laid out for what they say.
@@ -238,9 +278,14 @@ func (r *Reader) View(c *ui.Context) {
 			}
 			clear(r.paras)
 			if r.paras == nil {
-				r.paras, r.anchors = map[uint64]*para{}, map[string]float32{}
+				r.paras, r.anchors, r.anchorH = map[uint64]*para{}, map[string]float32{}, map[string]float32{}
 			}
 			clear(r.anchors)
+			clear(r.anchorH)
+			if r.picBox == nil {
+				r.picBox = map[*block]ui.Rect{}
+			}
+			clear(r.picBox)
 			r.units, r.row, r.tops = r.units[:0], 0, r.tops[:0]
 			// What a new measure lays out anew, and what a new size does too.
 			t := r.reflowTransition(c)
@@ -258,17 +303,23 @@ func (r *Reader) View(c *ui.Context) {
 				if len(bs) > 0 {
 					first, _ = outer(bs[0])
 					_, last = outer(bs[len(bs)-1])
+					if bs[0].kind == Heading {
+						first = 0 // a body opening on a heading keeps the head's own room above it
+					}
 				}
 				first, last = first*em, last*em
 				body := ui.Column(c.Key(r.gen)).Selectable().SelectionColor(theme.AccentSoft).CopyData(r.copyData).
-					FontSize(r.Size).LineHeight(theme.ReadingLineHeight).TextColor(theme.Text)
+					Font(r.face().Family).FontSize(r.textSize()).LineHeight(r.face().LineHeight).TextColor(theme.Text)
+				if r.fl != nil {
+					body.DrawOver(r.paintFlow) // the words on their way (flow.go)
+				}
 				if r.Name != "" {
 					body.Role(ui.RoleArticle).Label(r.Name)
 				}
 				r.body = body.LayoutBounds()
 				r.top = r.body.Y - r.view.Y + r.shownY
 				body.Children(func() {
-					tc := textCtx{size: r.Size, color: theme.Text, sep: "\n\n"}
+					tc := textCtx{size: r.textSize(), color: theme.Text, sep: "\n\n"}
 					build := func(_ int, b *block) ui.Element {
 						e := r.block(c, b, tc)
 						r.tops = append(r.tops, e.LayoutBounds())
@@ -321,8 +372,6 @@ func (r *Reader) View(c *ui.Context) {
 				r.endGap = max(48, last)
 				if r.Below != nil {
 					r.Below()
-				} else {
-					r.end(c, r.endGap)
 				}
 			})
 			if r.flow.on {
@@ -330,6 +379,9 @@ func (r *Reader) View(c *ui.Context) {
 			}
 		})
 		col.MaxWidth(r.width() + 80)
+		if r.fl != nil {
+			col.Translate(r.FlowShift(), 0) // flowing, the column slides from its old place to its new one
+		}
 	})
 	for i := range r.units {
 		r.units[i].top -= r.body.Y
@@ -358,6 +410,7 @@ func (r *Reader) View(c *ui.Context) {
 		}
 		r.jump = ""
 	}
+	r.flowOn(c)
 	r.shownY = r.Scroll.Y
 }
 
@@ -392,8 +445,31 @@ func (r *Reader) reflow(c *ui.Context) {
 		r.laidSize, r.laidWidth = r.Size, w
 	}
 	if r.Size == r.laidSize && w == r.laidWidth {
+		// A live change holds its block a frame after it stands still, then lets go.
+		if h := r.held; h != nil {
+			if h.still++; h.still > 1 && r.fl == nil { // a flow holds it till it ends
+				r.held = nil
+			}
+		}
 		return
 	}
+	if r.Flow && w != r.laidWidth && r.Size == r.laidSize && !r.flow.on && r.fl == nil {
+		r.startFlow(c, r.laidWidth)
+		r.laidWidth = w
+		return
+	}
+	if r.Live && !r.flow.on {
+		r.laidSize, r.laidWidth = r.Size, w
+		// The selection stays: letting it go would key the body anew, and its blocks would show unlaid for a frame.
+		if r.held == nil {
+			r.held = r.holdAt()
+		}
+		if r.held != nil {
+			r.held.still = 0
+		}
+		return
+	}
+	r.held = nil
 	measure := w != r.laidWidth
 	r.laidSize, r.laidWidth = r.Size, w
 	if r.body.H <= 0 || len(r.tops) == 0 {
@@ -409,7 +485,7 @@ func (r *Reader) reflow(c *ui.Context) {
 	}
 	if block >= 0 {
 		t := r.tops[block]
-		frac = max(0, min(1, (relative-t.Y)/max(1, t.H)))
+		frac = max(0, min(1, (relative-t.Y)/max(1, r.reach(block))))
 	}
 	if measure {
 		r.measures++
@@ -420,6 +496,43 @@ func (r *Reader) reflow(c *ui.Context) {
 	c.Invalidate() // laid out, it is measured in the next frame
 }
 
+// Settling reports whether a live change of size or measure is under way: the text is laid out anew each frame,
+// and where its blocks were in the frame before says little of where they are now.
+func (r *Reader) Settling() bool { return r.held != nil || r.fl != nil }
+
+// reach is how far top-level block i reaches down: to the next block's top, its margin below with it, which grows
+// with the text as the block does, so that a place in the room between two blocks is kept as one in a block is.
+func (r *Reader) reach(i int) float32 {
+	if i+1 < len(r.tops) {
+		return r.tops[i+1].Y - r.tops[i].Y
+	}
+	return r.tops[i].H
+}
+
+// holdAt is the block a live change holds: the top-level block at the guide,
+// or the first below it when its top is above the reader's; nil when none
+// shows, or at the top of the page.
+func (r *Reader) holdAt() *held {
+	// At the top of the page the page stays at its top, the text growing down from there.
+	if r.body.H <= 0 || len(r.tops) == 0 || r.Scroll.Y <= 0 {
+		return nil
+	}
+	relative := r.Scroll.Y + guide - r.bodyTop()
+	at := -1
+	for i, t := range r.tops {
+		if t.Y > relative {
+			break
+		}
+		at = i
+	}
+	for i := max(0, at); i < len(r.tops) && i < len(r.Body.blocks); i++ {
+		if off := r.bodyTop() + r.tops[i].Y - r.Scroll.Y; off >= 0 {
+			return &held{block: r.Body.blocks[i], off: off}
+		}
+	}
+	return nil
+}
+
 // measure finds, in the frame after the text crossed, where its new layout
 // puts the place being read, and how far that is from where it showed.
 func (r *Reader) measure() {
@@ -427,7 +540,7 @@ func (r *Reader) measure() {
 	f.measured = true
 	if f.block >= 0 && f.block < len(r.tops) {
 		t := r.tops[f.block]
-		f.shift = max(0, r.top+t.Y+f.frac*t.H-guide) - r.Scroll.Y
+		f.shift = max(0, r.top+t.Y+f.frac*r.reach(f.block)-guide) - r.Scroll.Y
 	}
 	if f.instant {
 		// The old text showed for one frame: the scroll takes the shift now.
@@ -472,6 +585,49 @@ func (r *Reader) AnchorY(id string) (float32, bool) {
 	return r.bodyTop() + top, ok
 }
 
+// AnchorBox is where the element of id (a heading's) starts in the scrolled
+// content and how tall it is, as the frame before laid it out.
+func (r *Reader) AnchorBox(id string) (y, h float32, ok bool) {
+	top, ok := r.anchors[id]
+	return r.bodyTop() + top, r.anchorH[id], ok
+}
+
+// HeadingView builds the heading anchored at id as the body sets it, its
+// words spaced as there, for the app to show elsewhere; false when the body
+// has none.
+func (r *Reader) HeadingView(c *ui.Context, id string) (ui.Element, bool) {
+	var find func(bs []*block) *block
+	find = func(bs []*block) *block {
+		for _, b := range bs {
+			if b.kind == Heading && b.anchor == id {
+				return b
+			}
+			if f := find(b.children); f != nil {
+				return f
+			}
+		}
+		return nil
+	}
+	b := find(r.Body.blocks)
+	if b == nil {
+		return ui.Element{}, false
+	}
+	f, color := r.HeadingFont(b.level), theme.Text
+	if headingStyles[max(2, min(6, b.level))].quiet {
+		color = theme.Text2
+	}
+	sp := spans(r.segments(b), f.Size)
+	return ui.RichText(c, sp...).Font(f.Family).FontSize(f.Size).LineHeight(f.LineHeight).
+		FontWeight(f.Weight).TextColor(color).DrawObjects(drawGlyphs(sp, color)), true
+}
+
+// HeadingFont is how the body sets a heading of level (2 to 6, as the body
+// settles them), in the article's face: at 17, 24, 20, 17, 15 and 15.
+func (r *Reader) HeadingFont(level int) ui.Font {
+	s := headingStyles[max(2, min(6, level))]
+	return ui.Font{Family: r.face().Family, Weight: 600, Size: s.size * r.textSize(), LineHeight: s.lineHeight}
+}
+
 // Jump scrolls to the element of id, 70 below the top, gliding unless told
 // not to.
 func (r *Reader) Jump(id string, smooth bool) {
@@ -492,9 +648,12 @@ func (r *Reader) Jump(id string, smooth bool) {
 func (r *Reader) Sent() bool { return r.sending }
 
 // Headline is the article's title as the reader sets it (DESIGN.md
-// Headline), width wide, balanced.
+// Headline), width wide, balanced, in the face of its own language: the
+// page it flies in from knows the title, not the body.
 func Headline(c *ui.Context, title string, width float32) ui.Element {
-	return Lines(c, title, width, ui.Font{Family: sans, Size: 32, Weight: 600, LineHeight: 1.3}, -0.012*32, true)
+	// At 32 in any face: the title flies in at the ratio of 32 to the size
+	// it left.
+	return Lines(c, title, width, ui.Font{Family: titleFace(title).Family, Size: theme.Headline, Weight: 600, LineHeight: 1.3}, -0.012*theme.Headline, true)
 }
 
 type linesKey struct {
@@ -565,7 +724,7 @@ func (r *Reader) header(c *ui.Context) {
 	a := r.Article
 	title := a.Title
 	if title == "" {
-		title = "未提取到标题"
+		title = locales.ReaderNoTitle()
 	}
 	ui.Column(c).Children(func() {
 		Headline(c, title, r.width())
@@ -575,7 +734,7 @@ func (r *Reader) header(c *ui.Context) {
 			ui.Text(c, metaDate(a.PublishedAt, a.ModifiedAt))
 			if r.Content.Status == "ready" && r.Body.Minutes > 0 {
 				ui.Text(c, "·")
-				ui.Text(c, fmt.Sprintf("约 %d 分钟", r.Body.Minutes))
+				ui.Text(c, locales.ReaderMinutes(r.Body.Minutes))
 			}
 		})
 	})
@@ -597,40 +756,11 @@ func (r *Reader) notice() string {
 	case r.Content.Message != "":
 		return r.Content.Message
 	case s == "summary":
-		return "当前来源仅提供摘要，可前往作者网站继续阅读。"
+		return locales.ReaderSummaryOnly()
 	case s == "restricted":
-		return "来源内容受限，请前往作者网站查看访问方式。"
+		return locales.ReaderRestricted()
 	}
-	return "暂时无法获取正文，请稍后重试。"
-}
-
-// end is the end mark: a hairline either side of one quiet line.
-func (r *Reader) end(c *ui.Context, top float32) {
-	var text string
-	switch r.Content.Status {
-	case "summary":
-		text = "摘要到此结束"
-	case "restricted":
-		text = "公开内容到此结束"
-	case "ready":
-		if r.Body.Minutes == 0 {
-			return
-		}
-		text = fmt.Sprintf("全文约 %d 分钟 · %s", r.Body.Minutes, r.Body.Size)
-		if r.Position().Progress >= 0.97 {
-			text = "读完 · " + text
-		}
-	default:
-		return
-	}
-	ui.Row(c).Margin(top, 0, 0, 0).Gap(12).AlignItems(ui.Center).FontSize(theme.Label).Children(func() {
-		ui.Box(c).Height(1).Grow(1).Background(theme.Line)
-		ui.Text(c, text).TextColor(theme.Muted).FontFeatures(theme.Numbers)
-		if r.Content.Status != "ready" && r.Article.URL != "" {
-			r.original(c)
-		}
-		ui.Box(c).Height(1).Grow(1).Background(theme.Line)
-	})
+	return locales.ReaderTextUnavailable()
 }
 
 // original is 阅读原文: the article on its site, which OnLink opens.
@@ -639,7 +769,7 @@ func (r *Reader) original(c *ui.Context) {
 	if r.OnLink != nil {
 		url = ""
 	}
-	l := ui.Link(c, "阅读原文", url).TextColor(theme.Text2)
+	l := ui.Link(c, locales.ReaderReadOriginal(), url).TextColor(theme.Text2)
 	if l.Clicked() && r.OnLink != nil {
 		r.OnLink(r.Article.URL)
 	}
@@ -665,11 +795,34 @@ func (r *Reader) children(c *ui.Context, bs []*block, collapse bool, tc textCtx,
 		top, bottom := outer(b)
 		gap := top
 		switch {
+		case i > 0 && bs[i-1].kind == Heading && b.kind == Heading:
+			// A heading right under another belongs with it: as near as the one above leaves room for.
+			_, before := outer(bs[i-1])
+			gap = max(before, min(top, .9))
 		case i > 0:
 			_, before := outer(bs[i-1])
 			gap = max(before, top)
 		case collapse:
 			gap = 0
+		}
+		// Each top-level block has a mark before it, empty, always there: adding one would move every block
+		// after it to another place among the body's children, and they would lose their layout for a frame.
+		// The block a live change holds has its mark run from off above its top to its top, which the scroll
+		// lines up with its own top once the frame is laid out, so the block stays where it showed whatever
+		// came above it; the block's margin is the mark's.
+		if build != nil {
+			mark := ui.Box(c).AccessHidden(true)
+			if h := r.held; h != nil && b == h.block {
+				mark.Height(h.off).Margin(gap*r.em()-h.off, 0, 0, 0)
+				switch {
+				case h.glide == nil:
+					mark.ScrollIntoView(ui.ScrollIntoViewOptions{Block: ui.ScrollStart})
+				case !h.called:
+					mark.ScrollIntoView(ui.ScrollIntoViewOptions{Block: ui.ScrollStart, Animation: h.glide})
+					h.called = true
+				}
+				gap = 0
+			}
 		}
 		var e ui.Element
 		if build != nil {
@@ -682,6 +835,14 @@ func (r *Reader) children(c *ui.Context, bs []*block, collapse bool, tc textCtx,
 			after = bottom
 		}
 		e.Margin(gap*r.em(), 0, after*r.em(), 0)
+		// Flowing, code and rules glide to their new places; the words and the pictures flow by themselves
+		// (flow.go).
+		if r.fl != nil && (b.kind == Code || b.kind == Rule) {
+			e.Transition(ui.ElementTransition{Animation: &ui.Animation{Duration: flowTime, Ease: motion.TravelEase}, Position: true, Width: true})
+		}
+		if h := r.held; h != nil && b == h.block {
+			r.heldTop, r.heldFound = e.LayoutBounds().Y, true
+		}
 		if b.unit != "" || b.anchor != "" {
 			y := e.LayoutBounds().Y
 			if b.unit != "" && (len(r.units) == 0 || r.units[len(r.units)-1].id != b.unit) {
@@ -689,6 +850,7 @@ func (r *Reader) children(c *ui.Context, bs []*block, collapse bool, tc textCtx,
 			}
 			if b.anchor != "" {
 				r.anchors[b.anchor] = y
+				r.anchorH[b.anchor] = e.LayoutBounds().H
 			}
 		}
 	}
@@ -711,7 +873,8 @@ func (r *Reader) block(c *ui.Context, b *block, tc textCtx) ui.Element {
 	case Picture:
 		return r.picture(c, b)
 	case Rule:
-		return ui.Box(c).Height(1).Background(theme.Line)
+		// A break between parts: a short rule in the middle, 64 wide.
+		return ui.Box(c).Height(1).Width(64).AlignSelf(ui.Center).Background(theme.Faint)
 	}
 	return r.paragraph(c, b, tc)
 }
@@ -730,23 +893,23 @@ func (r *Reader) item(c *ui.Context, l *block, i int, it *block, tc textCtx) ui.
 }
 
 func (r *Reader) quote(c *ui.Context, b *block, tc textCtx) ui.Element {
-	q := ui.Column(c)
+	// A quote stands by a grey rule, in the secondary text colour; a callout by a rule in its kind's colour, under its
+	// kind's name in that colour, its words in the text's own.
+	q := ui.Column(c).BorderWidth(0, 0, 0, 2).BorderColor(theme.QuoteRule).Padding(2, 0, 2, 16)
 	label, callout := calloutLabels[b.callout]
+	color, ok := calloutColors[b.callout]
+	if !ok {
+		color = theme.Danger
+	}
+	tc.color = theme.Text2
 	if callout {
-		q.Radius(10).Background(theme.Surface).Border(1, theme.Line).Padding(16)
+		q.BorderColor(color)
 		tc.color = theme.Text
-	} else {
-		q.BorderWidth(0, 0, 0, 2).BorderColor(theme.QuoteRule).Padding(2, 0, 2, 16)
-		tc.color = theme.Text2
 	}
 	return q.Children(func() {
 		if callout {
-			color, ok := calloutColors[b.callout]
-			if !ok {
-				color = theme.Danger
-			}
-			size := theme.Body * r.Size / theme.ReadingSize
-			ui.Text(c, label).FontSize(size).FontWeight(600).TextColor(color).Margin(0, 0, .4*size, 0)
+			size := theme.Body * r.textSize() / theme.ReadingSize
+			ui.Text(c, label()).Font(theme.Sans).FontSize(size).FontWeight(600).TextColor(color).Margin(0, 0, .3*size, 0)
 		}
 		r.children(c, b.children, false, tc, nil)
 	})
@@ -755,22 +918,30 @@ func (r *Reader) quote(c *ui.Context, b *block, tc textCtx) ui.Element {
 // paragraph builds the text of a paragraph, heading or caption: one rich
 // text, its links within it.
 func (r *Reader) paragraph(c *ui.Context, b *block, tc textCtx) ui.Element {
-	size, weight, lh, color := tc.size, tc.weight, float32(theme.ReadingLineHeight), tc.color
+	size, weight, lh, color := tc.size, tc.weight, r.face().LineHeight, tc.color
+	if tc.lineHeight > 0 {
+		lh = tc.lineHeight
+	}
 	switch b.kind {
 	case Heading:
-		size = [7]float32{0, theme.Title, theme.Subtitle, theme.ReadingSize, theme.ReadingSize, theme.ReadingSize, theme.ReadingSize}[b.level] * r.Size / theme.ReadingSize
-		weight, lh, color = 600, [7]float32{0, 1.4, 1.4, 1.45, 1.5, 1.5, 1.5}[b.level], theme.Text
-		if b.level == 6 {
+		f := r.HeadingFont(b.level)
+		size, weight, lh, color = f.Size, f.Weight, f.LineHeight, theme.Text
+		if headingStyles[max(2, min(6, b.level))].quiet {
 			color = theme.Text2
 		}
 	case Caption:
-		size, color = theme.Body*r.Size/theme.ReadingSize, theme.Muted
+		size, color = theme.Body*r.textSize()/theme.ReadingSize, theme.Muted
 	}
 	segs := r.segments(b)
 	var e ui.Element
-	if !hasLink(segs) {
+	switch {
+	case r.fl != nil:
+		// Flowing, its words are laid out unseen where the new measure puts them; the flow paints them on their way.
+		e = ui.RichText(c, ghost(spans(segs, size))...)
+	case !hasLink(segs):
 		e = ui.RichText(c, spans(segs, size)...)
-	} else {
+	default:
+		links, li := linkSpans(segs), 0
 		e = ui.RichText(c).Children(func() {
 			for i := 0; i < len(segs); {
 				j := i + 1
@@ -780,15 +951,36 @@ func (r *Reader) paragraph(c *ui.Context, b *block, tc textCtx) ui.Element {
 				if segs[i].href == "" {
 					ui.RichText(c, spans(segs[i:j], size)...)
 				} else {
-					r.link(c, segs[i:j], size)
+					links[li].k = r.link(c, segs[i:j], size, color)
+					li++
 				}
 				i = j
 			}
+		})
+		sp := spans(segs, size)
+		if hasGlyph(segs) {
+			e.DrawObjects(drawGlyphs(sp, color))
+		}
+		// The links' light, under their words: the paragraph laid out as the body lays it out.
+		font := ui.Font{Family: r.face().Family, Size: size, Weight: weight, LineHeight: lh}
+		if tc.numbers {
+			font.Features = theme.Numbers
+		}
+		shape := ui.TextShape{Align: tc.align, Pretty: b.kind == Paragraph && !hasWide(b.runs)}
+		text := utf16Of(sp)
+		e.Draw(func(pt *ui.Painter, box ui.Rect) {
+			paintMarkers(pt, box.X, box.Y, b.markerLayout(box.W, size, sp, font, shape), text, size, links)
 		})
 	}
 	e.FontSize(size).LineHeight(lh).TextColor(color)
 	if weight > 0 {
 		e.FontWeight(weight)
+	}
+	if tc.align != ui.Start {
+		e.TextAlign(tc.align)
+	}
+	if tc.numbers {
+		e.FontFeatures(theme.Numbers)
 	}
 	if b.kind == Paragraph && !hasWide(b.runs) {
 		// MyGo's Pretty counts the words between spaces: a run of Chinese
@@ -799,21 +991,35 @@ func (r *Reader) paragraph(c *ui.Context, b *block, tc textCtx) ui.Element {
 	if b.kind != Paragraph {
 		sep = "\n"
 	}
-	r.paras[e.ID()] = &para{b: b, sep: sep, row: tc.row, box: e.LayoutBounds(), segs: segs,
-		font: ui.Font{Family: sans, Size: size, Weight: weight, LineHeight: lh}}
+	if r.fl != nil {
+		e.TextColor(ui.Transparent) // its words flow over it (flow.go)
+	}
+	r.paras[e.ID()] = &para{b: b, sep: sep, row: tc.row, box: e.LayoutBounds(), segs: segs, color: color,
+		font: ui.Font{Family: r.face().Family, Size: size, Weight: weight, LineHeight: lh}}
 	return e
 }
 
-func (r *Reader) link(c *ui.Context, segs []segment, size float32) {
+// link builds a link of the body and returns how far it is lit, 0 to 1: pointed at or focused, the light under it
+// rises over its words and deepens, and settles again as it is left (paintMarkers). From the keys and under less
+// motion it changes at once.
+func (r *Reader) link(c *ui.Context, segs []segment, size float32, color ui.Color) float32 {
 	href := segs[0].href
 	url := href
 	if r.OnLink != nil || strings.HasPrefix(href, "#") {
 		url = "" // the app decides what a click does
 	}
-	l := ui.Link(c, "", url).Children(func() { ui.RichText(c, spans(segs, size)...) }).
-		TextColor(theme.Text).Underline().DecorationThickness(1).UnderlineOffset(4).DecorationColor(theme.LinkUnderline)
-	if l.Hovered() {
-		l.DecorationColor(theme.Accent)
+	// Its light marks it (paintMarkers): the underline a link takes pointed at is drawn in no colour.
+	l := ui.Link(c, "", url).Children(func() { ui.RichText(c, spans(segs, size)...) }).TextColor(color).DecorationColor(ui.Transparent)
+	on := l.Hovered() || l.FocusVisible()
+	target := map[bool]float32{true: 1, false: 0}[on]
+	var k float32
+	switch {
+	case r.Instant || c.Preferences().ReduceMotion:
+		k = l.Jump("sweep", target)
+	case on:
+		k = l.AnimateTo("sweep", target, ui.Animation{Duration: motion.State, Ease: motion.Ease})
+	default:
+		k = l.AnimateTo("sweep", target, ui.Animation{Duration: motion.Hover, Ease: motion.Ease})
 	}
 	if l.Clicked() {
 		switch {
@@ -826,12 +1032,14 @@ func (r *Reader) link(c *ui.Context, segs []segment, size float32) {
 			r.OnLink(href)
 		}
 	}
+	return k
 }
 
 // segment is a run, or the part of one a clip covers.
 type segment struct {
 	run
-	marked bool
+	marked  bool
+	cjkFont string // the face its Chinese and Japanese are drawn in (Face.CJK)
 }
 
 // segments cuts a paragraph's runs where the clips made in this session
@@ -846,11 +1054,11 @@ func (r *Reader) segments(b *block) []segment {
 		}
 	}
 	out := make([]segment, 0, len(b.runs))
-	at := 0
+	at, cjkFont := 0, r.face().CJK
 	for _, rn := range b.runs {
 		n := utf8.RuneCountInString(rn.text)
 		if len(marks) == 0 {
-			out = append(out, segment{run: rn})
+			out = append(out, segment{run: rn, cjkFont: cjkFont})
 			at += n
 			continue
 		}
@@ -875,7 +1083,7 @@ func (r *Reader) segments(b *block) []segment {
 			for _, m := range marks {
 				marked = marked || (mid >= m[0] && mid < m[1])
 			}
-			out = append(out, segment{run: piece, marked: marked})
+			out = append(out, segment{run: piece, marked: marked, cjkFont: cjkFont})
 		}
 		at += n
 	}
@@ -900,9 +1108,23 @@ func hasLink(segs []segment) bool {
 }
 
 // spans styles segments by their tags, in a paragraph of the given size.
+// hasGlyph reports whether segs hold a site's mark.
+func hasGlyph(segs []segment) bool {
+	for _, sg := range segs {
+		if sg.style&glyph != 0 {
+			return true
+		}
+	}
+	return false
+}
+
 func spans(segs []segment, size float32) []ui.Span {
 	out := make([]ui.Span, 0, len(segs))
 	for _, sg := range segs {
+		if sg.style&glyph != 0 {
+			out = append(out, glyphSpan(sg.glyph, size))
+			continue
+		}
 		s := ui.Span{Text: sg.text}
 		st := sg.style
 		if st&bold != 0 {
@@ -916,7 +1138,7 @@ func spans(segs []segment, size float32) []ui.Span {
 			s.Font, s.Size, s.Background, s.Radius, s.PaddingX, s.PaddingY = theme.Mono, at, theme.Selected, 6, 5, 2
 		}
 		if st&cjk != 0 {
-			s.Font = cjkFace
+			s.Font = cmp.Or(sg.cjkFont, cjkFace)
 		}
 		if st&autospace != 0 {
 			s.LetterSpacing = size / 8
@@ -951,29 +1173,53 @@ func (r *Reader) code(c *ui.Context, b *block) ui.Element {
 	return ui.Column(c).Background(theme.CodeBackground).Radius(10).Border(1, theme.LineSoft).Children(func() {
 		if cv.label != "" {
 			ui.Row(c).Height(32).Padding(0, 4, 0, 16).BorderWidth(0, 0, 1, 0).BorderColor(theme.LineSoft).Unselectable().Children(func() {
-				ui.Text(c, cv.label).Font(theme.Mono).FontSize(theme.Label).LetterSpacing(0.24).TextColor(theme.Muted).Grow(1)
+				label := cv.label
+				if label == plainText {
+					label = locales.ReaderPlainText()
+				}
+				ui.Text(c, label).Font(theme.Mono).FontSize(theme.Label).LetterSpacing(0.24).TextColor(theme.Muted).Grow(1)
 				r.copyButton(c, cv)
 			})
 		}
-		side := ui.ScrollHorizontal(c).TrackScroll(&cv.side)
-		r.asides = append(r.asides, aside{side.LayoutBounds(), &cv.side})
-		side.Children(func() {
-			e := ui.RichText(c, cv.spans...).Font(theme.Mono).FontSize(theme.Body * r.Size / theme.ReadingSize).LineHeight(1.75).NoWrap().TabSize(2).
-				TextColor(theme.Text).Padding(16)
-			r.paras[e.ID()] = &para{b: b, sep: "\n", box: e.LayoutBounds()}
+		ui.Column(c).Children(func() {
+			side := ui.ScrollHorizontal(c).TrackScroll(&cv.side)
+			side.Children(func() {
+				size := theme.Body * r.Size / theme.ReadingSize
+				e := ui.RichText(c, cv.spans...).Font(theme.Mono).FontSize(size).LineHeight(1.75).NoWrap().TabSize(2).
+					TextColor(theme.CodeText).Padding(16)
+				if len(cv.marks) > 0 {
+					// A marked line's ground across the whole block, a 2-wide rule at its start.
+					width := r.width()
+					if r.body.W > 0 {
+						width = r.body.W
+					}
+					e.Draw(func(p *ui.Painter, box ui.Rect) {
+						lh := size * 1.75
+						for i, m := range cv.marks {
+							ground, rule := markColors(m)
+							line := ui.Rect{X: box.X, Y: box.Y + 16 + float32(i)*lh, W: max(box.W, width-2), H: lh} // the card's inside, past short code
+							p.Fill(line, ground, 0)
+							p.Fill(ui.Rect{X: line.X, Y: line.Y, W: 2, H: lh}, rule, 0)
+						}
+					})
+				}
+				r.paras[e.ID()] = &para{b: b, sep: "\n", box: e.LayoutBounds()}
+			})
+			edgeFades(c, &cv.side, theme.CodeBackground)
 		})
 	})
 }
 
 func (r *Reader) copyButton(c *ui.Context, cv *codeView) {
-	label, name := "复制", "复制代码"
+	label, name, copied := locales.CommonCopy(), locales.ReaderCopyCode(), false
 	if left := 1400*time.Millisecond - c.Now().Sub(r.copiedAt); r.copied == cv.id && left > 0 {
-		label, name = "已复制", "已复制"
+		label, name, copied = locales.CommonCopied(), locales.CommonCopied(), true
 		c.After(left)
 	}
-	btn := ui.Button(c.Key("copy:"+cv.id), label).Label(name).Height(24).Padding(0, 8).Radius(6).FontSize(theme.Label).
+	// The interface's face: the body around it may be set in New York.
+	btn := ui.Button(c.Key("copy:"+cv.id), label).Label(name).Height(24).Padding(0, 8).Radius(6).Font(theme.Sans).FontSize(theme.Label).
 		Background(ui.Color{}).Border(0, ui.Color{}).TextColor(theme.Muted)
-	if btn.Hovered() || label == "已复制" {
+	if btn.Hovered() || copied {
 		btn.TextColor(theme.Text)
 	}
 	if btn.Hovered() {
@@ -986,6 +1232,10 @@ func (r *Reader) copyButton(c *ui.Context, cv *codeView) {
 	}
 }
 
+// table sets a table as a book does: rules across only, a stronger one under its head, none round it; the head in
+// the small grey of a label; each cell's words at its top, figures to the right in even widths. Its outer columns
+// stand on the column's edges, as the text does. Wider than the column, it scrolls sideways, and the side it goes on
+// fades out, less as it nears its end.
 func (r *Reader) table(c *ui.Context, b *block, tc textCtx) ui.Element {
 	cols := 0
 	for _, row := range b.rows {
@@ -999,27 +1249,50 @@ func (r *Reader) table(c *ui.Context, b *block, tc textCtx) ui.Element {
 	if r.body.W > 0 {
 		width = r.body.W
 	}
-	tc.size = r.Size * theme.Item / theme.ReadingSize
+	k := r.textSize() / theme.ReadingSize
+	tc.size, tc.lineHeight, tc.numbers = theme.Item*k, 1.6, true
+	head := headRows(b.rows)
+	label := tc
+	label.size, label.color, label.lineHeight = theme.Label*k, theme.Muted, 1.5
+	// The room a cell keeps either side of its words: 12, none on the table's outer sides.
+	pad := func(col, span int) (left, right float32) {
+		left, right = 12, 12
+		if col == 0 {
+			left = 0
+		}
+		if col+span >= cols {
+			right = 0
+		}
+		return
+	}
 	// Chrome's table (width: max-content, at least the column; cells at most
-	// 360 with their 12 a side and their rule): each column as wide as its
-	// widest cell's words on one line, up to 360, and the room left, when
-	// they fit, shared as their widths are; wider, the table scrolls.
+	// 360 with their room): each column as wide as its widest cell's words on
+	// one line, up to 360, and the room left, when they fit, shared as their
+	// widths are; wider, the table scrolls.
 	want := make([]float32, cols)
-	for _, row := range b.rows {
+	for i, row := range b.rows {
 		col := 0
 		for _, cl := range row {
 			if cl.colSpan == 1 && col < cols {
-				want[col] = max(want[col], min(r.cellWidth(cl, tc.size)+26, 360))
+				size, weight := tc.size, 400
+				switch {
+				case i < head:
+					size = label.size
+				case cl.header:
+					weight = 600
+				}
+				left, right := pad(col, 1)
+				want[col] = max(want[col], min(r.cellWidth(cl, size, weight), 336)+left+right)
 			}
 			col += cl.colSpan
 		}
 	}
-	total := float32(1)
+	total := float32(0)
 	for _, w := range want {
 		total += w
 	}
-	if total < width && total > 1 {
-		k := (width - 1) / (total - 1)
+	if total < width && total > 0 {
+		k := width / total
 		for i := range want {
 			want[i] *= k
 		}
@@ -1028,31 +1301,78 @@ func (r *Reader) table(c *ui.Context, b *block, tc textCtx) ui.Element {
 	for i := range tracks {
 		tracks[i] = ui.Fixed(want[i])
 	}
-	side := ui.ScrollHorizontal(c).TrackScroll(&b.side).Label("表格，可横向滚动")
-	r.asides = append(r.asides, aside{side.LayoutBounds(), &b.side})
-	return side.Children(func() {
-		ui.Grid(c).ColumnTracks(tracks...).MinWidth(width).BorderWidth(1, 0, 0, 1).BorderColor(theme.Line).Children(func() {
-			for _, row := range b.rows {
-				r.row++
-				for _, cl := range row {
-					cc := tc
-					cc.row, cc.sep = r.row, "\n"
-					if cl.header {
-						cc.weight = 700
+	last := len(b.rows) - 1
+	return ui.Column(c).Children(func() {
+		side := ui.ScrollHorizontal(c).TrackScroll(&b.side).Label(locales.ReaderTableScroll())
+		side.Children(func() {
+			ui.Grid(c).ColumnTracks(tracks...).MinWidth(width).Children(func() {
+				for i, row := range b.rows {
+					r.row++
+					col := 0
+					for _, cl := range row {
+						cc := tc
+						if i < head {
+							cc = label
+						} else if cl.header {
+							cc.weight = 600
+						}
+						cc.row, cc.sep = r.row, "\n"
+						left, right := pad(col, cl.colSpan)
+						e := ui.Column(c).Padding(10, right, 10, left)
+						switch {
+						case i < head:
+							// The head's words sit on its rule.
+							e.Padding(4, right, 8, left).Justify(ui.End)
+						default:
+							e.Justify(ui.Start)
+						}
+						if cl.colSpan == 1 && col < len(b.numeric) && b.numeric[col] {
+							cc.align = ui.End
+							e.AlignItems(ui.End)
+						}
+						// A rule under each row but the last, the head's stronger.
+						switch end := i + cl.rowSpan - 1; {
+						case end == head-1:
+							e.BorderWidth(0, 0, 1, 0).BorderColor(theme.TableHeadRule)
+						case end < last:
+							e.BorderWidth(0, 0, 1, 0).BorderColor(theme.Line)
+						}
+						if cl.colSpan > 1 {
+							e.ColumnSpan(cl.colSpan)
+						}
+						if cl.rowSpan > 1 {
+							e.RowSpan(cl.rowSpan)
+						}
+						e.Children(func() { r.children(c, cl.blocks, false, cc, nil) })
+						col += cl.colSpan
 					}
-					// A cell's words sit in its middle, as a td's vertical-align has them.
-					e := ui.Column(c).Padding(8, 12).Justify(ui.Center).BorderWidth(0, 1, 1, 0).BorderColor(theme.Line)
-					if cl.colSpan > 1 {
-						e.ColumnSpan(cl.colSpan)
-					}
-					if cl.rowSpan > 1 {
-						e.RowSpan(cl.rowSpan)
-					}
-					e.Children(func() { r.children(c, cl.blocks, false, cc, nil) })
 				}
-			}
+			})
 		})
+		edgeFades(c, &b.side, theme.Window)
 	})
+}
+
+// edgeFades fades the sides a sideways scroll can still go to out into bg, 40 wide, less as it nears its end; call
+// it in the box that holds the scroll, after it.
+func edgeFades(c *ui.Context, s *ui.ScrollState, bg ui.Color) {
+	if s.MaxX <= 1 {
+		return
+	}
+	fade := func(key string, k, angle float32) {
+		if k <= 0 {
+			return
+		}
+		e := ui.Box(c.Key(key)).Absolute().Top(0).Bottom(0).Width(40).Opacity(k).IgnoreInput(true).AccessHidden(true).
+			LinearGradient(ui.LinearGradient{Angle: angle, From: bg.Alpha(0), To: bg})
+		if angle == 90 {
+			e.Right(0)
+		} else {
+			e.Left(0)
+		}
+	}
+	fade("fade-end", min(1, (s.MaxX-s.X)/40), 90)
+	fade("fade-start", min(1, s.X/40), 270)
 }
 
 func (r *Reader) picture(c *ui.Context, b *block) ui.Element {
@@ -1061,23 +1381,34 @@ func (r *Reader) picture(c *ui.Context, b *block) ui.Element {
 		return r.missing(c, p)
 	}
 	var e ui.Element
-	if p.player != nil {
+	switch {
+	case p.player != nil:
 		e = ui.Video(c, p.player)
-	} else {
+	case r.fl != nil:
+		e = ui.Box(c) // flowing, the flow paints it on its way (flow.go)
+	default:
 		e = ui.Image(c, p.img)
 	}
 	e.Width(p.w).MaxWidthPercent(100).AspectRatio(p.w / p.h).AlignSelf(ui.Start)
+	r.picBox[b] = e.LayoutBounds()
 	if p.alt != "" {
 		e.Label(p.alt)
 	}
-	if len(p.texts) > 0 {
-		e.DrawOver(func(pt *ui.Painter, box ui.Rect) { drawSVGTexts(pt, box, p) })
+	rad := pictureRadius(min(p.w, r.width()))
+	if rad > 0 {
+		e.Radius(rad)
 	}
+	e.DrawOver(func(pt *ui.Painter, box ui.Rect) {
+		if len(p.texts) > 0 {
+			drawSVGTexts(pt, box, p)
+		}
+		pictureEdge(pt, box, rad)
+	})
 	// A button that shows it large, whose place stays empty while it does.
 	if r.OnPicture != nil {
-		name := "放大查看图片"
+		name := locales.ReaderViewLarger()
 		if p.alt != "" {
-			name = "放大查看：" + p.alt
+			name = locales.ReaderViewLargerAlt(p.alt)
 		}
 		e.Focusable().Role(ui.RoleButton).Label(name).Cursor(ui.CursorZoomIn).FocusRingOffset(3)
 		if e.Clicked() {
@@ -1089,6 +1420,23 @@ func (r *Reader) picture(c *ui.Context, b *block) ui.Element {
 		r.hidden = e.LayoutBounds()
 	}
 	return e
+}
+
+// pictureRadius is the corner of a picture of the body shown w wide: a card's, 10, where it shows as a picture;
+// none for a small one, a badge or an icon, which a corner would cut into.
+func pictureRadius(w float32) float32 {
+	if w >= 160 {
+		return 10
+	}
+	return 0
+}
+
+// pictureEdge draws a picture's edge, a line-soft rule inside its corners, so that a dark picture keeps its edge on
+// the dark page; a small one goes without.
+func pictureEdge(pt *ui.Painter, box ui.Rect, rad float32) {
+	if rad > 0 {
+		pt.Stroke(ui.Rect{X: box.X + .5, Y: box.Y + .5, W: box.W - 1, H: box.H - 1}, theme.LineSoft, rad-.5, 1)
+	}
 }
 
 // Pic is a picture to show large (OnPicture): its words, its own size, and
@@ -1144,27 +1492,9 @@ func (p Pic) View(c *ui.Context) ui.Element {
 // frame before laid it out; zero when it does not show it.
 func (r *Reader) HiddenBox() ui.Rect { return r.hidden }
 
-// ScrollsAside reports whether something under the point (x, y) in the
-// window can still scroll sideways by dx, a code block, a wide table or a
-// scroller of the app's (Aside): a swipe that
-// starts there is its own.
-func (r *Reader) ScrollsAside(x, y, dx float32) bool {
-	for _, a := range r.asides {
-		b, s := a.box, a.side
-		if x < b.X || x >= b.X+b.W || y < b.Y || y >= b.Y+b.H || s.MaxX <= 0 {
-			continue
-		}
-		if dx < 0 && s.X > 0 || dx > 0 && s.X < s.MaxX-1 {
-			return true
-		}
-	}
-	return false
-}
-
 // Aside builds a sideways scroller of the app's in Above or Below, as a
 // work's strip of shots, under key: it keeps its scrolling while the
-// reader lasts and, as the body's code blocks and wide tables do, keeps a
-// swipe that starts on it while it can still scroll that way (ScrollsAside).
+// reader lasts.
 func (r *Reader) Aside(c *ui.Context, key string) ui.Element {
 	s := r.sides[key]
 	if s == nil {
@@ -1174,17 +1504,15 @@ func (r *Reader) Aside(c *ui.Context, key string) ui.Element {
 		s = &ui.ScrollState{}
 		r.sides[key] = s
 	}
-	e := ui.ScrollHorizontal(c.Key(key)).TrackScroll(s)
-	r.asides = append(r.asides, aside{e.LayoutBounds(), s})
-	return e
+	return ui.ScrollHorizontal(c.Key(key)).TrackScroll(s)
 }
 
 // missing is a picture that did not load: its place in the column, at its
 // own proportions when known, the pictogram over one button.
 func (r *Reader) missing(c *ui.Context, p *picture) ui.Element {
-	label := "图片没能载入"
+	label := locales.ReaderImageFailed()
 	if p.alt != "" {
-		label += "：" + p.alt
+		label = locales.ReaderImageFailedAlt(p.alt)
 	}
 	e := ui.Column(c).Label(label).MinHeight(260).Padding(24).Gap(16).Center()
 	if p.w > 0 && p.h > 0 {
@@ -1204,9 +1532,9 @@ func (r *Reader) missing(c *ui.Context, p *picture) ui.Element {
 		}
 		var b ui.Element
 		if r.Button != nil {
-			b = r.Button(c, "重试")
+			b = r.Button(c, locales.CommonTryAgain())
 		} else {
-			b = ui.Button(c, "重试")
+			b = ui.Button(c, locales.CommonTryAgain())
 		}
 		if b.Clicked() {
 			r.OnRetry()
@@ -1232,14 +1560,15 @@ func drawSVGTexts(pt *ui.Painter, box ui.Rect, p *picture) {
 	}
 }
 
-// metaDate is the reader's date: 11月4日 this year, 2025年11月4日 before.
+// metaDate is the reader's date: 11月4日 this year, 2025年11月4日 before,
+// 更新于 one for a modified date.
 func metaDate(published, modified string) string {
-	prefix, v := "", published
+	updated, v := false, published
 	if v == "" {
-		prefix, v = "更新于 ", modified
+		updated, v = true, modified
 	}
 	if v == "" {
-		return "未提供日期"
+		return locales.ReaderNoDate()
 	}
 	t, err := time.Parse(time.RFC3339, v)
 	if err != nil {
@@ -1249,10 +1578,15 @@ func metaDate(published, modified string) string {
 	} else {
 		t = t.Local()
 	}
+	skeleton := "yMMMd"
 	if t.Year() == time.Now().Year() {
-		return prefix + fmt.Sprintf("%d月%d日", t.Month(), t.Day())
+		skeleton = "MMMd"
 	}
-	return prefix + fmt.Sprintf("%d年%d月%d日", t.Year(), t.Month(), t.Day())
+	d := i18n.FormatDate(i18n.Locale(), t, i18n.DateOptions{Skeleton: skeleton})
+	if updated {
+		return locales.ReaderUpdated(d)
+	}
+	return d
 }
 
 // readingTime is the reader's: about 400 Han characters or 230 words a
@@ -1293,17 +1627,9 @@ func readingTime(bs []*block) (minutes int, size string) {
 	}
 	minutes = max(1, int(float64(han)/400+float64(words)/230+0.5))
 	if han >= words {
-		return minutes, fmt.Sprintf("%s 字", thousands(han+words))
+		return minutes, locales.ReaderCharacters(han + words)
 	}
-	return minutes, fmt.Sprintf("%s 词", thousands(words))
-}
-
-func thousands(n int) string {
-	s := fmt.Sprint(n)
-	for i := len(s) - 3; i > 0; i -= 3 {
-		s = s[:i] + "," + s[i:]
-	}
-	return s
+	return minutes, locales.ReaderWords(words)
 }
 
 func hasWide(runs []run) bool {
@@ -1328,13 +1654,9 @@ func asciiWord(s string) bool {
 
 // cellWidth is how wide a cell's words are on one line (their max-content),
 // at size, kept on the cell.
-func (r *Reader) cellWidth(cl *cell, size float32) float32 {
+func (r *Reader) cellWidth(cl *cell, size float32, weight int) float32 {
 	if cl.measuredAt == size {
 		return cl.measured
-	}
-	weight := 400
-	if cl.header {
-		weight = 700
 	}
 	w := float32(0)
 	var walk func(bs []*block)
@@ -1343,9 +1665,9 @@ func (r *Reader) cellWidth(cl *cell, size float32) float32 {
 			if len(b.runs) > 0 {
 				segs := make([]segment, len(b.runs))
 				for i, rn := range b.runs {
-					segs[i] = segment{run: rn}
+					segs[i] = segment{run: rn, cjkFont: r.face().CJK}
 				}
-				lw, _ := ui.ShapeRichText(spans(segs, size), ui.Font{Family: sans, Size: size, Weight: weight}, 0).Size()
+				lw, _ := ui.ShapeRichText(spans(segs, size), ui.Font{Family: r.face().Family, Size: size, Weight: weight}, 0).Size()
 				w = max(w, lw)
 			}
 			walk(b.children)

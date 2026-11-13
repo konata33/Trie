@@ -285,7 +285,7 @@ func TestLineBreaking(t *testing.T) {
 		for i, r := range runs {
 			segs[i] = segment{run: r}
 		}
-		l := ui.ShapeRichTextWith(spans(segs, 17), ui.Font{Family: sans, Size: 17}, ui.TextShape{Width: width})
+		l := ui.ShapeRichTextWith(spans(segs, 17), ui.Font{Family: theme.Sans, Size: 17}, ui.TextShape{Width: width})
 		var out []string
 		rs := []rune(text)
 		for _, ln := range l.Lines() {
@@ -332,7 +332,7 @@ func TestChineseIsPingFangSC(t *testing.T) {
 	const s = "中文正文，标点。引号「」"
 	render := func(build func(c *ui.Context)) *image.RGBA {
 		return ui.Render(func(c *ui.Context) {
-			ui.Column(c).Fill().Background(theme.Window).Padding(8).Font(sans).FontSize(17).TextColor(theme.Text).Children(func() { build(c) })
+			ui.Column(c).Fill().Background(theme.Window).Padding(8).Font(theme.Sans).FontSize(17).TextColor(theme.Text).Children(func() { build(c) })
 		}, 240, 40, 2)
 	}
 	ours := render(func(c *ui.Context) {

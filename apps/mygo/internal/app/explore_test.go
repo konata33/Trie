@@ -17,6 +17,7 @@ import (
 	"trie/internal/explore"
 	"trie/internal/fetch"
 	"trie/internal/library"
+	"trie/internal/locales"
 	"trie/internal/reading"
 	"trie/internal/subscription"
 )
@@ -122,7 +123,7 @@ func TestExploreRooms(t *testing.T) {
 		t.Fatal("the lead shows")
 	}
 	g := a.geometryAt(850)
-	must(t, tt.Click("去写作：博主的最新文章"))
+	must(t, tt.Click("去写作：作者的最新文章"))
 	if ex.room != writing || ex.move == nil {
 		t.Fatalf("the rooms go on their spring: room %d, move %v", ex.room, ex.move)
 	}
@@ -138,7 +139,7 @@ func TestExploreRooms(t *testing.T) {
 		t.Fatal("the way back")
 	}
 	said := strings.Join(tt.Announcements(), "|")
-	if !strings.Contains(said, "写作：博主的最新文章") {
+	if !strings.Contains(said, "写作：作者的最新文章") {
 		t.Fatalf("the crossing is read out: %q", said)
 	}
 	// From the keys: there at once.
@@ -152,7 +153,7 @@ func TestExploreRooms(t *testing.T) {
 	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
 	tt.Move(640, 400)
 	rest(tt)
-	must(t, tt.Click("去写作：博主的最新文章"))
+	must(t, tt.Click("去写作：作者的最新文章"))
 	tt.Frame()
 	if ex.room != writing || ex.move != nil || ex.x != g.restX(writing) {
 		t.Fatalf("under less motion the rooms change at once: room %d, %v, %v", ex.room, ex.move, ex.x)
@@ -260,10 +261,10 @@ func TestExploreBatches(t *testing.T) {
 	}
 }
 
-// A card opens its author's panel: the close button takes the focus; Esc
-// closes it at once, the focus back on the card; the shade closes it by
-// pointer, the panel going over a moment; a byline opens a writer's panel.
-func TestExploreSheet(t *testing.T) {
+// A card opens its author's page, subscribed or not: it lists what Explore
+// has of them and goes back to Explore; Esc goes back with the focus on the
+// card; a byline on the front page opens the writer's page.
+func TestExploreAuthorPage(t *testing.T) {
 	a, _ := newExploreApp(t, nil)
 	tt := exploreTester(a)
 	toExplore(t, a, tt)
@@ -271,44 +272,46 @@ func TestExploreSheet(t *testing.T) {
 	ex.scroll.Y = 700
 	tt.Frame()
 	rest(tt)
-	e := ex.sites[0]
+	// The first site not subscribed to: its page is what Explore has of them.
+	e := ex.sites[slices.IndexFunc(ex.sites, func(e *explore.Entry) bool { return a.subscribedSource(e) == "" })]
 	card := e.Name + "：" + e.Intro
 	must(t, tt.Click(card))
-	if ex.open == nil || ex.open.id != e.ID || ex.open.from != "site" {
-		t.Fatalf("the panel opens: %+v", ex.open)
-	}
 	rest(tt)
-	if _, ok := tt.AccessByRole(ui.RoleDialog, e.Name); !ok {
-		t.Fatal("the panel shows")
+	if want := a.entryPage(e); a.page != want {
+		t.Fatalf("the card opens their page: %+v, want %+v", a.page, want)
 	}
-	if !tt.Focused("关闭") {
-		t.Fatal("the close button takes the focus")
+	if a.backTo() != (page{kind: "explore"}) || a.tabOf() != "explore" {
+		t.Fatalf("their page goes back to Explore, under its tab: %+v %q", a.backTo(), a.tabOf())
 	}
-	if !tt.HasText(e.Intro) {
-		t.Fatal("the panel says who they are")
+	if _, ok := tt.AccessByRole(ui.RoleHeading, e.Name); !ok {
+		t.Fatal("their page names them")
+	}
+	posts := e.Posts
+	if len(posts) == 0 {
+		posts = e.Works
+	}
+	if len(posts) > 0 && !tt.HasText(posts[0].Title) {
+		t.Fatalf("their page lists what Explore has of them: %q", posts[0].Title)
 	}
 	tt.Key(0, ui.KeyEscape)
-	if ex.open != nil || ex.sheet != nil {
-		t.Fatal("Esc closes the panel at once")
+	rest(tt)
+	if a.page != (page{kind: "explore"}) {
+		t.Fatalf("Esc goes back to Explore: %+v", a.page)
 	}
+	// From the keys there and back, the focus comes back to the card.
+	ex.focus = "card:" + e.ID
+	tt.Frame()
+	tt.Key(0, ui.KeyEnter)
+	rest(tt)
+	if want := a.entryPage(e); a.page != want {
+		t.Fatalf("Enter on the card opens their page: %+v", a.page)
+	}
+	tt.Key(0, ui.KeyEscape)
 	tt.Frame()
 	if !tt.Focused(card) {
 		t.Fatal("the focus goes back to the card")
 	}
-	// By pointer it goes over a moment, its surface flying back to the card.
-	tt.Move(640, 400)
-	tt.Advance(time.Second)
-	must(t, tt.Click(card))
-	rest(tt)
-	tt.ClickAt(300, 830)
-	if ex.open != nil || ex.sheet == nil || ex.closing != e.ID {
-		t.Fatalf("the shade closes it, by pointer: open %v, showing %v, closing %q", ex.open, ex.sheet, ex.closing)
-	}
-	rest(tt)
-	if ex.sheet != nil || ex.closing != "" {
-		t.Fatal("the panel is gone once it has gone")
-	}
-	// A writer's byline on the front page opens their panel, out of the byline.
+	// A writer's byline on the front page opens their page.
 	ex.scroll.Y = 0
 	ex.focus = "door"
 	tt.Frame()
@@ -321,12 +324,9 @@ func TestExploreSheet(t *testing.T) {
 		t.Fatal("the byline shows")
 	}
 	tt.ClickAt(r.X+r.W/2, r.Y+r.H/2)
-	if ex.open == nil || ex.open.from != "who" || ex.open.id != w.ID {
-		t.Fatalf("the byline opens the writer's panel: %+v", ex.open)
-	}
 	rest(tt)
-	if !tt.HasText("最近的文章") {
-		t.Fatal("a writer's panel lists their latest posts")
+	if want := a.entryPage(w); a.page != want {
+		t.Fatalf("the byline opens the writer's page: %+v, want %+v", a.page, want)
 	}
 }
 
@@ -340,7 +340,7 @@ func feedFor(name, home string) fetch.Fetch {
 	}
 }
 
-// Subscribing from the panel: pressed, the pill becomes 已订阅 and the
+// Subscribing from an author's page: pressed, the pill becomes 已订阅 and the
 // author's row grows in the sidebar, their face flying into it; pressed
 // again, they are let go, their row staying a beat for the face to leave
 // before it folds. From the keys nothing flies.
@@ -365,12 +365,9 @@ func TestExploreSubscribe(t *testing.T) {
 	tt.Frame()
 	tt.Key(0, ui.KeyEnter)
 	rest(tt)
-	ex.scroll.Y = 700
 	tt.Move(640, 400)
+	a.Press("card:" + target.ID)
 	tt.Frame()
-	rest(tt)
-	ex.open = &exOpen{id: target.ID, from: "site", run: 99, focus: true}
-	ex.sheet = ex.open
 	rest(tt)
 	pill := "订阅 " + target.Name
 	must(t, tt.Click(pill))
@@ -402,7 +399,7 @@ func TestExploreSubscribe(t *testing.T) {
 	if a.subscribedSource(target) != "" || a.parting[src] == nil {
 		t.Fatalf("let go, the row stays a beat: %v", a.parting[src])
 	}
-	if len(a.flights2) != 1 || a.flights2[0].to != "pill:sheet:"+target.ID {
+	if len(a.flights2) != 1 || a.flights2[0].to != "pill:head:"+target.ID {
 		t.Fatalf("the face flies back to the pill: %+v", a.flights2)
 	}
 	rest(tt)
@@ -413,13 +410,15 @@ func TestExploreSubscribe(t *testing.T) {
 	must(t, tt.Click("订阅 "+target.Name))
 	rest(tt)
 	src = a.subscribedSource(target)
-	ex.sheet.focus = true
-	tt.Frame()
-	tt.Key(ui.Shift, ui.KeyTab)
-	tt.Key(ui.Shift, ui.KeyTab)
 	on := "已订阅 " + target.Name + "，按下取消订阅"
+	for range 40 {
+		if tt.Focused(on) {
+			break
+		}
+		tt.Key(0, ui.KeyTab)
+	}
 	if !tt.Focused(on) {
-		t.Fatal("Shift-Tab from the close button reaches the pill")
+		t.Fatal("Tab reaches the pill")
 	}
 	tt.Key(0, ui.KeySpace)
 	tt.Frame()
@@ -428,9 +427,10 @@ func TestExploreSubscribe(t *testing.T) {
 	}
 }
 
-// A post opens in the reader, outside the library: 探索 is the way back, the
-// author's pill stands where the favourite would; Esc goes back to Explore
-// at the same depth, the focus on the post.
+// A post opens in the reader, kept in the library as it opens, under its
+// author's source, unsubscribed: 探索 is the way back; the favourite
+// stands in the bar; the author does not join the sidebar. Esc goes back to
+// Explore at the same depth, the focus on the post.
 func TestExplorePreview(t *testing.T) {
 	a, store := newExploreApp(t, nil)
 	tt := exploreTester(a)
@@ -443,8 +443,9 @@ func TestExplorePreview(t *testing.T) {
 	tt.Move(640, 400)
 	rest(tt)
 	f := ex.fresh[0]
+	authors := len(a.authors)
 	must(t, tt.Click(f.post.Title))
-	id := trialID(f.post.URL)
+	id := a.postID(f.post.URL)
 	if a.page != (page{"reader", id}) || len(a.flights) != 1 || a.lay == nil {
 		t.Fatalf("the post opens in the reader, its title flying, its ground spreading: %v %d %v", a.page, len(a.flights), a.lay)
 	}
@@ -452,18 +453,27 @@ func TestExplorePreview(t *testing.T) {
 	if _, ok := tt.Find("探索"); !ok {
 		t.Fatal("the way back is 探索")
 	}
-	if f.entry.FeedURL != nil {
-		if _, ok := tt.Find("订阅 " + f.entry.Name); !ok {
-			t.Fatal("the author's pill in the bar")
-		}
-	}
-	if _, ok := tt.Find("收藏"); ok && tt.Focused("收藏") {
-		t.Fatal("no favourite for a post outside the library")
-	}
 	lib, _ := store.Library()
-	if slices.ContainsFunc(lib.Articles, func(art library.Article) bool { return art.URL == f.post.URL }) {
-		t.Fatal("nothing is kept")
+	at := slices.IndexFunc(lib.Articles, func(art library.Article) bool { return art.URL == f.post.URL })
+	if at < 0 || lib.Articles[at].ID != id {
+		t.Fatalf("kept in the library by its address: %v", at)
 	}
+	src := slices.IndexFunc(lib.Sources, func(s library.Source) bool { return s.ID == lib.Articles[at].SourceID })
+	if src < 0 || lib.Sources[src].Subscribed || lib.Sources[src].DisplayName != f.entry.Name {
+		t.Fatalf("under its author's source, unsubscribed: %+v", lib.Sources[src])
+	}
+	if len(a.authors) != authors {
+		t.Fatal("the author does not join the sidebar")
+	}
+	if _, ok := tt.Find("收藏"); !ok {
+		t.Fatal("the favourite stands in the bar")
+	}
+	tt.Key(0, ui.KeyS)
+	rest(tt)
+	if art := a.libArticle(id); art == nil || !art.Favorite {
+		t.Fatal("S keeps it")
+	}
+	// Opened again, it is the same article.
 	tt.Key(0, ui.KeyEscape)
 	tt.Frame()
 	if a.page.kind != "explore" || ex.room != writing {
@@ -472,6 +482,11 @@ func TestExplorePreview(t *testing.T) {
 	tt.Frame()
 	if !tt.Focused(f.post.Title) {
 		t.Fatal("the focus goes back to the post")
+	}
+	tt.Key(0, ui.KeyEnter)
+	rest(tt)
+	if lib, _ := store.Library(); a.page != (page{"reader", id}) || len(lib.Articles) != len(a.lib.Articles) {
+		t.Fatalf("opened again, the same article: %v", a.page)
 	}
 }
 
@@ -596,7 +611,7 @@ func TestExploreShots(t *testing.T) {
 	ex.scroll.Y = 0
 	tt.Frame()
 	settle(tt)
-	must(t, tt.Click("去写作：博主的最新文章"))
+	must(t, tt.Click("去写作：作者的最新文章"))
 	tt.Move(1000, 830)
 	still("writing-front")
 	ex.scroll.Y = 760
@@ -653,7 +668,7 @@ func TestExploreShots(t *testing.T) {
 		}
 	})
 	// And the way across pressed: the same spring.
-	record("door", 900*time.Millisecond, func() { must(t, tt.Click("去写作：博主的最新文章")) })
+	record("door", 900*time.Millisecond, func() { must(t, tt.Click("去写作：作者的最新文章")) })
 }
 
 // everyOther is every other frame, for a contact sheet.
@@ -675,7 +690,7 @@ func TestExploreUnreadable(t *testing.T) {
 		Fetch:     offline()})
 	tt := exploreTester(a)
 	toExplore(t, a, tt)
-	if !tt.HasText("推荐暂时读不出来") || !tt.HasText(exploreUnread) {
+	if !tt.HasText("暂时读不到推荐") || !tt.HasText(locales.ExploreUnread()) {
 		t.Error("the page does not say the list could not be read")
 	}
 	if tt.HasText(missing) || tt.HasText("no such file") {
@@ -691,15 +706,15 @@ func TestExploreNextWindow(t *testing.T) {
 	a, _ := newExploreApp(t, nil)
 	tt := exploreTester(a)
 	toExplore(t, a, tt)
-	if _, ok := tt.Find("去写作：博主的最新文章"); !ok {
+	if _, ok := tt.Find("去写作：作者的最新文章"); !ok {
 		t.Fatal("Explore is not open")
 	}
 	next := exploreTester(a)
 	settle(next)
-	if _, ok := next.Find("去写作：博主的最新文章"); !ok {
+	if _, ok := next.Find("去写作：作者的最新文章"); !ok {
 		t.Fatal("the next window does not show Explore")
 	}
-	must(t, next.Click("去写作：博主的最新文章"))
+	must(t, next.Click("去写作：作者的最新文章"))
 	settle(next)
 	if _, ok := next.Find("回到设计：设计网站和作品"); !ok {
 		t.Error("the rooms do not cross in the next window")
@@ -708,7 +723,7 @@ func TestExploreNextWindow(t *testing.T) {
 
 // Before any writer's posts were read (offline on a first start), the
 // writing room's front page is the writers themselves, opening their
-// panels; covers and panels say where they write, never that it cannot be
+// pages; covers and pages say where they write, never that it cannot be
 // read.
 func TestExploreNothingRead(t *testing.T) {
 	a, _ := newExploreApp(t, nil)
@@ -719,21 +734,24 @@ func TestExploreNothingRead(t *testing.T) {
 		e.Posts = nil
 	}
 	ex.fresh = nil
-	must(t, tt.Click("去写作：博主的最新文章"))
+	must(t, tt.Click("去写作：作者的最新文章"))
 	rest(tt)
 	for _, s := range []string{"博主的新文章暂时读不到，联网后会自己更新。", "暂时读不到这个订阅源的文章", "没有订阅源"} {
 		if tt.HasText(s) {
 			t.Errorf("no word of what is missing: %q", s)
 		}
 	}
-	if _, ok := tt.AccessByRole(ui.RoleRegion, "博主"); !ok {
+	if _, ok := tt.AccessByRole(ui.RoleRegion, "作者"); !ok {
 		t.Fatal("the front page is the writers")
 	}
 	e := ex.index[0]
-	r, _ := tt.AccessByRole(ui.RoleRegion, "博主")
+	r, _ := tt.AccessByRole(ui.RoleRegion, "作者")
 	tt.ClickAt(r.Bounds.X+48+20, r.Bounds.Y+32+(r.Bounds.H-64)/8) // the first: its face, in the middle of the first of four rows
 	rest(tt)
-	if ex.open == nil || ex.open.id != e.ID {
-		t.Fatalf("their panel opens: %+v", ex.open)
+	if want := a.entryPage(e); a.page != want {
+		t.Fatalf("their page opens: %+v, want %+v", a.page, want)
+	}
+	if tt.HasText("还没有收到文章") {
+		t.Error("their page ends at its head, saying nothing of what is missing")
 	}
 }

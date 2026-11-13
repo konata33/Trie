@@ -1,31 +1,36 @@
 package app
 
 import (
-	"fmt"
 	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
 	"trie/internal/library"
+	"trie/internal/locales"
 	"trie/internal/motion"
+	"trie/internal/reader"
 	"trie/internal/theme"
 )
 
-// An author's page: the page band, a card for
-// the person, then their chronology by year, each article a row with a
-// tear-off date.
+// A subscribed author's page reads as their journal: everything they wrote,
+// newest first, down the reading column, each entry its date, its title,
+// its picture and how it opens, hairlines between. Beside it runs a rail of
+// what they wrote, one tick an article: the page's scrollbar, the article
+// in view an amber pill on it.
 
 // listState is what an author's page keeps: its scroll, the list cursor
-// (the row J and K move, which Tab enters on) and the search.
+// (the entry J and K move, which Tab enters on) and the search.
 type listState struct {
 	scroll ui.ScrollState
 	cursor string
 	query  string
 	search bool   // the search field is open
-	focus  string // the row J or K moved the cursor to, to focus
+	focus  string // the entry J or K moved the cursor to, to focus
 	rows   map[string]ui.Rect
+	held   bool // the rail is held: its pointer scrubs
 }
 
 func (a *App) list(id string) *listState {
@@ -65,48 +70,54 @@ func (a *App) authorPage(c *ui.Context, id string, live bool) {
 	l := a.list(id)
 	p := page{"author", id}
 	items := a.shown(au, l.query)
+	col := a.column()
+	_, vh := c.Size()
+	headH := sceneHeight(sceneHead, vh) + profileFoot
 	sc := ui.Scroll(c.Key("scroll")).TrackScroll(&l.scroll).Grow(1).FillWidth().Scrollbars(false)
 	view := sc.LayoutBounds()
 	sc.Children(func() {
-		ui.Column(c).FillWidth().MaxWidth(720).MinHeight(view.H).AlignSelf(ui.Center).Padding(0, 40, 140, 40).Children(func() {
-			a.band(c, func() { a.backLink(c, "首页") }, func() { a.searchField(c, &l.query, &l.search, "搜索这位作者的文章", "搜索标题") })
-			a.authorCard(c, au, p, live)
-			cursor := l.cursor
-			if !containsArticle(items, cursor) && len(items) > 0 {
-				cursor = items[0].ID
-			}
-			ui.Column(c).Margin(48, 0, 0, 0).Gap(48).Children(func() {
-				for _, y := range years(items) {
-					ui.Column(c.Key("year:" + y.year)).Role(ui.RoleGroup).Label(y.year + " 年").Children(func() {
-						ui.Row(c).Gap(16).AlignItems(ui.Center).Margin(0, 0, 4, 0).Children(func() {
-							ui.Text(c, y.year).FontSize(theme.Subtitle).LineHeight(28.0 / 20).FontWeight(600).TextColor(theme.Text2).Role(ui.RoleHeading).Level(2)
-							ui.Box(c).Grow(1).Height(1).Background(theme.LineSoft)
-							ui.Text(c, strconv.Itoa(len(y.rows))+" 篇").FontSize(theme.Label).TextColor(theme.Muted)
-						})
-						ui.Column(c).Margin(0, -12, 0, -12).Children(func() {
-							for i, art := range y.rows {
-								a.articleRow(c, l, p, art, i > 0, art.ID == cursor, view, live)
+		ui.Column(c).FillWidth().MinHeight(view.H).Children(func() {
+			// The band floats over the head's picture, at the column's edges.
+			ui.Column(c.Key("band-float")).Absolute().Top(0).Left(0).Right(0).ZIndex(3).AlignItems(ui.Center).PassThrough().Children(func() {
+				ui.Column(c).FillWidth().MaxWidth(col+80).Padding(0, 40).PassThrough().Children(func() {
+					a.band(c, func() { a.backLink(c, backLabel(a, a.backTo())) }, func() {
+						a.searchField(c, &l.query, &l.search, locales.AuthorSearchLabel(), locales.AuthorSearchPlaceholder())
+					})
+				})
+			})
+			a.authorHead(c, au, p, live)
+			ui.Column(c).FillWidth().MaxWidth(col+80).AlignSelf(ui.Center).Padding(0, 40, 140, 40).Children(func() {
+				cursor := l.cursor
+				if !containsArticle(items, cursor) && len(items) > 0 {
+					cursor = items[0].ID
+				}
+				// The entries reach 16 past the column, so that the keyboard's ground has room round the words.
+				ui.Column(c.Key("entries")).Margin(0, -16).Role(ui.RoleList).Label(locales.AuthorArticles(au.src.DisplayName)).Children(func() {
+					for i, art := range items {
+						a.entry(c, l, p, art, i == 0, art.ID == cursor, live)
+					}
+				})
+				if len(items) == 0 {
+					if strings.TrimSpace(l.query) != "" {
+						ui.Column(c).Margin(28, 0, 0, 0).Children(func() {
+							ui.Text(c, locales.CommonNoMatchingArticles()).FontSize(theme.Body).LineHeight(20.0 / 13).TextColor(theme.Muted)
+							if a.linkButton(c, "clear", locales.CommonClearSearch(), false, false).Margin(8, 0, 0, 0).Clicked() {
+								l.query = ""
 							}
 						})
-					})
+					} else if a.exPersonOf(id) == nil {
+						// Someone only Explore has, with nothing of theirs read yet, has the page end at its head.
+						a.emptyState(c, "mailbox", locales.AuthorEmptyTitle(), locales.AuthorEmptyText(), nil)
+					}
 				}
 			})
-			if len(items) == 0 {
-				if strings.TrimSpace(l.query) != "" {
-					ui.Column(c).Margin(32, 0, 0, 0).Children(func() {
-						ui.Text(c, "没有匹配的文章").FontSize(theme.Body).LineHeight(20.0 / 13).TextColor(theme.Muted)
-						if a.linkButton(c, "clear", "清除搜索", false, false).Margin(8, 0, 0, 0).Clicked() {
-							l.query = ""
-						}
-					})
-				} else {
-					a.emptyState(c, "mailbox", "还没有收到文章", "这位作者发了新文章，会出现在这里", nil)
-				}
-			}
 		})
 	})
 	if live {
-		a.scrolling = &l.scroll
+		// The rail stands for the scrollbar here; it waits under the head
+		// until the head has scrolled away.
+		a.scrolling = nil
+		a.rail(c, l, items, view, max(0, headH+8-railTop-l.scroll.Y))
 	}
 }
 
@@ -117,28 +128,6 @@ func containsArticle(arts []*library.Article, id string) bool {
 		}
 	}
 	return false
-}
-
-type year struct {
-	year string
-	rows []*library.Article
-}
-
-// years groups articles, newest first, by the year they are dated.
-func years(arts []*library.Article) []year {
-	var out []year
-	for _, art := range arts {
-		y := "未注明"
-		if t, ok := articleTime(art); ok {
-			y = strconv.Itoa(local(t).Year())
-		}
-		if n := len(out); n > 0 && out[n-1].year == y {
-			out[n-1].rows = append(out[n-1].rows, art)
-		} else {
-			out = append(out, year{y, []*library.Article{art}})
-		}
-	}
-	return out
 }
 
 // band is the 52 band every page starts with (ui/page PageBand): something
@@ -206,7 +195,7 @@ func (a *App) searchField(c *ui.Context, query *string, search *bool, label, pla
 				*search = true
 			}
 			b.Children(func() { a.pressIcon(c, "search", 16, false, b.Pressed()) })
-			a.tip(c, b, "搜索 · ⌘F", false)
+			a.tip(c, b, locales.CommonSearch()+" · ⌘F", false)
 			return
 		}
 		a.icon(c, "search", 16, false)
@@ -224,97 +213,136 @@ func (a *App) searchField(c *ui.Context, query *string, search *bool, label, pla
 	})
 }
 
-// authorCard is the head of an author's page: their face, their name with
-// the subscription menu, their own words, and the facts.
-func (a *App) authorCard(c *ui.Context, au *author, p page, live bool) {
+// authorHead is the head of the journal, a profile: the author's own site's
+// first screen as a banner across the content area (else their latest
+// picture, else their face as a glow), half the window high and lit, only
+// its foot sinking into the window's ground; their portrait standing on its
+// foot, half in it; beside the portrait, below the banner, their name and
+// their site; the subscription menu at the column's end. Come from the
+// sidebar, the face flies out of its chip and the name travels with it;
+// going back, they return.
+func (a *App) authorHead(c *ui.Context, au *author, p page, live bool) {
 	id := au.src.ID
-	ui.Row(c.Key("card")).Gap(18).AlignItems(ui.Start).Children(func() {
-		if l := a.left; l != nil && l.page == p && l.move.chip == id {
-			// The page left, built on for its exit, keeps the face's place
-			// but not the face: the face flies to its chip as itself.
-			ui.Box(c.Key("face-gone")).Size(56, 56).Shrink(0)
-		} else {
-			f := a.face(c, a.iconOf(au.src), "face", 56).Shadow(0, 0, 0, 1, theme.LineSoft).Shadow(0, 6, 18, 0, theme.ShadowTip)
-			switch m := a.came; {
-			case !live:
-				// The page left for an article: the face goes with its page.
-			case m != nil && m.to == p && m.depth == motion.Deep:
-				// Come from the sidebar: the face flies out of its chip.
-				t := m.depth.Crossing().Shared(faceMatch{id})
-				t.ScaleContent = true
-				f.Transition(a.tr(c, t))
-			default:
-				// Where the face is, for its chip to take it back from.
-				f.Transition(ui.ElementTransition{Match: faceMatch{id}})
-			}
+	_, vh := c.Size()
+	h, gh, w := sceneHeight(sceneHead, vh), groundHeight(vh), a.area.W
+	col := min(a.column(), w-80)
+	left := (w - col) / 2
+	g := &favGroup{src: au.src, list: au.arts}
+	ui.Box(c.Key("head")).FillWidth().Height(h + profileFoot).Children(func() {
+		pic, site, waiting := a.shelfPicture(g, true)
+		bright := float32(1)
+		if pic != nil {
+			bright = pic.lit
 		}
-		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Padding(2, 0, 0, 0).Children(func() {
-			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				name := authorName(c, au.src.DisplayName).Role(ui.RoleHeading).Level(1).Shrink(1)
-				a.end(name, p, "name:"+id)
-				more := a.sourceMenu(c, "more", au.src, false).TextColor(theme.Faint)
-				if more.Hovered() {
-					more.Background(theme.Hover).TextColor(theme.Text2)
-				}
-			})
-			if intro := a.introOf(au.src); intro != "" {
-				ui.Text(c, intro).Margin(6, 0, 0, 0).MaxWidth(468).FontSize(theme.Body).LineHeight(20.0 / 13).TextColor(theme.Text2).Pretty()
+		// The picture is drawn taller than the banner and cut to it; the face flying in is not.
+		ground := ui.Box(c.Key("ground")).Absolute().Left(0).Right(0).Top(0).Height(h).ClipX().ClipY().IgnoreInput(true).AccessHidden(true)
+		if a.crossing(c, live) {
+			ground.Cache()
+		}
+		ground.Children(func() {
+			// The foot, where the portrait and the name meet it, softened (a backdrop's blur) across the banner, so
+			// that the site's own words there never crowd the name.
+			var soft *ui.Bitmap
+			if pic != nil && pic.soft != nil && w > 0 {
+				soft = pic.pool(w, gh, posOf(site), left, h, 1.6*w, 200, 0.35, 1)
 			}
-			ui.Row(c).Margin(8, 0, 0, 0).Wrap().AlignItems(ui.Center).FontSize(theme.Label).LineHeight(18.0 / 12).TextColor(theme.Muted).Children(func() {
-				site := ui.ButtonBase(c.Key("site")).Label(au.src.Host).Radius(6).FocusRing(false)
-				color, line := theme.Text2, theme.Line
-				if site.Hovered() {
-					color, line = theme.Text, theme.Faint
-				}
-				if site.Clicked() {
-					a.openExternal(c, au.src.HomeURL)
-				}
-				if site.FocusVisible() {
-					site.FocusRing(true)
-				}
-				site.Children(func() {
-					ui.Text(c, au.src.Host).TextColor(site.AnimateColor("fg", color, a.ease(motion.LinkHover))).Underline().UnderlineOffset(3).
-						DecorationColor(site.AnimateColor("line", line, a.ease(motion.LinkHover)))
-				})
-				a.tip(c, site, "在浏览器中打开", false)
-				sep(c)
-				ui.Text(c, "收录")
-				a.count(c, "count:"+au.src.ID, len(au.arts), 18).Margin(0, 3.3)
-				ui.Text(c, "篇")
-				if au.days >= 0 {
-					sep(c)
-					ui.Text(c, ago(au.time)+"更新")
-				}
-			})
+			a.groundView(c, g, pic, site, waiting, gh, bright, a.picFade(c, pic), soft)
+			// Under the floating band: dark enough for its grey words on a white site.
+			ui.Box(c).Absolute().Left(0).Top(0).Right(0).Height(132).LinearGradient(ui.LinearGradient{Angle: 180, Stops: []ui.GradientStop{
+				{Color: theme.Window.Alpha(0.9), At: 0}, {Color: theme.Window.Alpha(0.9), At: 52.0 / 132}, {Color: theme.Window.Alpha(0), At: 1}}})
+			// The foot sinks into the window's ground: 0.9 by the name's first line, the ground itself at the edge.
+			ui.Box(c).Absolute().Left(0).Right(0).Top(0).Height(h).LinearGradient(ui.LinearGradient{Angle: 180, Stops: []ui.GradientStop{
+				{Color: theme.Window.Alpha(0), At: (h - 200) / h}, {Color: theme.Window.Alpha(0.6), At: (h - 96) / h},
+				{Color: theme.Window.Alpha(0.9), At: (h - 40) / h}, {Color: theme.Window, At: 1}}})
 		})
+		// The portrait: the face in a ring of the window's ground, centred on the banner's foot.
+		ui.Box(c.Key("portrait")).Absolute().Left(left-portraitRing).Top(h-portrait/2-portraitRing).
+			Size(portrait+2*portraitRing, portrait+2*portraitRing).Radius(portrait/2 + portraitRing).Background(theme.Window).Center().AccessHidden(true).
+			Children(func() { a.headFace(c, au, p, portrait, live) })
+		// Beside it, its foot level with the portrait's: the name and, under it, the site.
+		ui.Column(c.Key("words")).Absolute().Left(left + portrait + 20).Top(h - profileRise).Width(col - portrait - 20 - 40).Children(func() {
+			name := authorName(c, au.src.DisplayName).Role(ui.RoleHeading).Level(1)
+			a.end(name, p, "name:"+id)
+			ui.Row(c).Margin(2, 0, 0, 0).FontSize(theme.Body).LineHeight(20.0 / 13).Children(func() { a.siteLink(c, au.src) })
+		})
+		// The menu at the column's end, level with the name; for someone not subscribed to, the pill that subscribes.
+		if who := a.exPersonOf(id); who != nil {
+			a.follow(c, who.entry, "head").Absolute().Right(w - left - col).Top(h - profileRise + 4)
+			return
+		}
+		more := a.sourceMenu(c, "more", au.src, false).Absolute().Left(left + col - 24).Top(h - profileRise + 8).TextColor(theme.Muted)
+		if more.Hovered() {
+			more.Background(theme.Hover).TextColor(theme.Text)
+		}
 	})
 }
 
-// introOf is an author's introduction: their own
-// words from the feed first; when it says nothing useful, the line Explore
-// has about their site, looked up once.
-func (a *App) introOf(src *library.Source) string {
-	if v := src.Description.Value; v != nil && strings.TrimSpace(*v) != "" {
-		return *v
+// The profile at the head: the portrait 88 across in a ring of 4, centred
+// on the banner's foot; the name and site beside it rise profileRise above
+// the foot and end level with the portrait's; the head reaches profileFoot
+// below the banner, the portrait's lower half and 24 more.
+const (
+	portrait, portraitRing = 88, 4
+	profileRise            = 14
+	profileFoot            = portrait/2 + portraitRing + 24
+)
+
+// headFace is the face at the head of an author's page, size across, with
+// its flight: out of the sidebar chip coming in, back to it going back.
+func (a *App) headFace(c *ui.Context, au *author, p page, size float32, live bool) ui.Element {
+	id := au.src.ID
+	if l := a.left; l != nil && l.page == p && l.move.chip == id {
+		// The page left, built on for its exit, keeps the face's place
+		// but not the face: the face flies to its chip as itself.
+		return ui.Box(c.Key("face-gone")).Size(size, size).Shrink(0)
 	}
-	if a.opt.Explore == nil || a.warming {
-		return a.intros[src.ID]
+	f := a.face(c, a.iconOf(au.src), "face", size)
+	switch m := a.came; {
+	case !live:
+		// The page left for an article: the face goes with its page.
+	case m != nil && m.to == p && m.depth == motion.Deep:
+		// Come from the sidebar: the face flies out of its chip.
+		t := m.depth.Crossing().Shared(faceMatch{id})
+		t.ScaleContent = true
+		f.Transition(a.tr(c, t))
+	default:
+		// Where the face is, for its chip to take it back from.
+		f.Transition(ui.ElementTransition{Match: faceMatch{id}})
 	}
-	if intro, ok := a.intros[src.ID]; ok {
-		return intro
-	}
-	a.intros[src.ID] = ""
-	svc, id, s := a.opt.Explore, src.ID, *src
-	a.do(func() func() {
-		intro := svc.Intro(s)
-		return func() { a.intros[id] = intro }
-	})
-	return a.intros[src.ID]
+	return f
 }
 
-// sep is the facts' quiet dot, 6 either side.
-func sep(c *ui.Context) {
-	ui.Text(c, "·").Margin(0, 6).Opacity(0.6)
+// siteLink is the address of an author's site with the arrow of a way out
+// of the app, which opens it: muted, both lighting up under the pointer, the
+// address underlined.
+func (a *App) siteLink(c *ui.Context, src *library.Source) {
+	if src.Host == "" {
+		return
+	}
+	if src.HomeURL == "" {
+		ui.Text(c, src.Host).TextColor(theme.Muted)
+		return
+	}
+	site := ui.ButtonBase(c.Key("site")).Label(src.Host).Margin(0, -4).Padding(0, 4).Gap(4).Radius(6).AlignItems(ui.Center).FocusRing(false)
+	color, mark := theme.Muted, theme.Faint
+	if site.Hovered() {
+		color, mark = theme.Text, theme.Text2
+	}
+	if site.FocusVisible() {
+		site.FocusRing(true)
+	}
+	if site.Clicked() {
+		a.openExternal(c, src.HomeURL)
+	}
+	a.control(site)
+	site.Children(func() {
+		t := ui.Text(c, src.Host).TextColor(site.AnimateColor("fg", color, a.ease(motion.Hover)))
+		if site.Hovered() {
+			t.Underline().UnderlineOffset(3)
+		}
+		a.pressIcon(c, "openArrow", 12, false, site.Pressed()).TextColor(site.AnimateColor("mark", mark, a.ease(motion.Hover)))
+	})
+	a.tip(c, site, locales.CommonOpenInBrowser(), false)
 }
 
 // face is a round author face: the site icon toned for the dark interface,
@@ -334,25 +362,35 @@ func (a *App) face(c *ui.Context, ic *siteIcon, key string, size float32) ui.Ele
 	})
 }
 
-// articleRow is a row of the chronology: the date, the
-// moon of an article being read, the title and what the list can say of
-// it, its picture. The pointer lays no ground over it; the keyboard's
-// cursor takes the selected ground and a 1.5 amber line inside it.
-func (a *App) articleRow(c *ui.Context, l *listState, p page, art *library.Article, rule, cursor bool, view ui.Rect, live bool) {
-	row := ui.Box(c.Key(art.ID)).Radius(10).FillWidth()
+// entry is one article of the journal: the date it was written, with the
+// moon of an article being read and the orbit of one kept; its title; its
+// picture; and how it opens, three lines of what the feed gave. The pointer
+// lays no ground over it; the keyboard's cursor takes the selected ground
+// and a 1.5 amber line inside it.
+func (a *App) entry(c *ui.Context, l *listState, p page, art *library.Article, first, cursor, live bool) {
+	row := ui.Box(c.Key(art.ID)).FillWidth()
 	pv := art.Preview
-	film := pv != nil && pv.Gallery >= 3 && pv.Images >= 5
-	thumb := pv != nil && pv.HasImage && !film && a.thumbShows(art.ID, 0)
-	row.Children(func() {
-		if rule {
-			ui.Box(c).Absolute().Top(0).Left(72).Right(12).Height(1).Background(theme.LineSoft).IgnoreInput(true)
+	var pic *favPic
+	wants := false
+	if row.InViewMargin(600, 0) || a.favs().pics["keep:"+art.ID] != nil {
+		pic, wants = a.entryPic(p, art)
+	} else {
+		if who := a.exPersonOf(p.id); who != nil {
+			_, wants = who.works[art.ID]
 		}
-		// The row's grid keeps an empty column for its actions: 8 and 8 at its end.
-		b := ui.ButtonBase(c.Key("open")).Label(titleOf(art.Title)).FillWidth().Margin(0, 16, 0, 0).Padding(18, 12).Gap(14).Radius(10).AlignItems(ui.Start).
+		wants = wants || pv != nil && pv.HasImage
+	}
+	pictured := wants && !(pic != nil && pic.done && pic.bmp == nil)
+	row.Children(func() {
+		if !first {
+			ui.Box(c).Absolute().Top(0).Left(16).Right(16).Height(1).Background(theme.LineSoft).IgnoreInput(true)
+		}
+		b := ui.ButtonBase(c.Key("open")).Label(titleOf(art.Title)).FillWidth().Padding(28, 16).Radius(10).
 			FocusRing(false).TabStop(cursor).KeyShortcuts(0, ui.KeyEnter)
-		if b.Clicked() {
+		r := b.LayoutBounds()
+		if b.Clicked() && live {
 			l.cursor = art.ID
-			a.open(c, art.ID, b.LayoutBounds())
+			a.open(c, art.ID, r)
 		}
 		if l.focus == art.ID {
 			l.focus = ""
@@ -362,75 +400,37 @@ func (a *App) articleRow(c *ui.Context, l *listState, p page, art *library.Artic
 		}
 		focus := b.FocusVisible() || b.Focused() && a.kbd
 		if focus {
-			row.Background(theme.Selected).InsetShadow(0, 0, 0, 1.5, theme.Focus)
+			b.Background(theme.Selected).InsetShadow(0, 0, 0, 1.5, theme.Focus)
 		}
-		r := b.LayoutBounds()
 		l.rows[art.ID] = r
 		a.layInto(p, art.ID, r)
-		near := r.W == 0 || r.Y < view.Y+view.H+400 && r.Y+r.H > view.Y-400
 		b.Children(func() {
-			ui.Column(c).Width(34).AlignItems(ui.End).Shrink(0).FontFeatures(theme.Numbers).Children(func() {
-				if t, ok := articleTime(art); ok {
-					d := local(t)
-					ui.Text(c, strconv.Itoa(d.Day())).FontSize(theme.Subtitle).LineHeight(24.0 / 20).TextColor(theme.Text)
-					ui.Text(c, strconv.Itoa(int(d.Month()))+"月").FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted)
-				}
-			})
-			ui.Box(c).Width(12).Padding(5, 0, 0, 0).Shrink(0).Children(func() {
-				if inProgress(art) {
-					a.moonOf(c, art, fmt.Sprintf("读到 %d%%", percentOf(art)))
-				}
-			})
-			ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Children(func() {
-				ui.Row(c).Gap(7).AlignItems(ui.Center).MinWidth(0).Children(func() {
-					t := rowTitle(c, titleOf(art.Title)).Shrink(1).MinWidth(0)
-					a.end(t, p, "title:"+art.ID)
+			ui.Column(c).FillWidth().Children(func() {
+				ui.Row(c.Key("when")).Gap(8).AlignItems(ui.Center).FontSize(theme.Body).LineHeight(20.0 / 13).FontFeatures(theme.Numbers).Children(func() {
+					if d := articleDate(art, false); d != "" {
+						ui.Text(c, d).TextColor(theme.Text2).NoWrap()
+					}
+					a.progress(c, art)
 					if art.Favorite {
-						a.orbit(c, "badge", 11, true).AccessHidden(false).Label("已收藏")
+						a.orbit(c, "kept", 12, true).AccessHidden(false).Label(locales.CommonFavorited())
 					}
 				})
+				t := entryTitle(c, titleOf(art.Title)).Margin(8, 0, 0, 0)
+				a.end(t, p, "title:"+art.ID)
+				a.looks[art.ID] = titleLook{entryTitle, theme.Subtitle}
+				if pictured {
+					a.entryPicture(c, pic, row.Hovered())
+				}
 				if pv != nil && pv.Excerpt != nil && *pv.Excerpt != "" {
-					ui.Text(c, *pv.Excerpt).Margin(4, 0, 0, 0).FontSize(theme.Body).LineHeight(21.0 / 13).TextColor(theme.Text2).MaxLines(2).Ellipsis("…")
-				}
-				if film {
-					ui.Row(c).Margin(12, 0, 0, 0).Gap(6).MaxWidth(420).Children(func() {
-						for i := range 3 {
-							a.thumbView(c, art.ID, i, near).Grow(1).Basis(0).AspectRatio(1.5)
-						}
-					})
-				}
-				var facts []string
-				if pv != nil && pv.Minutes != nil && *pv.Minutes > 0 {
-					facts = append(facts, fmt.Sprintf("约 %d 分钟", *pv.Minutes))
-				}
-				if pv != nil && pv.CodeBlocks > 0 {
-					facts = append(facts, fmt.Sprintf("%d 段代码", pv.CodeBlocks))
-				}
-				if pv != nil && pv.Images > 1 {
-					facts = append(facts, fmt.Sprintf("%d 张图", pv.Images))
-				}
-				if inProgress(art) {
-					facts = append(facts, fmt.Sprintf("读到 %d%%", percentOf(art)))
-				}
-				if len(facts) > 0 {
-					ui.Row(c).Margin(1, 0, 0, 0).FontSize(theme.Label).LineHeight(18.0 / 12).TextColor(theme.Muted).Children(func() {
-						for i, f := range facts {
-							if i > 0 {
-								sep(c)
-							}
-							ui.Text(c, f).NoWrap()
-						}
-					})
+					ui.Text(c, *pv.Excerpt).Margin(12, 0, 0, 0).FontSize(theme.Item).LineHeight(1.8).TextColor(theme.Text2).MaxLines(3).Ellipsis("…")
 				}
 			})
-			if thumb {
-				a.thumbView(c, art.ID, 0, near).Size(120, 80).Margin(0, 0, 0, 4)
-			}
 		})
-		// Resting on a row reads its article and lays it out, unseen (warm.go):
+		// Resting on an entry reads its article and lays it out, unseen (warm.go):
 		// only an article already in the library, so the pointer alone never
 		// fetches a page: nothing is read before the click.
-		if row.Hovered() && !a.kbd && live {
+		hover := row.Hovered()
+		if hover && !a.kbd && live {
 			if a.hover != art.ID {
 				a.hover, a.hoverAt = art.ID, c.Now()
 				if art.BodyStatus != "not_extracted" {
@@ -440,23 +440,214 @@ func (a *App) articleRow(c *ui.Context, l *listState, p page, art *library.Artic
 		} else if a.hover == art.ID && !a.pinned {
 			a.hover = ""
 		}
-		// The favourite action, shown on hover and on the keyboard's cursor.
-		show := row.Hovered() || focus
-		right := float32(8)
-		if thumb {
-			right = 148
+		// The favourite, beside the date, shown on hover and on the keyboard's cursor, once the library has the article.
+		if a.libArticle(art.ID) == nil {
+			return
 		}
-		fav := a.favButton(c, art, 28, 14).Absolute().Right(right).Bottom(12).TabStop(false)
-		fav.Opacity(fav.AnimateTo("show", map[bool]float32{true: 1, false: 0}[show || fav.Hovered()], a.ease(motion.Reveal)))
+		fav := a.favButton(c, art, 28, 14).Absolute().Right(10).Top(24).TabStop(false)
+		fav.Opacity(fav.AnimateTo("show", map[bool]float32{true: 1, false: 0}[hover || focus || fav.Hovered()], a.ease(motion.Reveal)))
+	})
+}
+
+// entryTitle is an entry's title: 20, two lines at most.
+func entryTitle(c *ui.Context, s string) ui.Element {
+	return ui.Text(c, s).Font(reader.TitleFont(s)).FontSize(theme.Subtitle).LineHeight(1.4).FontWeight(600).TextColor(theme.Text).Balance().MaxLines(2).Ellipsis("…")
+}
+
+// entryPicture is an entry's picture across the column, 5:2, held a little
+// above its middle; breathing on its way, fading in once there. It is as
+// bright as the picture is (toneOf): a white one rests dimmer and comes up
+// while the pointer is on its entry.
+func (a *App) entryPicture(c *ui.Context, pic *favPic, lit bool) {
+	box := ui.Box(c.Key("picture")).FillWidth().AspectRatio(2.5).Margin(16, 0, 0, 0).Radius(10).ClipX().ClipY().Background(theme.Surface).AccessHidden(true)
+	if pic != nil && !pic.done {
+		box.Opacity(1 - 0.45*breathe(box.Loop("breathe", 2*motion.Breathe, ui.Linear)))
+	}
+	box.Children(func() {
+		if pic != nil && pic.bmp != nil {
+			fade := a.picFade(c, pic)
+			picImage(c, pic.bmp, false, fade)
+			bright := pic.rest
+			if lit {
+				bright = pic.lit
+			}
+			if a.kbd {
+				bright = box.Jump("bright", bright)
+			} else {
+				bright = box.AnimateTo("bright", bright, a.ease(motion.Lean))
+			}
+			if v := (1 - bright) * fade; v > 0.001 {
+				ui.Box(c).Absolute().Fill().Background(theme.Darken).Opacity(v)
+			}
+		}
+		ui.Box(c).Absolute().Fill().Radius(10).InsetShadow(0, 0, 0, 1, theme.LineSoft)
+	})
+}
+
+// Where the rail sits: from under the head to above the window's foot, its
+// ticks at its right edge; groups of ticks a little apart.
+const (
+	railTop, railBottom = 104, 48
+	railWide, railGap   = 160, 14
+	railRight           = 20
+)
+
+// rail is the page's scrollbar, down from its place by down while the head
+// is in view: one tick an article, newest at the top, in
+// groups of a month (of a year, when they span more than a year and a half)
+// whose first tick is longer and named; the article in view an amber pill
+// with its date, gliding as the page scrolls. The pointer lights the tick
+// under it, the title beside it; a press goes there, a drag scrubs.
+func (a *App) rail(c *ui.Context, l *listState, items []*library.Article, view ui.Rect, down float32) {
+	n := len(items)
+	if n < 2 || view.H <= 0 {
+		return
+	}
+	days := make([]time.Time, n)
+	dated := make([]bool, n)
+	var newest, oldest time.Time
+	for i, art := range items {
+		if ms, ok := articleTime(art); ok {
+			days[i], dated[i] = local(ms), true
+			if newest.IsZero() || days[i].After(newest) {
+				newest = days[i]
+			}
+			if oldest.IsZero() || days[i].Before(oldest) {
+				oldest = days[i]
+			}
+		}
+	}
+	byYear := newest.Sub(oldest) > 548*24*time.Hour
+	group := func(i int) int {
+		if !dated[i] {
+			return -1
+		}
+		if byYear {
+			return days[i].Year()
+		}
+		return days[i].Year()*100 + int(days[i].Month())
+	}
+	groups := 1
+	for i := 1; i < n; i++ {
+		if group(i) != group(i-1) {
+			groups++
+		}
+	}
+	// ponytail: ticks never come closer than 3; an author of a few hundred articles runs past the foot.
+	step := max(3, min(10, (view.H-railTop-railBottom-float32(groups-1)*railGap)/float32(n-1)))
+	ys := make([]float32, n)
+	starts := make([]bool, n)
+	y := railTop + down
+	for i := range items {
+		if i > 0 && group(i) != group(i-1) {
+			y += railGap
+		}
+		starts[i] = i == 0 || group(i) != group(i-1)
+		ys[i], y = y, y+step
+	}
+	// The article in view: the last whose entry has come up to a third of the
+	// view; at the foot of the page, the last one shown whole.
+	cur := 0
+	for i, art := range items {
+		if r := l.rows[art.ID]; r.H > 0 && r.Y <= view.Y+view.H/3 {
+			cur = i
+		}
+	}
+	if s := &l.scroll; s.MaxY > 0 && s.Y >= s.MaxY-1 {
+		for i, art := range items {
+			if r := l.rows[art.ID]; r.H > 0 && r.Y+r.H <= view.Y+view.H {
+				cur = i
+			}
+		}
+	}
+	strip := ui.Box(c.Key("rail")).Absolute().Top(0).Right(railRight).Width(railWide).Height(view.H).ZIndex(5).AccessHidden(true)
+	px, py, over := strip.PointerPosition()
+	hov := -1
+	if over && px > railWide-48 && py > ys[0]-12 && py < ys[n-1]+12 {
+		for i := range ys {
+			if hov < 0 || math.Abs(float64(ys[i]-py)) < math.Abs(float64(ys[hov]-py)) {
+				hov = i
+			}
+		}
+	}
+	// A press goes to the tick under it, gliding; held, it scrubs.
+	goTo := func(i int, glide bool) {
+		r, s := l.rows[items[i].ID], &l.scroll
+		to := max(0, min(s.MaxY, r.Y-view.Y+s.Y-24))
+		if glide && !a.still(c) {
+			s.ScrollTo(0, to, ui.Smooth)
+		} else {
+			s.Y = to
+		}
+	}
+	switch {
+	case strip.Pressed() && hov >= 0:
+		goTo(hov, !l.held)
+		l.held = true
+	case !strip.Pressed():
+		l.held = false
+	}
+	pill := ys[cur]
+	if a.kbd || a.still(c) || l.held {
+		pill = strip.Jump("pill", pill)
+	} else {
+		pill = strip.AnimateTo("pill", pill, motion.Follow)
+	}
+	strip.Children(func() {
+		ui.Box(c.Key("ticks")).Absolute().Fill().Draw(func(pt *ui.Painter, box ui.Rect) {
+			hair := 1 / pt.Scale()
+			snap := func(v float32) float32 { return float32(math.Round(float64(v*pt.Scale()))) / pt.Scale() }
+			right := box.X + box.W
+			for i, y := range ys {
+				w, ink := float32(6), float32(0.3)
+				if starts[i] {
+					w, ink = 10, 0.45
+				}
+				if i == hov {
+					w, ink = w+4, 0.9
+				}
+				pt.Fill(ui.Rect{X: right - w, Y: box.Y + snap(y), W: w, H: hair}, theme.RulerInk.Alpha(ink), 0)
+			}
+		})
+		// Each group is named at its first tick, unless the pill or the name above is there.
+		last := float32(-100)
+		for i := range ys {
+			if !starts[i] || !dated[i] || ys[i]-last < 18 || math.Abs(float64(ys[i]-pill)) < 16 {
+				continue
+			}
+			last = ys[i]
+			ui.Text(c.Key("g"+strconv.Itoa(i)), groupName(days[i], byYear)).Absolute().Right(18).Top(ys[i] - 8).FontSize(theme.Label).LineHeight(16.0 / 12).
+				TextColor(theme.Muted).FontFeatures(theme.Numbers).NoWrap()
+		}
+		if day := articleDate(items[cur], false); day != "" {
+			ui.Row(c.Key("pill")).Absolute().Right(0).Top(pill-10).Height(20).Padding(0, 8).Radius(10).Background(theme.Accent).AlignItems(ui.Center).
+				Children(func() {
+					ui.Text(c, day).FontSize(theme.Label).LineHeight(16.0 / 12).FontWeight(600).TextColor(theme.OnAccent).FontFeatures(theme.Numbers).NoWrap()
+				})
+		}
+		if hov >= 0 && !l.held {
+			// Up to 300 wide, past the rail's own width (a frame as wide, the tag in it hugging its words); over the
+			// names, short of the ticks.
+			ui.Row(c.Key("peek")).Absolute().Right(18).Top(ys[hov] - 14).Width(300).Height(28).Justify(ui.End).IgnoreInput(true).Children(func() {
+				ui.Row(c).Height(28).Padding(0, 10).Gap(8).Radius(6).AlignItems(ui.Center).Shrink(1).MinWidth(0).
+					Background(theme.Elevated).Border(1, theme.Line).Shadow(0, 0, 0, 1, theme.ShadowEdge).Shadow(0, 12, 32, 0, theme.ShadowFloat).
+					Children(func() {
+						if d := articleDate(items[hov], false); d != "" {
+							ui.Text(c, d).FontSize(theme.Label).TextColor(theme.Muted).FontFeatures(theme.Numbers).NoWrap()
+						}
+						ui.Text(c, titleOf(items[hov].Title)).FontSize(theme.Body).TextColor(theme.Text).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
+					})
+			})
+		}
 	})
 }
 
 // favButton keeps or lets go of an article (RowActions, the reader's fav):
 // the orbit closes and lights amber.
 func (a *App) favButton(c *ui.Context, art *library.Article, size, orbit float32) ui.Element {
-	label := "收藏"
+	label := locales.CommonFavorite()
 	if art.Favorite {
-		label = "取消收藏"
+		label = locales.CommonRemoveFavorite()
 	}
 	b := ui.ButtonBase(c.Key("fav")).Label(label).Checked(art.Favorite).Role(ui.RoleToggleButton).KeyShortcuts(0, ui.KeyS).
 		Size(size, size).Radius(6).Center().FocusRing(false)

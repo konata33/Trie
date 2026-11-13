@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
@@ -19,7 +20,9 @@ import (
 	"trie/internal/explore"
 	"trie/internal/fetch"
 	"trie/internal/library"
+	"trie/internal/locales"
 	"trie/internal/subscription"
+	"trie/internal/web"
 )
 
 // pngData is a w×h picture of one colour as a data URL.
@@ -100,6 +103,24 @@ func newHomeApp(t testing.TB, prefs ui.Preferences) (*App, *ui.Tester, *library.
 	return a, tt, store, func(e *explore.Entry) { target = e }
 }
 
+// unread puts the test library's half-read articles back at their start, for a page without 接着读.
+func unread(t *testing.T, a *App, tt *ui.Tester) {
+	t.Helper()
+	for _, art := range a.lib.Articles {
+		if p := art.ReadingPosition; p != nil {
+			if err := a.opt.Store.SaveReadingPosition(library.ReadingPositionInput{ArticleID: art.ID, ContentVersion: p.ContentVersion}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	lib, err := a.opt.Store.Library()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.accept(lib)
+	settle(tt)
+}
+
 // entryOf is the catalog's entry id.
 func entryOf(a *App, id string) *explore.Entry {
 	for i := range a.ex.entries {
@@ -110,22 +131,21 @@ func entryOf(a *App, id string) *explore.Entry {
 	return nil
 }
 
-// passingBy are the writers on the line, as the page draws them.
-func passingBy(a *App, now time.Time) []homeItem {
-	return strangersOf(passersOf(a.ex.entries, now), func(e *explore.Entry) bool { return a.followed(nil, e, false) })
-}
-
 // The page: today's design example, then the ranking, then the people
-// followed, then the writers passing by; each drawn from the catalog.
+// followed; nothing passes by.
 func TestHomePage(t *testing.T) {
 	a, tt, _, _ := newHomeApp(t, ui.Preferences{})
+	unread(t, a, tt)
 	if a.page.kind != "home" {
 		t.Fatalf("starts on 首页: %v", a.page)
 	}
-	for _, name := range []string{"今天的设计例子", "流行", "关注的人", "还没关注的博主"} {
+	for _, name := range []string{"今天的设计例子", "流行", "订阅的作者"} {
 		if _, ok := tt.AccessByRole(ui.RoleRegion, name); !ok {
 			t.Errorf("no %s", name)
 		}
+	}
+	if _, ok := tt.AccessByRole(ui.RoleRegion, "还没订阅的作者"); ok {
+		t.Error("no one passes by")
 	}
 	entries := a.ex.entries
 	if ex := exampleOf(entries); ex == nil || ex.post.Title != "今天的作品：Field Notes" || ex.index != 1 {
@@ -143,20 +163,6 @@ func TestHomePage(t *testing.T) {
 			t.Errorf("rank %s hangs in the margin", n)
 		}
 	}
-	strangers := strangersOf(passersOf(entries, tt.Now()), func(*explore.Entry) bool { return false })
-	people := map[string]bool{}
-	for _, it := range strangers {
-		if people[personOfHost(it.entry.Host)] || it.entry.ID == "w10" || it.entry.ID == "w11" {
-			t.Errorf("passing by: %s (one per person, wrote lately, a whole sentence)", it.entry.ID)
-		}
-		people[personOfHost(it.entry.Host)] = true
-		if !strings.HasSuffix(it.said, "。") || strings.HasPrefix(it.said, "我是写作者") {
-			t.Errorf("%s says %q: a whole sentence, not the line atop every post", it.entry.ID, it.said)
-		}
-	}
-	if len(strangers) != 10 {
-		t.Errorf("ten writers pass by, got %d", len(strangers))
-	}
 	// The people followed are not on the first screen.
 	follows := followsOf(a.homeItems(""))
 	if len(follows) == 0 {
@@ -164,28 +170,6 @@ func TestHomePage(t *testing.T) {
 	}
 	if r, ok := tt.Find(titleOf(follows[0].Title)); !ok || r.Y < 850 {
 		t.Errorf("the people followed start below the first screen: %v %v", ok, r)
-	}
-	// The passing line walks right to left at a copy's width per 160 s, only on screen and not held.
-	hs := a.homeSt()
-	tt.Move(140, 400) // the sidebar
-	tt.Advance(time.Second)
-	if hs.street != 0 {
-		t.Errorf("off screen the line stands: %v", hs.street)
-	}
-	hs.scroll.Y = 1e5
-	tt.Frame()
-	from := hs.street
-	tt.Advance(time.Second)
-	if d := hs.street - from; d < 22 || d > 28 {
-		t.Errorf("about 25 a second: %v", d)
-	}
-	street, _ := tt.AccessByRole(ui.RoleRegion, "还没关注的博主")
-	tt.Move(street.Bounds.X+street.Bounds.W/2, street.Bounds.Y+street.Bounds.H/2)
-	tt.Frame()
-	from = hs.street
-	tt.Advance(time.Second)
-	if hs.street != from {
-		t.Errorf("the pointer stops it: %v → %v", from, hs.street)
 	}
 }
 
@@ -195,12 +179,13 @@ func TestHomePage(t *testing.T) {
 // the focus comes back to what opened it.
 func TestHomeOpenAndBack(t *testing.T) {
 	a, tt, _, _ := newHomeApp(t, ui.Preferences{})
+	unread(t, a, tt)
 	hs := a.homeSt()
 	hs.scroll.Y = 300
 	tt.Frame()
 	must(t, tt.Click("Lobsters 第 1"))
 	tt.Frame()
-	if !isTrial(a.page.id) || a.lay == nil || len(a.flights) == 0 {
+	if a.trials[a.page.id] == nil || a.lay == nil || len(a.flights) == 0 {
 		t.Fatalf("opening a post: page %v, ground %v, %d flights", a.page, a.lay != nil, len(a.flights))
 	}
 	settle(tt)
@@ -244,11 +229,11 @@ func TestHomeOpenAndBack(t *testing.T) {
 	settle(tt)
 	// From the keys: Enter on a rank opens it at once; Esc comes back to it.
 	hs.scroll.Y = 300
-	hs.focus = trialID("https://lobsters.example/1/post")
+	hs.focus = a.postID("https://lobsters.example/1/post")
 	tt.Frame()
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
-	if !isTrial(a.page.id) || len(a.flights) != 0 {
+	if a.trials[a.page.id] == nil || len(a.flights) != 0 {
 		t.Fatalf("from the keys it is simply there: %v, %d flights", a.page, len(a.flights))
 	}
 	settle(tt)
@@ -257,102 +242,6 @@ func TestHomeOpenAndBack(t *testing.T) {
 	if a.page.kind != "home" || !tt.Focused("Lobsters 第 1") {
 		t.Errorf("the focus comes back to the rank: %v", a.page)
 	}
-	// A writer passing by opens without a title to travel: the page just crosses.
-	hs.scroll.Y = 1e5
-	tt.Move(140, 400)
-	tt.Frame()
-	it := passingBy(a, tt.Now())[0]
-	hs.street = 0
-	tt.Frame()
-	must(t, tt.Click(it.entry.Name+"："+it.post.Title))
-	tt.Advance(50 * time.Millisecond)
-	if !isTrial(a.page.id) || a.lay != nil || len(a.flights) != 0 {
-		t.Errorf("a writer's post just crosses: %v, ground %v", a.page, a.lay != nil)
-	}
-}
-
-// Subscribing from the passing line: the face flies into the sidebar, the
-// card folds out of the line, the author joins the people followed, coming
-// into focus; the page grows above the line so the line stays where it was
-// on screen. From the keys they simply leave and the focus moves on.
-func TestHomeSubscribe(t *testing.T) {
-	a, tt, _, aim := newHomeApp(t, ui.Preferences{})
-	tt.SetSize(1280, 700)
-	hs := a.homeSt()
-	before := len(followsOf(a.homeItems("")))
-	hs.scroll.Y = 1e5
-	settle(tt)
-	street, _ := tt.AccessByRole(ui.RoleRegion, "还没关注的博主")
-	if people, _ := tt.AccessByRole(ui.RoleRegion, "关注的人"); people.Bounds.Y+people.Bounds.H > 350 {
-		t.Fatalf("the people end above the middle: %v", people.Bounds)
-	}
-	tt.Move(street.Bounds.X+200, street.Bounds.Y+100) // held still under the pointer
-	tt.Frame()
-	e := entryOf(a, hs.passing[0])
-	aim(e)
-	must(t, tt.Click("订阅 "+e.Name))
-	tt.Frame()
-	src := a.subscribedSource(e)
-	if src == "" {
-		t.Fatal("subscribed")
-	}
-	if len(a.flights2) != 1 || a.flights2[0].to != "chip:"+src {
-		t.Fatalf("the face flies to the sidebar: %+v", a.flights2)
-	}
-	if _, ok := hs.leaving[e.ID]; !ok {
-		t.Fatal("the card folds out")
-	}
-	for i := range 40 { // the line holds still on screen, frame by frame
-		tt.Advance(16 * time.Millisecond)
-		if r, _ := tt.AccessByRole(ui.RoleRegion, "还没关注的博主"); r.Bounds.Y < street.Bounds.Y-1 || r.Bounds.Y > street.Bounds.Y+1 {
-			t.Fatalf("the line moved on screen: %v → %v", street.Bounds.Y, r.Bounds.Y)
-		}
-		if w := a.strangerWidth(tt.Now(), e.ID); i == 12 && (w <= 0 || w >= 400) {
-			t.Errorf("half-way folded: %v", w)
-		}
-	}
-	settle(tt)
-	if slices.Contains(hs.passing, e.ID) || len(followsOf(a.homeItems(""))) != before+1 {
-		t.Fatalf("gone from the line, among the people followed: %v, %d", hs.passing, len(followsOf(a.homeItems(""))))
-	}
-	after, _ := tt.AccessByRole(ui.RoleRegion, "还没关注的博主")
-	if d := after.Bounds.Y - street.Bounds.Y; d < -1 || d > 1 {
-		t.Errorf("the line stays put on screen: %v → %v", street.Bounds.Y, after.Bounds.Y)
-	}
-	if !hs.seen[src] {
-		t.Error("the newcomer came into focus")
-	}
-	// From the keys: gone at once, the focus on the next writer.
-	e = entryOf(a, hs.passing[0])
-	aim(e)
-	hs.focus = "stranger:" + e.ID
-	tt.Frame()
-	tt.Key(0, ui.KeyTab)
-	tt.Frame()
-	if !tt.Focused("订阅 " + e.Name) {
-		t.Fatal("Tab reaches the pill")
-	}
-	tt.Key(0, ui.KeySpace)
-	tt.Frame()
-	tt.Frame()
-	if slices.Contains(hs.passing, e.ID) || len(hs.leaving) != 0 || len(a.flights2) != 0 {
-		t.Fatalf("from the keys: gone at once, nothing flies: %v %v", hs.passing, a.flights2)
-	}
-	n := passingBy(a, tt.Now())[0]
-	if !tt.Focused(n.entry.Name + "：" + n.post.Title) {
-		t.Error("the focus moved on to the next writer")
-	}
-	// A subscription that does not go through says why.
-	a.opt.Subscriptions = subscription.New(a.opt.Store, offline, nil, nil)
-	hs.focus = "stranger:" + n.entry.ID
-	tt.Frame()
-	tt.Key(0, ui.KeyTab)
-	tt.Key(0, ui.KeySpace)
-	tt.Frame()
-	tt.Frame()
-	if a.errText == "" || !slices.Contains(hs.passing, n.entry.ID) {
-		t.Errorf("a notice says why, the writer stays: %q", a.errText)
-	}
 }
 
 // The keys: J and K walk the people followed, Enter opens, S keeps; ⌘F
@@ -360,6 +249,7 @@ func TestHomeSubscribe(t *testing.T) {
 // clears it.
 func TestHomeKeysAndSearch(t *testing.T) {
 	a, tt, store, _ := newHomeApp(t, ui.Preferences{})
+	unread(t, a, tt)
 	hs := a.homeSt()
 	follows := followsOf(a.homeItems(""))
 	if len(follows) < 2 {
@@ -436,39 +326,63 @@ func TestHomeKeysAndSearch(t *testing.T) {
 	}
 }
 
-// Under less motion the line stands still, holds each writer once, and
-// scrolls sideways by hand; a writer subscribed from it simply leaves.
-func TestHomeReducedMotion(t *testing.T) {
-	a, tt, _, aim := newHomeApp(t, ui.Preferences{ReduceMotion: true})
-	hs := a.homeSt()
-	hs.scroll.Y = 1e5
-	tt.Move(140, 400)
-	tt.Frame()
-	tt.Advance(time.Second)
-	if hs.street != 0 {
-		t.Errorf("the line stands: %v", hs.street)
+// 接着读: the articles left half-read lately, the last left first, three at
+// most, each with its moon and the words it was left at after an ellipsis;
+// none, and the page goes from the first screen to the ranking. Opened,
+// it is the article, its title travelling from the column.
+func TestHomeResume(t *testing.T) {
+	a, tt, _, _ := newHomeApp(t, ui.Preferences{})
+	unread(t, a, tt)
+	if _, ok := tt.AccessByRole(ui.RoleRegion, "接着读"); ok {
+		t.Fatal("nothing half-read, no 接着读")
 	}
-	e := passingBy(a, tt.Now())[0]
-	if n := countOf(tt.Texts(), e.said); n != 1 {
-		t.Errorf("each writer once: %d", n)
+	now := tt.Now()
+	arts := a.homeItems("")
+	if len(arts) < 5 {
+		t.Fatalf("five articles at least: %d", len(arts))
 	}
-	aim(e.entry)
-	must(t, tt.Click("订阅 "+e.entry.Name))
+	left := func(art *library.Article, progress float64, ago time.Duration) {
+		unit := "u-" + art.ID
+		art.ReadingPosition = &library.ReadingPosition{ReadingPositionInput: library.ReadingPositionInput{ArticleID: art.ID, UnitID: &unit, Progress: progress},
+			UpdatedAt: web.ISOTime(now.Add(-ago).UnixMilli())}
+		a.homeSt().stopped[art.ID+"#"+unit] = "The words it was left at, " + art.ID
+	}
+	left(arts[0], 0.5, 3*time.Hour)
+	left(arts[1], 0.3, time.Hour)
+	left(arts[2], 0.6, 2*time.Hour)
+	left(arts[3], 0.4, 4*time.Hour)
+	left(arts[4], 0.97, 0) // read to its end
+	got := a.resumable(now)
+	if len(got) != 3 || got[0] != arts[1] || got[1] != arts[2] || got[2] != arts[0] {
+		t.Fatalf("the last left first, three at most, nothing read to its end: %v", got)
+	}
+	left(arts[3], 0.4, 40*24*time.Hour)
+	if got := a.resumable(now); len(got) != 3 || slices.Contains(got, arts[3]) {
+		t.Fatal("a month and more ago is not 接着读")
+	}
+	settle(tt)
+	if _, ok := tt.AccessByRole(ui.RoleRegion, "接着读"); !ok {
+		t.Fatal("no 接着读")
+	}
+	if !tt.HasText("…The words it was left at, " + arts[1].ID) {
+		t.Error("it opens with the words it was left at")
+	}
+	must(t, tt.Click(locales.HomeResume(titleOf(arts[1].Title), percentOf(arts[1]))))
 	tt.Frame()
-	tt.Frame()
-	if slices.Contains(hs.passing, e.entry.ID) || len(hs.leaving) != 0 {
-		t.Errorf("subscribed, they simply leave: %v", hs.passing)
+	if a.page != (page{"reader", arts[1].ID}) || a.lay == nil {
+		t.Fatalf("opened, it is the article: %v", a.page)
 	}
 }
 
-func countOf(list []string, s string) int {
-	n := 0
-	for _, x := range list {
-		if x == s {
-			n++
+// The words an article was left at: its unit's, or the first after it with words.
+func TestStoppedAt(t *testing.T) {
+	doc := json.RawMessage(`{"units":[{"id":"a","kind":"paragraph","text":"First."},{"id":"b","kind":"image","text":""},` +
+		`{"id":"c","kind":"caption","text":"Source: x"},{"id":"d","kind":"paragraph","text":"  After   the picture. "}]}`)
+	for unit, want := range map[string]string{"a": "First.", "b": "After the picture.", "c": "After the picture.", "z": ""} {
+		if got := stoppedAt(doc, unit); got != want {
+			t.Errorf("%s: %q, want %q", unit, got, want)
 		}
 	}
-	return n
 }
 
 // homeAt scrolls 首页 so that region starts 120 below the window's top, as
@@ -508,7 +422,6 @@ func TestHomeLook(t *testing.T) {
 	shot := func(name string) {
 		tt.Move(1270, 840)
 		tt.Advance(2 * time.Second)
-		hs.street = 0 // the passing line at its start, as the recorded capture holds it
 		tt.Frame()
 		savePNG(t, filepath.Join(dir, name+"-mygo.png"), tt.Image())
 	}
@@ -517,12 +430,11 @@ func TestHomeLook(t *testing.T) {
 	shot("home-1-first")
 	homeAt(t, a, tt, "流行")
 	shot("home-2-trending")
-	homeAt(t, a, tt, "关注的人")
+	homeAt(t, a, tt, "订阅的作者")
 	shot("home-3-follows")
 	hs.scroll.Y = 1e6
 	tt.Frame()
-	shot("home-4-street")
-	t.Log(hs.passing)
+	shot("home-4-end")
 	hs.scroll.Y = 0
 	tt.Frame()
 	tt.Key(ui.Cmd, ui.KeyF)
@@ -534,9 +446,8 @@ func TestHomeLook(t *testing.T) {
 }
 
 // TestHomeFrames writes the motions of 首页 as frames and GIFs: opening a
-// post and back, opening a followed author's piece and back, subscribing
-// from the passing line, and the line passing: HOMEFRAMES=dir HOMEDATA=folder
-// go test -run HomeFrames.
+// post and back, and opening a followed author's piece and back:
+// HOMEFRAMES=dir HOMEDATA=folder go test -run HomeFrames.
 func TestHomeFrames(t *testing.T) {
 	dir, data := os.Getenv("HOMEFRAMES"), os.Getenv("HOMEDATA")
 	if dir == "" || data == "" {
@@ -560,28 +471,9 @@ func TestHomeFrames(t *testing.T) {
 		{"home-open-post-back", func(a *App, tt *ui.Tester) { homeAt(t, a, tt, "流行") }, []phase{
 			{clickTitle("流行", func(a *App) string { return trendingOf(a.ex.entries)[1].post.Title }), 900 * time.Millisecond},
 			{back, 800 * time.Millisecond}}},
-		{"home-open-follow-back", func(a *App, tt *ui.Tester) { homeAt(t, a, tt, "关注的人") }, []phase{
-			{clickTitle("关注的人", func(a *App) string { return titleOf(followsOf(a.homeItems(""))[0].Title) }), 900 * time.Millisecond},
+		{"home-open-follow-back", func(a *App, tt *ui.Tester) { homeAt(t, a, tt, "订阅的作者") }, []phase{
+			{clickTitle("订阅的作者", func(a *App) string { return titleOf(followsOf(a.homeItems(""))[0].Title) }), 900 * time.Millisecond},
 			{back, 900 * time.Millisecond}}},
-		{"home-subscribe", func(a *App, tt *ui.Tester) {
-			a.homeSt().scroll.Y = 1e6
-			tt.Frame()
-		}, []phase{{func(a *App, tt *ui.Tester) {
-			hs := a.homeSt()
-			e := entryOf(a, hs.passing[slices.IndexFunc(hs.passing, func(id string) bool {
-				p, ok := tt.AccessByRole(ui.RoleToggleButton, "订阅 "+entryOf(a, id).Name)
-				return ok && p.Bounds.X > 300 && p.Bounds.X < 1100
-			})])
-			a.opt.Subscriptions = subscription.New(a.opt.Store, func() fetch.Fetch { return feedFor(e.Name, e.HomeURL) }, nil, nil)
-			p, _ := tt.AccessByRole(ui.RoleToggleButton, "订阅 "+e.Name)
-			tt.Move(p.Bounds.X+p.Bounds.W/2, p.Bounds.Y+p.Bounds.H/2) // the line stops under the pointer
-			tt.Advance(300 * time.Millisecond)
-			must(t, tt.Click("订阅 "+e.Name))
-		}, 1600 * time.Millisecond}}},
-		{"home-street", func(a *App, tt *ui.Tester) {
-			a.homeSt().scroll.Y = 1e6
-			tt.Frame()
-		}, []phase{{func(a *App, tt *ui.Tester) {}, 3 * time.Second}}},
 	}
 	for _, s := range scenarios {
 		if only := os.Getenv("ONLY"); only != "" && !strings.Contains(s.name, only) {

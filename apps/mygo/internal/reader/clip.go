@@ -112,12 +112,15 @@ func (r *Reader) join(sel []ui.SelectedText) (string, []clipPart) {
 				sb.WriteString(prev.sep)
 			}
 		}
-		sb.WriteString(string(runes[from:to]))
+		sb.WriteString(unmarked.Replace(string(runes[from:to])))
 		parts = append(parts, clipPart{p.b, from, to})
 		prev = p
 	}
 	return sb.String(), parts
 }
+
+// unmarked takes out a site's mark and the word joiner keeping it with its link (glyph.go): they are not words.
+var unmarked = strings.NewReplacer("\uFFFC", "", "\u2060", "")
 
 func (r *Reader) copyData(sel []ui.SelectedText) transfer.Data {
 	text, _ := r.join(sel)
@@ -265,7 +268,7 @@ func (r *Reader) SetMarks(marks []Mark) {
 			i := 0
 			for _, rn := range b.runs {
 				for _, ch := range rn.text {
-					if !unicode.IsSpace(ch) {
+					if !unicode.IsSpace(ch) && ch != '\uFFFC' && ch != '\u2060' {
 						flat = append(flat, ch)
 						from = append(from, at{b, i})
 					}

@@ -7,6 +7,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"trie/internal/library"
+	"trie/internal/locales"
 	"trie/internal/motion"
 	"trie/internal/theme"
 )
@@ -18,30 +19,7 @@ var magColors = [5]ui.Color{theme.Text2, theme.Mag1, theme.Mag2, theme.Mag3, the
 
 func (a *App) sidebar(c *ui.Context) {
 	side := ui.Column(c.Key("side")).Width(232).Shrink(0).FillHeight().Background(theme.Sidebar).BorderWidth(0, 1, 0, 0).
-		BorderColor(theme.LineSoft).Padding(46, 12, 12, 12).ClipX().Role(ui.RoleNavigation).Label("侧栏")
-	// 专注阅读: the sidebar slides out to the left as the content area
-	// widens, in one motion.
-	shut := float32(0)
-	if a.focused && a.page.kind == "reader" {
-		shut = 1
-	}
-	var k float32
-	if a.kbd {
-		k = side.Jump("shut", shut)
-	} else {
-		k = side.AnimateTo("shut", shut, ui.Animation{Duration: motion.Focus, Ease: motion.Ease})
-	}
-	if k > 0 {
-		side.Width(232 * (1 - k)).MinWidth(0)
-		side.Children(func() {
-			ui.Column(c).Width(232).FillHeight().Translate(-232*k*map[bool]float32{true: 0, false: 1}[a.still(c)], 0).
-				Opacity(side.AnimateTo("fade", 1-shut, a.ease(map[bool]time.Duration{true: motion.FocusOut, false: motion.FocusIn}[shut == 1]))).Children(func() { a.sideParts(c) })
-		})
-		if k >= 0.999 {
-			side.Invisible()
-		}
-		return
-	}
+		BorderColor(theme.LineSoft).Padding(46, 12, 12, 12).ClipX().Role(ui.RoleNavigation).Label(locales.SidebarRegion())
 	side.Children(func() { a.sideParts(c) })
 }
 
@@ -57,11 +35,11 @@ func (a *App) sideParts(c *ui.Context) {
 	} else {
 		a.unslide(sideMatch{"tabs"})
 	}
-	bar := ui.Row(c.Key("tabs")).Gap(4).Role(ui.RoleNavigation).Label("主导航")
+	bar := ui.Row(c.Key("tabs")).Gap(4).Role(ui.RoleNavigation).Label(locales.SidebarTabs())
 	bar.Children(func() {
 		var at ui.Rect
 		for _, t := range tabs {
-			if r := a.tabButton(c, t.kind, t.label, t.icon, tab == t.kind); tab == t.kind {
+			if r := a.tabButton(c, t.kind, t.label(), t.icon, tab == t.kind); tab == t.kind {
 				at = r
 			}
 		}
@@ -85,22 +63,15 @@ func (a *App) sideParts(c *ui.Context) {
 		})
 	})
 	ui.Row(c.Key("foot")).AlignItems(ui.Center).Gap(4).Padding(12, 4, 0, 10).Children(func() {
-		keys := ui.ButtonBase(c.Key("keys")).Label("快捷键 ?").KeyShortcuts(0, ui.KeySlash).FocusRing(false)
-		if keys.Clicked() {
-			a.toggleSheet(keys.Bounds())
+		// Settings: the interface's language (the sheet), lit while open.
+		open := a.layers.sheet
+		set := a.iconBtn(c, "settings", iconOpt{icon: "settings", label: locales.Settings(), tip: locales.Settings(), small: true, beside: true, active: open, lit: open}).
+			KeyShortcuts(ui.Cmd, ui.KeyComma)
+		if set.Clicked() {
+			a.toggleSheet(set.Bounds())
 		}
-		color := theme.Muted
-		if keys.Hovered() {
-			color = theme.Text2
-		}
-		if keys.FocusVisible() {
-			keys.FocusRing(true)
-		}
-		keys.Children(func() {
-			ui.Text(c, "快捷键 ?").FontSize(theme.Label).LineHeight(18.0 / 12).TextColor(keys.AnimateColor("fg", color, a.ease(motion.Hover)))
-		})
 		ui.Box(c).Grow(1)
-		add := a.iconBtn(c, "add-subscription", iconOpt{icon: "add", label: "添加订阅", tip: "添加订阅", small: true, beside: true})
+		add := a.iconBtn(c, "add-subscription", iconOpt{icon: "add", label: locales.SidebarFollowBlog(), tip: locales.SidebarFollowBlog(), small: true, beside: true})
 		if add.Clicked() {
 			a.openSubscribe(add.Bounds())
 		}
@@ -219,8 +190,11 @@ func (a *App) exploreRuns(on bool) int {
 }
 
 // textWidth is how wide s is in the system face at size.
-func textWidth(s string, size float32) float32 {
-	g := ui.Shape(s, ui.Font{Family: theme.Sans, Size: size})
+func textWidth(s string, size float32) float32 { return textWidthIn(s, theme.Sans, size) }
+
+// textWidthIn is how wide s is in family at size.
+func textWidthIn(s, family string, size float32) float32 {
+	g := ui.Shape(s, ui.Font{Family: family, Size: size})
 	if len(g) == 0 {
 		return 0
 	}
@@ -256,7 +230,7 @@ func (a *App) authorRow(c *ui.Context, au *author, on, parting bool) ui.Rect {
 		b := ui.ButtonBase(c.Key("open")).Label(au.src.DisplayName).Grow(1).Shrink(1).MinWidth(0).MinHeight(30).Padding(5, 4, 5, 10).Gap(10).
 			AlignItems(ui.Start).FocusRing(false)
 		if au.latest != "" {
-			b.Description("最近一篇：" + au.latest)
+			b.Description(locales.SidebarLatest(au.latest))
 		}
 		if on {
 			b.Current(ui.CurrentPage)
@@ -306,14 +280,14 @@ func (a *App) authorRow(c *ui.Context, au *author, on, parting bool) ui.Rect {
 		})
 		// A failed feed: the dimmed row and the refresh mark, beside where ··· appears.
 		if failure != "" || pending && a.refresh.asked[id] {
-			tip := "刷新失败，点击重试"
+			tip := locales.SidebarRefreshFailedTip()
 			if pending {
 				tip = ""
 			}
-			retry := a.iconBtn(c, "retry", iconOpt{icon: "refresh", label: "重新刷新 " + au.src.DisplayName, tip: tip, small: true, beside: true,
+			retry := a.iconBtn(c, "retry", iconOpt{icon: "refresh", label: locales.SidebarRefreshAgain(au.src.DisplayName), tip: tip, small: true, beside: true,
 				lit: pending, turn: a.refresh.angle(c, a.still(c))}).Margin(3, 28, 0, 0).Description(failure)
 			if pending {
-				retry.Label("正在刷新 " + au.src.DisplayName)
+				retry.Label(locales.SidebarRefreshingWriter(au.src.DisplayName))
 			}
 			if retry.Clicked() && !pending {
 				a.refresh.ask(id)
@@ -369,7 +343,7 @@ func (a *App) chip(c *ui.Context, au *author, lit bool) ui.Element {
 func (a *App) renameField(c *ui.Context, au *author) {
 	ui.Row(c).Grow(1).MinHeight(30).Padding(5, 4, 5, 10).Gap(10).AlignItems(ui.Start).Children(func() {
 		a.chip(c, au, true)
-		in := ui.TextInputBase(c.Key("rename"), &a.layers.name).Label("名称").MaxLength(40).Grow(1).Height(20).Margin(0, 0, 0, -4).Padding(0, 4).
+		in := ui.TextInputBase(c.Key("rename"), &a.layers.name).Label(locales.SidebarRenameField()).MaxLength(40).Grow(1).Height(20).Margin(0, 0, 0, -4).Padding(0, 4).
 			Radius(6).Background(theme.Field).LineHeight(20.0 / 13).AutoFocus().FocusRing(true).FocusRingOffset(0)
 		switch {
 		case in.Submitted():
@@ -394,11 +368,11 @@ func (a *App) rename(src *library.Source, name string) {
 // then slows evenly to rest there (900 ms a turn, 100° of braking). Under less motion it stays still, its accent lit.
 func (a *App) refreshButton(c *ui.Context) {
 	r := &a.refresh
-	label := "刷新"
+	label := locales.CommonRefresh()
 	if r.busy {
-		label = "正在刷新"
+		label = locales.CommonRefreshing()
 	}
-	b := a.iconBtn(c, "refresh", iconOpt{icon: "refresh", label: label, tip: "刷新", small: true, lit: r.busy, beside: true,
+	b := a.iconBtn(c, "refresh", iconOpt{icon: "refresh", label: label, tip: locales.CommonRefresh(), small: true, lit: r.busy, beside: true,
 		turn: r.angle(c, a.still(c)), disabled: len(a.authors) == 0})
 	b.Busy(r.busy)
 	if b.Clicked() && !r.busy && len(a.authors) > 0 {

@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 	"time"
 
@@ -111,6 +112,7 @@ func TestMeasure(t *testing.T) {
 	if os.Getenv("MEASURE") == "" {
 		t.Skip("MEASURE not set")
 	}
+	pinNow(t)
 	a, _ := newTestApp(t)
 	tt := ui.NewTester(a.View, 1280, 850)
 	settle(tt)
@@ -120,13 +122,83 @@ func TestMeasure(t *testing.T) {
 			t.Logf("%-40q %v x%.1f y%.1f w%.1f h%.1f", n, ok, r.X, r.Y, r.W, r.H)
 		}
 	}
-	show("首页", "收藏", "Fonts In Use", "快捷键 ?")
+	show("首页", "收藏", "Fonts In Use", "设置")
 	tt.Click("Innei")
 	settle(tt)
-	show("Innei", "2026", "12 篇", "Migrating from React Native to UIKit in 87 Hours: Hollow Out the Data Layer, Rebuild It in UIKit", "约 12 分钟", "8", "11月", "innei.in")
+	show("Innei", "Migrating from React Native to UIKit in 87 Hours: Hollow Out the Data Layer, Rebuild It in UIKit", "11月4日")
 	tt.Click("十个月，给 LobeHub 换掉 Ant Design：向 Base UI 与 StyleX 的渐进式迁移")
 	settle(tt)
 	show("十个月，给 LobeHub 换掉 Ant Design：向 Base UI 与 StyleX 的渐进式迁移", "11月4日", "约 17 分钟", "起点是一轮性能优化", "让新旧组件在同一个包里并存")
+}
+
+// TestAuthorPage: an author's page says nothing its entries do not show (no
+// counts, reading times or picture counts), dates its entries with month and
+// day, and its ··· opens its own menu, not the sidebar row's as well.
+func TestAuthorPage(t *testing.T) {
+	pinNow(t)
+	a, _ := newTestApp(t)
+	tt := ui.NewTester(a.View, 1280, 850)
+	settle(tt)
+	must(t, tt.Click("Innei"))
+	settle(tt)
+	noise := regexp.MustCompile(`^收录|\d+ 篇$|约 \d+ 分钟|\d+ 张图|\d+ 段代码|前更新$`)
+	for _, text := range tt.Texts() {
+		if noise.MatchString(text) {
+			t.Errorf("the page says %q", text)
+		}
+	}
+	if !tt.HasText("11月4日") {
+		t.Errorf("no entry dated 11月4日: %q", tt.Texts())
+	}
+	menus := func() (n int) {
+		for _, text := range tt.Texts() {
+			if text == "重命名" {
+				n++
+			}
+		}
+		return n
+	}
+	// One menu open, the sidebar row's, to count against.
+	side, ok := tt.AccessByRole(ui.RoleMenuButton, "Innei 的订阅操作")
+	if !ok {
+		t.Fatal("no ··· on the sidebar row")
+	}
+	tt.ClickAt(side.Bounds.X+side.Bounds.W/2, side.Bounds.Y+side.Bounds.H/2)
+	settle(tt)
+	one := menus()
+	if a.layers.menu != "innei" || one == 0 {
+		t.Fatalf("the sidebar's ··· opened %q", a.layers.menu)
+	}
+	tt.Key(0, ui.KeyEscape)
+	settle(tt)
+	name, ok := tt.AccessByRole(ui.RoleHeading, "Innei")
+	if !ok {
+		t.Fatal("no name at the head of the page")
+	}
+	// The head's ··· sits at the column's end, 24 across, level with the name's first line; the name starts 20
+	// right of the portrait, which starts at the column's left.
+	col := min(a.column(), a.area.W-80)
+	tt.ClickAt(name.Bounds.X-portrait-20+col-12, name.Bounds.Y+20)
+	settle(tt)
+	if a.layers.menu != headMenu+"innei" {
+		t.Fatalf("the head's ··· opened %q", a.layers.menu)
+	}
+	if n := menus(); n != one {
+		t.Errorf("the head's ··· showed %d 重命名, one menu shows %d", n, one)
+	}
+	tt.Key(0, ui.KeyEscape)
+	settle(tt)
+	// The rail: a press on a tick further down goes to its entry.
+	l := a.list("innei")
+	// It waits 8 under the head: the banner, half the window high, and the portrait's foot under it.
+	x, y := a.area.X+a.area.W-railRight-4, sceneHeight(sceneHead, 850)+profileFoot+8+24
+	tt.Press(x, y)
+	tt.Frame()
+	tt.Release(x, y)
+	settle(tt)
+	if l.scroll.Y <= 0 {
+		t.Errorf("a press on the rail did not go down the page: scrolled to %v", l.scroll.Y)
+	}
 }
 
 // TestPairs writes the reader at the scroll positions the previous

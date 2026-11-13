@@ -55,7 +55,7 @@ func TestFrames(t *testing.T) {
 		{"2-open-article", set(click("Innei")), click(lobeTitle), 960 * time.Millisecond},
 		{"3-back-article", set(click("Innei"), click(lobeTitle)), at(460, 30), 760 * time.Millisecond},
 		{"4-side-tab", set(click("Innei")), click("收藏"), 560 * time.Millisecond},
-		{"5-dialog-open", set(click("Innei")), click("添加订阅"), 480 * time.Millisecond},
+		{"5-dialog-open", set(click("Innei")), click("订阅博客…"), 480 * time.Millisecond},
 	}
 	var times strings.Builder
 	fmt.Fprintf(&times, "Frames made in memory by ui.Tester at 1280×850, scale 1 (CPU renderer: build, layout and paint; no GPU), one per 60 Hz refresh from the click.\n\n")

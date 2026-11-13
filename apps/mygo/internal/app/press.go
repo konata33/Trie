@@ -12,7 +12,7 @@ import (
 // Press asks the window to do what a named control does, as the pointer
 // would, in its next frame: "author:<source ID>", "open:<article ID>",
 // "back", "dialog", "close", "sheet", and on Explore "tab:explore", "door",
-// "card:<entry ID>", "esc", "scroll:<y>"; in 收藏 "shelf:<source ID>" (into
+// "card:<entry ID>", "scroll:<y>"; in 收藏 "shelf:<source ID>" (into
 // an author), "letgo:<source ID>" (their whole shelf), "undo"; in 摘录
 // "clip:<clip ID>" (its card), "cite" (the card's article); on 首页
 // "read:<article ID>" (a column of the people followed); on 收藏 (the
@@ -53,13 +53,9 @@ func (a *App) presses(c *ui.Context) {
 			if a.page.kind == "explore" {
 				a.enterRoom(c, 1-a.ex.room, false, 0)
 			}
-		case "card": // an Explore card opening its author's panel
+		case "card": // an Explore card opening its author's page
 			if e := a.ex.find(id); e != nil {
-				a.showSheet(c, e, "site", ui.Rect{})
-			}
-		case "esc":
-			if a.ex.open != nil {
-				a.closeSheet(c)
+				a.openFromExplore(c, e, "card:"+id)
 			}
 		case "scroll":
 			if y, err := strconv.ParseFloat(id, 32); err == nil {
@@ -103,6 +99,8 @@ func (a *App) presses(c *ui.Context) {
 					st = &a.favs().shelves
 				case a.page.kind == "home":
 					st = &a.homeSt().scroll
+				case a.page.kind == "author":
+					st = &a.list(a.page.id).scroll
 				}
 				st.ScrollTo(0, float32(y), ui.Smooth)
 			}

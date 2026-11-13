@@ -9,314 +9,15 @@ import (
 
 	"trie/internal/explore"
 	"trie/internal/library"
+	"trie/internal/locales"
 	"trie/internal/motion"
 	"trie/internal/theme"
 	"trie/internal/web"
 )
 
-// An author's panel over Explore (SourceSheet): who they are, then their
-// works or their latest posts; the subscribe pill (Follow), and the face
-// flying into the sidebar's new row.
-
-// showSheet opens an author's panel: from a card ("site"), whose surface
-// becomes the panel's thumbnail, or from a byline ("who"), which the panel
-// grows out of. From the keys it is simply there.
-func (a *App) showSheet(c *ui.Context, e *explore.Entry, from string, opener ui.Rect) {
-	ex := a.ex
-	ex.run++
-	ex.open = &exOpen{id: e.ID, from: from, opener: opener, kbd: a.kbd, run: ex.run, focus: true}
-	ex.sheet = ex.open
-	ex.closing = ""
-	c.Invalidate()
-}
-
-// closeSheet closes the panel: its picture flies back into its card, whose
-// words follow; the focus goes back to what opened it. From the keys it is
-// simply gone.
-func (a *App) closeSheet(c *ui.Context) {
-	ex := a.ex
-	o := ex.open
-	if o == nil {
-		return
-	}
-	ex.open = nil
-	o.kbd, o.closedAt = a.kbd, c.Now()
-	if o.from == "site" {
-		ex.closing = o.id
-		ex.landed[o.id] = c.Now()
-		ex.focus = "card:" + o.id
-	} else {
-		ex.focus = "who:" + o.id
-	}
-	if o.kbd {
-		ex.sheet, ex.closing = nil, ""
-	}
-	c.Invalidate()
-}
-
-// presence is how far a part of the panel is there: it comes over in, delay
-// after the panel opens, and goes over out as it closes, along ease; from
-// the keys it is simply there or gone. Only fades and blurs ride it, which
-// stay under less motion.
-func (a *App) presence(e ui.Element, o *exOpen, in, delay, out time.Duration, ease ui.Easing) float32 {
-	switch {
-	case o.kbd && o.closing():
-		return 0
-	case o.kbd:
-		return 1
-	case o.closing():
-		return e.Keyframes("out", []ui.Keyframe{{Value: 1}, {At: out, Value: 0, Ease: ease}}, ui.KeyframeOptions{Run: o.run, NonMotion: true})
-	}
-	return e.Keyframes("in", rise(delay, in, ease), ui.KeyframeOptions{Run: o.run, NonMotion: true})
-}
-
-func (o *exOpen) closing() bool { return !o.closedAt.IsZero() }
-
-// exploreLayer is the panel's layer over the page: the shade, and the panel
-// centred in the content area.
-func (a *App) exploreLayer(c *ui.Context, g exGeometry, live bool) {
-	ex := a.ex
-	o := ex.sheet
-	if o == nil {
-		return
-	}
-	if o.closing() && (o.kbd || c.Now().Sub(o.closedAt) >= motion.DialogOut) {
-		ex.sheet = nil
-		ex.closing = ""
-		return
-	}
-	if o.closing() {
-		c.After(motion.DialogOut - c.Now().Sub(o.closedAt))
-	}
-	e := ex.find(o.id)
-	if e == nil {
-		ex.sheet, ex.open = nil, nil
-		return
-	}
-	site := o.from == "site"
-	ui.Box(c.Key("layer")).Absolute().Fill().ZIndex(5).IgnoreInput(o.closing()).Children(func() {
-		shade := ui.Box(c.Key("shade-" + strconv.Itoa(int(o.run)))).Absolute().Fill().Background(theme.Shade)
-		shade.Opacity(a.presence(shade, o, 200*time.Millisecond, 0, 200*time.Millisecond, motion.EaseOut))
-		if shade.Clicked() && !o.closing() {
-			a.closeSheet(c)
-		}
-		// The box centring the panel lets the pointer through to the shade around it.
-		ui.Box(c.Key("sheet-box")).Absolute().Fill().Padding(48).Center().PassThrough().Children(func() {
-			sheet := ui.Column(c.Key("sheet-" + strconv.Itoa(int(o.run)))).Width(min(880, a.area.W-96)).MaxHeightPercent(100).IgnoreInput(o.closing()).
-				Role(ui.RoleDialog).Label(e.Name)
-			// Opened from a byline, the panel grows out of it and goes back into it.
-			if !site {
-				k := a.presence(sheet, o, motion.DialogIn, 0, motion.DialogOut, motion.Ease)
-				sheet.Opacity(k)
-				if !a.still(c) && k < 1 {
-					b := sheet.LayoutBounds()
-					ox, oy := motion.Origin(b, o.opener)
-					s := 0.97 + 0.03*k
-					sheet.TransformOrigin(ox, oy).Scale(s, s)
-				}
-			}
-			sheet.Children(func() {
-				// The panel's ground: from a card it comes into focus around the picture travelling into it.
-				ground := ui.Box(c.Key("ground")).Absolute().Fill().ZIndex(-1).Radius(12).Background(theme.Elevated).InsetShadow(0, 0, 0, 1, theme.Line).
-					Shadow(0, 24, 64, 0, theme.ShadowDialog).IgnoreInput(true)
-				if site {
-					k := a.presence(ground, o, motion.DialogIn, 0, motion.DialogOut, motion.Ease)
-					ground.Opacity(k)
-					blur := 3 * (1 - k)
-					if o.closing() {
-						blur = 2 * (1 - k)
-					}
-					if blur > 0.05 {
-						ground.Blur(blur)
-					}
-				}
-				body := ui.Scroll(c.Key("body")).Shrink(1).MinHeight(0).Scrollbars(false).Radius(12)
-				body.Children(func() {
-					ui.Column(c).Padding(24).Gap(24).Children(func() {
-						a.sheetHead(c, e, o, site)
-						list := ui.Column(c.Key("list"))
-						a.sheetWords(c, list, o, 180*time.Millisecond)
-						list.Children(func() { a.sheetList(c, e) })
-					})
-				})
-			})
-		})
-	})
-	_ = g
-	_ = live
-}
-
-// sheetWords has the panel's words follow it a beat later: up from 8 below,
-// coming into view; they go by fading.
-func (a *App) sheetWords(c *ui.Context, e ui.Element, o *exOpen, delay time.Duration) {
-	in, out := motion.PopIn, motion.SwapOut
-	k := a.presence(e, o, in, delay, out, motion.Ease)
-	if k < 1 {
-		e.Opacity(k)
-		if !o.closing() && !a.still(c) {
-			e.Translate(0, 8*(1-k))
-		}
-	}
-}
-
-// sheetHead is who they are: their site's picture (where the card's
-// surface lands), face and name, their introduction, the pill and the way
-// to their site; and the close button.
-func (a *App) sheetHead(c *ui.Context, e *explore.Entry, o *exOpen, site bool) {
-	ex := a.ex
-	tall := e.Kind == "blog"
-	picks := ex.picks[e.ID]
-	ui.Row(c.Key("head")).Gap(24).AlignItems(ui.Start).Children(func() {
-		switch {
-		case site:
-			w, h := float32(224), float32(140)
-			if tall {
-				w, h = 150, 200
-			}
-			shot := ui.Box(c.Key("shot")).Size(w, h).Radius(10).Shrink(0).Shadow(0, 0, 0, 1, theme.LineSoft).Shadow(0, 16, 32, -16, theme.ShadowShot).
-				Role(ui.RoleImage).Label(e.Name + " 的页面")
-			shot.Children(func() {
-				if o.closing() {
-					return // the surface is on its way back to its card
-				}
-				switch {
-				case tall:
-					a.plate(c, e, plateOpt{sharp: a.fullShot(e), writer: true, round: 10, w: w, h: h, sheet: true})
-				case len(picks) > 0:
-					a.plate(c, e, plateOpt{shot: a.workPic(picks[0]), has: true, bare: true, round: 10, w: w, h: h})
-				default:
-					a.plate(c, e, plateOpt{shot: a.shotOf(e), has: true, sharp: a.fullShot(e), round: 10, w: w, h: h})
-				}
-			})
-		default:
-			if p := a.shotOf(e); p != nil && p.bmp != nil {
-				ui.Image(c.Key("shot"), p.bmp).Fit(ui.Cover).ObjectPosition(0.5, 0).Size(224, 140).Radius(10).Shrink(0).
-					Shadow(0, 0, 0, 1, theme.LineSoft).Shadow(0, 16, 32, -16, theme.ShadowShot).Label(e.Name + " 的页面")
-			}
-		}
-		who := ui.Column(c.Key("who")).Grow(1).Shrink(1).MinWidth(0).Gap(8).Padding(4, 0, 0, 0)
-		a.sheetWords(c, who, o, 120*time.Millisecond)
-		who.Children(func() {
-			// The face over the name, each a block of its own.
-			ui.Column(c.Key("name")).AlignItems(ui.Start).Children(func() {
-				a.exFace(c, e, 40, false, 11)
-				ui.Text(c, e.Name).FontSize(theme.Subtitle).LineHeight(28.0 / 20).FontWeight(650).LetterSpacing(-0.01 * 20).TextColor(theme.Text).
-					Role(ui.RoleHeading).Level(2).Shrink(1)
-			})
-			ui.Text(c, e.Intro).FontSize(theme.Body).LineHeight(20.0 / 13).TextColor(theme.Text2)
-			ui.Row(c.Key("acts")).Gap(8).AlignItems(ui.Center).Margin(8, 0, 0, 0).Children(func() {
-				a.follow(c, e, "sheet")
-				b := a.button(c, "去看看", btnOpt{inset: true, key: "visit", trail: "openArrow"})
-				if b.Clicked() {
-					a.openExternal(c, e.HomeURL)
-				}
-			})
-			if err := ex.errors[e.ID]; err != "" {
-				ui.Text(c.Key("err"), err).FontSize(theme.Label).TextColor(theme.Danger).Role(ui.RoleAlert)
-			}
-		})
-		closeBox := ui.Box(c.Key("close-box")).Margin(-8, -8, 0, 0)
-		a.sheetWords(c, closeBox, o, 120*time.Millisecond)
-		closeBox.Children(func() {
-			b := a.iconBtn(c, "close", iconOpt{icon: "close", label: "关闭", tip: "关闭 · Esc"})
-			if o.focus && !o.closing() {
-				o.focus = false
-				b.Focus()
-			}
-			if b.Clicked() && !o.closing() {
-				a.closeSheet(c)
-			}
-		})
-	})
-}
-
-// shotOf is what a site looks like: its small capture, or for a
-// gallery without one, its newest work.
-func (a *App) shotOf(e *explore.Entry) *exPic {
-	if p := a.ex.pics["thumb:"+e.ID]; p != nil && p.bmp != nil {
-		return p
-	}
-	if len(e.Works) > 0 {
-		return a.workPic(exWork{entry: e, index: 0, title: e.Works[0].Title, url: e.Works[0].URL, publishedAt: e.Works[0].PublishedAt})
-	}
-	return nil
-}
-
-// sheetList is their works or their latest posts; with nothing of theirs
-// read yet, nothing: the panel ends at its head, whose link goes to their site.
-func (a *App) sheetList(c *ui.Context, e *explore.Entry) {
-	ex := a.ex
-	var works []exWork
-	for _, w := range ex.works {
-		if w.entry.ID == e.ID {
-			works = append(works, w)
-		}
-	}
-	heading := func(s string) {
-		ui.Text(c.Key("h"), s).FontSize(theme.Label).FontWeight(500).TextColor(theme.Muted).Margin(0, 0, 12, 0).Role(ui.RoleHeading).Level(3)
-	}
-	switch {
-	case len(works) > 0:
-		heading("最近收录")
-		inner := min(880, a.area.W-96) - 48
-		fw := (inner - 3*12) / 4
-		ui.Column(c.Key("works")).Gap(12).Children(func() {
-			for row := 0; row*4 < len(works); row++ {
-				ui.Row(c.Key(row)).Gap(12).Children(func() {
-					for col := range 4 {
-						if i := row*4 + col; i < len(works) {
-							a.frame(c, works[i], fw, fw*10/16)
-						}
-					}
-				})
-			}
-		})
-	case len(e.Posts) > 0:
-		heading("最近的文章")
-		// A hairline over each row but the first; gone over the row pointed at,
-		// and over the one before it.
-		hov := -1
-		for i, p := range e.Posts {
-			if p.URL == ex.hoverPost {
-				hov = i
-			}
-		}
-		ui.Column(c.Key("posts")).Role(ui.RoleList).Children(func() {
-			for i, p := range e.Posts {
-				row := ui.Box(c.Key(p.URL)).Role(ui.RoleListItem)
-				row.Children(func() {
-					b := ui.ButtonBase(c.Key("post")).Label(p.Title).Row().AlignItems(ui.End).Justify(ui.Start).Gap(16).Margin(0, -12).Padding(8, 12).Radius(6).FocusRing(false)
-					a.reach(c, b, e.ID, p.URL)
-					if b.FocusVisible() {
-						b.FocusRing(true)
-					}
-					bg := ui.Transparent
-					if b.Hovered() {
-						bg = theme.Selected
-					}
-					b.Background(b.AnimateColor("bg", bg, a.ease(140*time.Millisecond)))
-					if i > 0 && i != hov && i+1 != hov {
-						b.Shadow(0, -1, 0, 0, theme.LineSoft)
-					}
-					style := func(c *ui.Context, s string) ui.Element {
-						return ui.Text(c, s).FontSize(theme.Item).LineHeight(22.0 / 15).FontWeight(500).TextColor(theme.Text)
-					}
-					var title ui.Element
-					b.Children(func() {
-						title = style(c, p.Title).Grow(1).Shrink(1).MinWidth(0)
-						a.end(title, page{kind: "explore"}, "title:"+trialID(p.URL))
-						if p.PublishedAt != nil && *p.PublishedAt != "" {
-							ui.Text(c, dateLabel(p.PublishedAt)).FontSize(theme.Label).TextColor(theme.Muted).Shrink(0).NoWrap()
-						}
-					})
-					if b.Clicked() {
-						a.openPost(c, e, p, &trialFrom{title: title.LayoutBounds(), button: b.LayoutBounds(), style: style, size: theme.Item})
-					}
-				})
-			}
-		})
-	}
-}
+// Subscribing from Explore, the reader and an author's page (Follow): the
+// pill, and the face flying into the sidebar's new row; and reading
+// Explore's posts in place.
 
 // --- Subscribing: the author's face and one word, a real button that becomes
 // quiet once pressed (Follow). Their face is what flies to the sidebar.
@@ -356,8 +57,8 @@ type pillState struct {
 	changedAt   time.Time
 }
 
-// follow is the subscribe pill of an entry, at where ("sheet", "bar" or
-// "foot"): amber with the face and 订阅; once subscribed, quiet with a tick
+// follow is the subscribe pill of an entry, at where ("head" of their page,
+// or "home"): amber with the face and 订阅; once subscribed, quiet with a tick
 // and 已订阅, offering 取消订阅 only when pointed at. A request answering
 // within 150 ms shows no spinner.
 func (a *App) follow(c *ui.Context, e *explore.Entry, where string) ui.Element {
@@ -381,14 +82,14 @@ func (a *App) follow(c *ui.Context, e *explore.Entry, where string) ui.Element {
 	if st.on != on || st.working != working {
 		st.on, st.working, st.changedAt = on, working, now
 	}
-	label := "订阅 " + e.Name
+	label := locales.ExploreFollowWriter(e.Name)
 	switch {
 	case working && on:
-		label = "正在取消订阅 " + e.Name
+		label = locales.ExploreUnfollowingWriter(e.Name)
 	case working:
-		label = "正在订阅 " + e.Name
+		label = locales.ExploreFollowingWriter(e.Name)
 	case on:
-		label = "已订阅 " + e.Name + "，按下取消订阅"
+		label = locales.ExploreFollowedWriter(e.Name)
 	}
 	b := ui.ButtonBase(c.Key("follow-" + key)).Label(label).Role(ui.RoleToggleButton).Checked(on).Busy(working).Height(32).Radius(16).
 		AlignItems(ui.Center).ClipX().FocusRing(false).Shrink(0)
@@ -448,7 +149,7 @@ func (a *App) follow(c *ui.Context, e *explore.Entry, where string) ui.Element {
 			switch {
 			case on && alt:
 				slot.Children(func() { a.icon(c, "close", 12, false) })
-				ui.Text(c, "取消订阅").NoWrap()
+				ui.Text(c, locales.CommonUnfollow()).NoWrap()
 			case on:
 				slot.Children(func() {
 					if working {
@@ -457,7 +158,7 @@ func (a *App) follow(c *ui.Context, e *explore.Entry, where string) ui.Element {
 						a.icon(c, "check", 12, false)
 					}
 				})
-				ui.Text(c, map[bool]string{true: "取消订阅", false: "已订阅"}[working]).NoWrap()
+				ui.Text(c, map[bool]string{true: locales.CommonUnfollow(), false: locales.ExploreFollowed()}[working]).NoWrap()
 			default:
 				slot.Width(24).Children(func() {
 					if working {
@@ -470,7 +171,7 @@ func (a *App) follow(c *ui.Context, e *explore.Entry, where string) ui.Element {
 						f.Opacity(0)
 					}
 				})
-				ui.Text(c, "订阅").NoWrap()
+				ui.Text(c, locales.CommonFollow()).NoWrap()
 			}
 		})
 	})
@@ -497,8 +198,7 @@ func (a *App) toggleFollow(c *ui.Context, e *explore.Entry, pill string) {
 		return
 	}
 	ex.busy, ex.busyAt = e.ID, c.Now()
-	delete(ex.errors, e.ID)
-	id, name := e.ID, e.Name
+	name := e.Name
 	var icon *exPic
 	if p := ex.pics["icon:"+e.ID]; p != nil && p.bmp != nil {
 		icon = p
@@ -512,11 +212,11 @@ func (a *App) toggleFollow(c *ui.Context, e *explore.Entry, pill string) {
 			return func() {
 				ex.busy = ""
 				if err != nil {
-					a.followFailed(id, err)
+					a.fail(err.Error())
 					return
 				}
 				a.accept(lib)
-				ex.live = "已取消订阅 " + name
+				ex.live = locales.NoticeUnfollowed(name)
 				if moving && from.W > 0 {
 					a.faceLeft[cur] = true
 					a.flights2 = append(a.flights2, &faceFlight{img: icon.bmp, from: from, to: "pill:" + pill})
@@ -540,26 +240,16 @@ func (a *App) toggleFollow(c *ui.Context, e *explore.Entry, pill string) {
 		return func() {
 			ex.busy = ""
 			if err != nil {
-				a.followFailed(id, err)
+				a.fail(err.Error())
 				return
 			}
 			a.accept(res.Library)
-			ex.live = "已订阅 " + name
+			ex.live = locales.NoticeFollowing(name)
 			if moving && from.W > 0 {
 				a.flights2 = append(a.flights2, &faceFlight{img: icon.bmp, from: from, to: "chip:" + res.SourceID, light: true})
 			}
 		}
 	})
-}
-
-// followFailed says why a subscription did not go through: in the panel
-// under the pill, or as a notice from the reader.
-func (a *App) followFailed(id string, err error) {
-	if a.page.kind == "reader" {
-		a.fail(err.Error())
-		return
-	}
-	a.ex.errors[id] = err.Error()
 }
 
 // faceFlight is an author's face travelling from one place to another
@@ -721,12 +411,4 @@ func (a *App) prefetchPost(c *ui.Context) {
 			}
 		}
 	})
-}
-
-// exploreKeys are Explore's: Esc closes the open panel, at once.
-func (a *App) exploreKeys(c *ui.Context) {
-	if a.ex.open != nil && c.Shortcut(0, ui.KeyEscape) {
-		a.kbd = true
-		a.closeSheet(c)
-	}
 }

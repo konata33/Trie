@@ -1,12 +1,12 @@
 package app
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
 
 	"trie/internal/library"
+	"trie/internal/locales"
 	"trie/internal/motion"
 	"trie/internal/subscription"
 	"trie/internal/theme"
@@ -38,7 +38,7 @@ func (a *App) subscribeView(c *ui.Context, f *subscribeForm) {
 		f.gen++
 		gen, url := f.gen, f.url
 		f.working, f.preview, f.err = "preview", nil, ""
-		a.said = append(a.said, "正在读取网站提供的订阅信息…")
+		a.said = append(a.said, locales.SubscribeReading())
 		a.do(func() func() {
 			p, err := svc.Preview(bg, url)
 			return func() {
@@ -47,7 +47,7 @@ func (a *App) subscribeView(c *ui.Context, f *subscribeForm) {
 				}
 				f.working = ""
 				if err != nil {
-					f.err = said(err, "暂时无法读取订阅地址，请重试")
+					f.err = said(err, locales.SubscribeCantRead())
 					return
 				}
 				f.preview = &p
@@ -64,7 +64,7 @@ func (a *App) subscribeView(c *ui.Context, f *subscribeForm) {
 			res, err := svc.Add(token, true)
 			return func() {
 				if err != nil {
-					f.working, f.err = "", said(err, "订阅未保存，请重试")
+					f.working, f.err = "", said(err, locales.SubscribeNotSaved())
 					return
 				}
 				a.subscriptionAdded(c, res)
@@ -72,10 +72,10 @@ func (a *App) subscribeView(c *ui.Context, f *subscribeForm) {
 		})
 	}
 	ui.Column(c.Key("form")).Margin(16, 0, 0, 0).Children(func() {
-		ui.Text(c, "博客或订阅地址").FontSize(theme.Label).LineHeight(16.0/12).TextColor(theme.Text2).Margin(0, 0, 8, 0)
+		ui.Text(c, locales.SubscribeAddress()).FontSize(theme.Label).LineHeight(16.0/12).TextColor(theme.Text2).Margin(0, 0, 8, 0)
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			before := f.url
-			in := ui.TextInputBase(c.Key("url"), &f.url).Label("博客或订阅地址").Placeholder("https://antfu.me").Grow(1).Height(32).Padding(0, 12).
+			in := ui.TextInputBase(c.Key("url"), &f.url).Label(locales.SubscribeAddress()).Placeholder("https://antfu.me").Grow(1).Height(32).Padding(0, 12).
 				Radius(6).Background(theme.Field).FontSize(theme.Body).TextColor(theme.Text).PlaceholderColor(theme.Muted).CaretColor(theme.Accent).
 				AutoFocus().Disabled(f.working == "save")
 			edge := theme.Line
@@ -93,7 +93,7 @@ func (a *App) subscribeView(c *ui.Context, f *subscribeForm) {
 			if in.Submitted() {
 				discover()
 			}
-			if a.button(c, "识别", btnOpt{loading: f.working == "preview", disabled: f.working == "save" || strings.TrimSpace(f.url) == ""}).Clicked() {
+			if a.button(c, locales.SubscribeFind(), btnOpt{loading: f.working == "preview", disabled: f.working == "save" || strings.TrimSpace(f.url) == ""}).Clicked() {
 				discover()
 			}
 		})
@@ -122,13 +122,13 @@ func (a *App) subscribeView(c *ui.Context, f *subscribeForm) {
 					ui.Column(c).Margin(12, 0, 0, 0).FontSize(theme.Label).LineHeight(1.8).TextColor(theme.Text2).Children(func() {
 						ui.Text(c, p.HomeURL)
 						ui.Text(c, p.FeedURL).Margin(4, 0, 10, 0)
-						count := "订阅源暂时没有文章，添加后可刷新"
+						count := locales.SubscribeNoArticles()
 						if p.ArticleCount > 0 {
-							count = fmt.Sprintf("本次提供 %d 篇文章", p.ArticleCount)
+							count = locales.SubscribeArticleCount(p.ArticleCount)
 						}
 						ui.Text(c, count).FontWeight(600)
 						if existing != nil {
-							ui.Text(c, map[bool]string{true: "已订阅，将更新这个来源，不会重复添加", false: "已保存过这个来源，可以重新订阅"}[existing.Subscribed])
+							ui.Text(c, map[bool]string{true: locales.SubscribeAlreadyFollowing(), false: locales.SubscribeSavedBefore()}[existing.Subscribed])
 						}
 					})
 					for _, t := range p.SampleTitles {
@@ -144,13 +144,13 @@ func (a *App) subscribeView(c *ui.Context, f *subscribeForm) {
 			})
 		}
 		ui.Row(c).Justify(ui.End).Gap(8).Margin(24, 0, 0, 0).Children(func() {
-			if a.button(c, "取消", btnOpt{inset: true, disabled: f.working == "save"}).Clicked() {
+			if a.button(c, locales.CommonCancel(), btnOpt{inset: true, disabled: f.working == "save"}).Clicked() {
 				a.layers.dialog = nil
 			}
 			if f.preview != nil {
-				label := "确认订阅"
+				label := locales.SubscribeFollow()
 				if existing != nil && existing.Subscribed {
-					label = "更新订阅"
+					label = locales.SubscribeUpdate()
 				}
 				if a.button(c, label, btnOpt{kind: primary, inset: true, loading: f.working == "save", disabled: f.working == "preview"}).Clicked() {
 					confirm()
@@ -165,7 +165,7 @@ func (a *App) subscribeView(c *ui.Context, f *subscribeForm) {
 func said(err error, fallback string) string {
 	text := err.Error()
 	if strings.Contains(text, "Invalid URL") {
-		return "请填写有效的 RSS/Atom 或博客首页地址"
+		return locales.SubscribeInvalidAddress()
 	}
 	if text == "" {
 		return fallback
@@ -178,13 +178,13 @@ func said(err error, fallback string) string {
 func (a *App) subscriptionAdded(c *ui.Context, res library.SubscriptionResult) {
 	a.accept(res.Library)
 	a.layers.dialog = nil
-	a.said = append(a.said, fmt.Sprintf("订阅已保存 · 新收录 %d 篇 · 更新 %d 篇", res.ImportedCount, res.UpdatedCount))
+	a.said = append(a.said, locales.SubscribeSaved(res.ImportedCount, res.UpdatedCount))
 	src := a.source(res.SourceID)
-	name := "博客"
+	text := locales.NoticeFollowingThisBlog()
 	if src != nil {
-		name = src.DisplayName
+		text = locales.NoticeFollowing(src.DisplayName)
 	}
-	a.notify("已订阅 "+name, a.iconOf(src), nil)
+	a.notify(text, a.iconOf(src), nil)
 	if a.writer(res.SourceID) != nil {
 		a.page, a.from, a.came, a.left = page{"author", res.SourceID}, []page{{kind: "home"}}, nil, nil
 	}

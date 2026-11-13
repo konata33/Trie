@@ -10,6 +10,7 @@ import (
 	xdraw "golang.org/x/image/draw"
 
 	"trie/internal/explore"
+	"trie/internal/locales"
 	"trie/internal/motion"
 	"trie/internal/theme"
 )
@@ -112,7 +113,7 @@ func (a *App) designFront(c *ui.Context, g exGeometry, on bool) {
 	ui.Row(c.Key("front")).Height(g.front).Gap(16).Children(func() {
 		a.enterIn(c, ui.Box(c.Key("lead-slot")).Width(leadW).Height(g.front), 0, on).Children(func() { a.lead(c, leadW, g.front, !on) })
 		fw, fh := float32(320-12)/2, (g.front-3*12)/4
-		a.enterIn(c, ui.Column(c.Key("newin")).Width(320).Height(g.front).Gap(12).Role(ui.RoleGroup).Label("设计画廊的最新作品"), 1, on).Children(func() {
+		a.enterIn(c, ui.Column(c.Key("newin")).Width(320).Height(g.front).Gap(12).Role(ui.RoleGroup).Label(locales.ExploreGalleryNewest()), 1, on).Children(func() {
 			for row := range 4 {
 				ui.Row(c.Key(row)).Gap(12).Children(func() {
 					for col := range 2 {
@@ -159,7 +160,7 @@ func (a *App) leadClock(c *ui.Context) {
 	ex := a.ex
 	now := c.Now()
 	last := ex.leadAt
-	if len(ex.leads) < 2 || ex.leadHeld || a.still(c) || ex.open != nil {
+	if len(ex.leads) < 2 || ex.leadHeld || a.still(c) {
 		ex.leadAt = time.Time{} // held: the time it waits is not the work's
 		return
 	}
@@ -190,7 +191,7 @@ func (a *App) leadClock(c *ui.Context) {
 func (a *App) lead(c *ui.Context, w, h float32, away bool) {
 	ex := a.ex
 	box := ui.Box(c.Key("lead")).Size(w, h).Radius(10).ClipX().ClipY().Background(theme.Surface).InsetShadow(0, 0, 0, 1, theme.LineSoft).
-		Role(ui.RoleRegion).Label("最新收录的作品")
+		Role(ui.RoleRegion).Label(locales.ExploreNewWork())
 	works := ex.leads
 	if len(works) == 0 {
 		return
@@ -264,17 +265,17 @@ func (a *App) lead(c *ui.Context, w, h float32, away bool) {
 						}
 					}
 				}
-				ui.Row(c.Key("from")).Gap(8).AlignItems(ui.Center).Height(fromH).FontSize(theme.Body).TextColor(theme.Text2).Children(func() {
+				ui.Row(c.Key("from")).Gap(8).AlignItems(ui.Center).Height(fromH).FontSize(theme.Body).TextColor(theme.Text2).FontFeatures(theme.Numbers).Children(func() {
 					if p := ex.pics["icon:"+work.entry.ID]; p != nil && p.bmp != nil {
 						ui.Box(c).Size(20, 20).Radius(10).Background(theme.Text).Children(func() {
 							ui.Image(c, p.bmp).Fit(ui.Cover).Fill().Radius(10)
 						})
 					}
-					line := work.entry.Name
-					if work.publishedAt != nil && *work.publishedAt != "" {
-						line += " · " + dateLabel(work.publishedAt)
+					ui.Text(c, work.entry.Name)
+					if d := dateText(work.publishedAt); d != "" {
+						ui.Text(c, "·").AccessHidden(true)
+						ui.Text(c, d)
 					}
-					ui.Text(c, line)
 					if p := pics[at]; p != nil && len(p.dots) > 0 {
 						ui.Row(c.Key("dots")).Gap(4).Margin(0, 0, 0, 8).AccessHidden(true).Children(func() {
 							for _, d := range p.dots {
@@ -297,7 +298,7 @@ func (a *App) pips(c *ui.Context, works []exWork, at int) {
 	ex := a.ex
 	ui.Row(c.Key("pips")).Absolute().Right(24).Top(16).ZIndex(3).Children(func() {
 		for i, w := range works {
-			b := ui.ButtonBase(c.Key(i)).Label("第 "+strconv.Itoa(i+1)+" 件："+w.title).Size(32, 20).Padding(0, 4).AlignItems(ui.Center).FocusRing(false)
+			b := ui.ButtonBase(c.Key(i)).Label(locales.ExploreWorkNumber(i+1, w.title)).Size(32, 20).Padding(0, 4).AlignItems(ui.Center).FocusRing(false)
 			if i == at {
 				b.Current(ui.CurrentItem)
 			}
@@ -338,7 +339,7 @@ func (a *App) pips(c *ui.Context, works []exWork, at int) {
 // gallery's badge, and its title on a band that rises when pointed at.
 func (a *App) frame(c *ui.Context, w exWork, width, height float32) {
 	pic := a.workPic(w)
-	b := ui.ButtonBase(c.Key(w.key())).Label(w.title+"，"+w.entry.Name).Size(width, height).Radius(10).ClipX().ClipY().
+	b := ui.ButtonBase(c.Key(w.key())).Label(locales.ExploreWorkCard(w.title, w.entry.Name)).Size(width, height).Radius(10).ClipX().ClipY().
 		Background(theme.Surface).InsetShadow(0, 0, 0, 1, theme.LineSoft).Center().FocusRing(false)
 	a.reach(c, b, w.entry.ID, w.url)
 	if b.Clicked() {
@@ -389,7 +390,7 @@ func (a *App) frame(c *ui.Context, w exWork, width, height float32) {
 func (a *App) roster(c *ui.Context, g exGeometry, on bool) {
 	people := a.ex.index[:min(12, len(a.ex.index))]
 	ui.Box(c.Key("paper")).Height(g.front).Radius(10).Background(theme.Surface).InsetShadow(0, 0, 0, 1, theme.LineSoft).Padding(32, 48).ClipY().
-		Role(ui.RoleRegion).Label("博主").Children(func() {
+		Role(ui.RoleRegion).Label(locales.ExploreWriters()).Children(func() {
 		rows := make([]ui.Track, (len(people)+2)/3)
 		for i := range rows {
 			rows[i] = ui.Fr(1)
@@ -416,7 +417,7 @@ func (a *App) roster(c *ui.Context, g exGeometry, on bool) {
 						MaxLines(2).Ellipsis("…").Balance().Shrink(1).MinWidth(0)
 				})
 				if b.Clicked() {
-					a.showSheet(c, e, "who", b.LayoutBounds())
+					a.openFromExplore(c, e, "who:"+e.ID)
 				}
 			}
 		})
@@ -448,7 +449,7 @@ func (a *App) frontPaper(c *ui.Context, g exGeometry, on bool) {
 	}
 	unit := (g.w - 32) / 3.3
 	widths := [3]float32{unit * 1.35, unit, unit * 0.95}
-	ui.Row(c.Key("paper")).Height(g.front).Gap(16).Role(ui.RoleRegion).Label("博主的最新文章").Children(func() {
+	ui.Row(c.Key("paper")).Height(g.front).Gap(16).Role(ui.RoleRegion).Label(locales.ExploreWritersLatest()).Children(func() {
 		cols := [3][]exFresh{items[:1], items[min(1, len(items)):min(3, len(items))], items[min(3, len(items)):min(8, len(items))]}
 		sizes := [3]string{"top", "second", "brief"}
 		for i, col := range cols {
@@ -522,7 +523,7 @@ func (a *App) story(c *ui.Context, it exFresh, size string, w, h float32, g exGe
 		b.Children(func() {
 			title = titleStyle(c, post.Title)
 			a.underline(title, b, b.Hovered(), theme.Faint, 0.2*ts)
-			a.end(title, page{kind: "explore"}, "title:"+trialID(post.URL))
+			a.end(title, page{kind: "explore"}, "title:"+a.postID(post.URL))
 			if post.Excerpt == "" {
 				return
 			}
@@ -558,7 +559,7 @@ func (a *App) byline(c *ui.Context, e *explore.Entry, post explore.Post, size st
 	case "brief":
 		face = 16
 	}
-	b := ui.ButtonBase(c.Key("byline")).Label(e.Name).HasPopup(ui.PopupDialog).Margin(top, 0, 0, 0).AlignSelf(ui.Start).Gap(8).
+	b := ui.ButtonBase(c.Key("byline")).Label(e.Name).Margin(top, 0, 0, 0).AlignSelf(ui.Start).Gap(8).
 		AlignItems(ui.Center).Radius(6).FocusRing(false).MaxWidthPercent(100).FontSize(font).TextColor(theme.Muted)
 	if size != "brief" {
 		b.Margin(max(top, 0), 0, 0, 0)
@@ -577,13 +578,13 @@ func (a *App) byline(c *ui.Context, e *explore.Entry, post explore.Post, size st
 	b.Children(func() {
 		a.exFace(c, e, face, false, map[bool]float32{true: 9, false: 11}[size == "brief"])
 		ui.Text(c, e.Name).FontWeight(500).TextColor(b.AnimateColor("name", name, a.ease(140*time.Millisecond))).SingleLine().Shrink(1)
-		if post.PublishedAt != nil && *post.PublishedAt != "" {
+		if d := dateText(post.PublishedAt); d != "" {
 			ui.Text(c, "·").Shrink(0).AccessHidden(true)
-			ui.Text(c, dateLabel(post.PublishedAt)).Shrink(0)
+			ui.Text(c, d).Shrink(0).FontFeatures(theme.Numbers)
 		}
 	})
 	if b.Clicked() {
-		a.showSheet(c, e, "who", b.LayoutBounds())
+		a.openFromExplore(c, e, "who:"+e.ID)
 	}
 }
 
@@ -711,7 +712,7 @@ func (a *App) siteStream(c *ui.Context, g exGeometry, live bool) {
 	n := min(ex.shown[design], len(list))
 	cw := (g.cw - 32) / 3
 	ch := cw * 10 / 16
-	ui.Column(c.Key("sites")).Gap(16).Padding(0, 0, ch/2, 0).Role(ui.RoleRegion).Label("设计网站").Children(func() {
+	ui.Column(c.Key("sites")).Gap(16).Padding(0, 0, ch/2, 0).Role(ui.RoleRegion).Label(locales.ExploreDesignSites()).Children(func() {
 		for row := 0; row*3 < n; row++ {
 			ui.Row(c.Key(row)).Gap(16).AlignItems(ui.Start).Children(func() {
 				for col := range 3 {
@@ -739,7 +740,7 @@ func (a *App) coverStream(c *ui.Context, g exGeometry, live bool) {
 		cols = 2
 	}
 	cw := (g.cw - float32(cols-1)*16) / float32(cols)
-	ui.Column(c.Key("covers")).Gap(24).Role(ui.RoleRegion).Label("博主").Children(func() {
+	ui.Column(c.Key("covers")).Gap(24).Role(ui.RoleRegion).Label(locales.ExploreWriters()).Children(func() {
 		for row := 0; row*cols < n; row++ {
 			ui.Row(c.Key(row)).Gap(16).Children(func() {
 				for col := range cols {
@@ -772,13 +773,6 @@ func (a *App) streamEnd(c *ui.Context, room int, more, live bool, step int) {
 	}
 }
 
-// cardState is how a card's surface stands: out in its open panel (away), or
-// landing back from it (lift).
-func (a *App) cardState(e *explore.Entry) (away, lift bool) {
-	ex := a.ex
-	return ex.open != nil && ex.open.id == e.ID && ex.open.from == "site", ex.closing == e.ID
-}
-
 // siteCard is a design site in the stream: the site itself fills the card (a
 // gallery shows its own picks, turning while pointed at), and at its foot,
 // on the band, its face, name and address, then the newest thing it has.
@@ -791,31 +785,24 @@ func (a *App) siteCard(c *ui.Context, e *explore.Entry, w, h float32, middle boo
 		full = a.fullShot(e)
 	}
 	thumb := ex.pics["thumb:"+e.ID]
-	away, lift := a.cardState(e)
 	card := ui.Box(c.Key(e.ID)).Size(w, h).Radius(10).Role(ui.RoleArticle).Label(e.Name)
 	dy := float32(0)
 	if middle {
 		dy = h / 2
 		card.Translate(0, dy)
 	}
-	if lift {
-		card.ZIndex(6)
-	}
 	a.intoView(card, dy)
 	hover := card.Hovered()
 	turn := a.turning(c, e.ID, picks, hover)
 	card.Children(func() {
 		// Not clipped: the plate inside clips itself, and a rounded clip in another reaching into its corners is masked on the CPU.
-		win := ui.ButtonBase(c.Key("window")).Label(e.Name + "：" + e.Intro).HasPopup(ui.PopupDialog).Absolute().Fill().Radius(10).FocusRing(false)
+		win := ui.ButtonBase(c.Key("window")).Label(locales.CommonNameColon(e.Name, e.Intro)).Absolute().Fill().Radius(10).FocusRing(false)
 		if ex.focus == "card:"+e.ID {
 			ex.focus = ""
 			win.Focus()
 		}
 		if win.FocusVisible() {
 			win.FocusRing(true)
-		}
-		if away {
-			win.InsetShadow(0, 0, 0, 1, theme.LineSoft)
 		}
 		// Pressed, a card gives a little at once.
 		if !a.still(c) {
@@ -829,44 +816,8 @@ func (a *App) siteCard(c *ui.Context, e *explore.Entry, w, h float32, middle boo
 		zoom := a.zoom(c, card, hover)
 		var shown *exPic
 		win.Children(func() {
-			if away {
-				return
-			}
 			if gallery {
-				var first *exPic
-				if turn != nil {
-					first = turn.pics[0]
-				}
-				a.plate(c, e, plateOpt{shot: first, has: true, bare: true, round: 10, zoom: zoom, w: w, h: h})
-				shown = first
-				if turn != nil {
-					// The picks crossfade as they turn (300 ms); at rest the plate shows the first.
-					fading := c.Now().Sub(turn.changedAt) < 300*time.Millisecond
-					if fading {
-						c.After(300*time.Millisecond - c.Now().Sub(turn.changedAt))
-					}
-					for i, p := range turn.pics {
-						if p == nil || p.bmp == nil {
-							continue
-						}
-						if i == turn.at {
-							shown = p
-						}
-						on, off := i == turn.at && (i != 0 || fading), fading && i == turn.prev
-						if !on && !off {
-							continue
-						}
-						img := ui.Image(c.Key("pick-"+strconv.Itoa(i)), p.bmp).Fit(ui.Cover).ObjectPosition(0.5, 0).Absolute().Fill().Radius(10)
-						k := img.Keyframes("swap", rise(0, 300*time.Millisecond, motion.Ease), ui.KeyframeOptions{Run: turn.run, NonMotion: true})
-						if off {
-							k = 1 - k
-						}
-						img.Opacity(k)
-					}
-					if turn.at < len(turn.pics) && (turn.pics[turn.at] == nil || !turn.pics[turn.at].done) {
-						a.breathing(c, theme.Hover)
-					}
-				}
+				shown = a.turned(c, e, turn, zoom, w, h)
 				return
 			}
 			a.plate(c, e, plateOpt{shot: thumb, has: true, sharp: full, round: 10, zoom: zoom, w: w, h: h})
@@ -876,7 +827,7 @@ func (a *App) siteCard(c *ui.Context, e *explore.Entry, w, h float32, middle boo
 			}
 		})
 		if win.Clicked() {
-			a.showSheet(c, e, "site", win.LayoutBounds())
+			a.openFromExplore(c, e, "card:"+e.ID)
 		}
 		// The caption: face, name, address and palette, then the newest thing.
 		var post *explore.Post
@@ -891,12 +842,7 @@ func (a *App) siteCard(c *ui.Context, e *explore.Entry, w, h float32, middle boo
 			capH += 22
 		}
 		// The caption takes the pointer only on its link; elsewhere it reaches the card.
-		words := ui.Box(c.Key("cap")).Absolute().Fill().PassThrough().IgnoreInput(away)
-		if away {
-			words.Invisible()
-		} else if lift || ex.closing == "" && ex.open == nil {
-			a.backIn(c, words, e.ID)
-		}
+		words := ui.Box(c.Key("cap")).Absolute().Fill().PassThrough()
 		words.Children(func() {
 			band(c, h-14-capH-72, capH+14+72, 72, shown, 0, w, h, 10)
 			ui.Column(c.Key("words")).Absolute().Left(16).Right(16).Bottom(14).Gap(2).Children(func() {
@@ -925,6 +871,47 @@ func (a *App) siteCard(c *ui.Context, e *explore.Entry, w, h float32, middle boo
 	})
 }
 
+// turned is a plate standing on works turning while pointed at (turning):
+// the first at rest, the next crossfading over it (300 ms), breathing while
+// one is on its way. It returns the picture on show.
+func (a *App) turned(c *ui.Context, e *explore.Entry, turn *pickTurns, zoom, w, h float32) *exPic {
+	var first *exPic
+	if turn != nil {
+		first = turn.pics[0]
+	}
+	a.plate(c, e, plateOpt{shot: first, has: true, bare: true, round: 10, zoom: zoom, w: w, h: h})
+	shown := first
+	if turn == nil {
+		return shown
+	}
+	fading := c.Now().Sub(turn.changedAt) < 300*time.Millisecond
+	if fading {
+		c.After(300*time.Millisecond - c.Now().Sub(turn.changedAt))
+	}
+	for i, p := range turn.pics {
+		if p == nil || p.bmp == nil {
+			continue
+		}
+		if i == turn.at {
+			shown = p
+		}
+		on, off := i == turn.at && (i != 0 || fading), fading && i == turn.prev
+		if !on && !off {
+			continue
+		}
+		img := ui.Image(c.Key("pick-"+strconv.Itoa(i)), p.bmp).Fit(ui.Cover).ObjectPosition(0.5, 0).Absolute().Fill().Radius(10)
+		k := img.Keyframes("swap", rise(0, 300*time.Millisecond, motion.Ease), ui.KeyframeOptions{Run: turn.run, NonMotion: true})
+		if off {
+			k = 1 - k
+		}
+		img.Opacity(k)
+	}
+	if turn.at < len(turn.pics) && (turn.pics[turn.at] == nil || !turn.pics[turn.at].done) {
+		a.breathing(c, theme.Hover)
+	}
+	return shown
+}
+
 // capPost is a card's newest thing, under its name: 13, its words a step
 // brighter when pointed at.
 func (a *App) capPost(c *ui.Context, e *explore.Entry, post explore.Post, key string) {
@@ -950,7 +937,7 @@ func (a *App) capPost(c *ui.Context, e *explore.Entry, post explore.Post, key st
 				title.Opacity(k)
 			}
 		}
-		a.end(title, page{kind: "explore"}, "title:"+trialID(post.URL))
+		a.end(title, page{kind: "explore"}, "title:"+a.postID(post.URL))
 	})
 	if b.Clicked() {
 		a.openPost(c, e, post, &trialFrom{title: title.LayoutBounds(), button: b.LayoutBounds(), style: func(c *ui.Context, s string) ui.Element {
@@ -1018,23 +1005,6 @@ func (a *App) zoom(c *ui.Context, card ui.Element, hover bool) float32 {
 		return card.Jump("zoom", 1)
 	}
 	return card.AnimateTo("zoom", z, ui.Animation{Duration: 400 * time.Millisecond, Ease: motion.Ease})
-}
-
-// backIn fades a card's words back in once its picture has landed (a 220 ms
-// wait, then 240 ms); at once from the keys.
-func (a *App) backIn(c *ui.Context, e ui.Element, id string) {
-	ex := a.ex
-	if ex.landed[id].IsZero() || a.kbd {
-		return
-	}
-	t := c.Now().Sub(ex.landed[id])
-	k := min(1, max(0, float32(t-220*time.Millisecond)/float32(240*time.Millisecond)))
-	if k >= 1 {
-		delete(ex.landed, id)
-		return
-	}
-	e.Opacity(k)
-	c.AnimationFrame()
 }
 
 // plateOpt is what a card's surface shows (Plate): its small capture (shot,
@@ -1111,11 +1081,7 @@ func grown(img ui.Element, w, h, z float32) {
 func (a *App) cover(c *ui.Context, e *explore.Entry, w, h float32) {
 	ex := a.ex
 	full := a.fullShot(e)
-	away, lift := a.cardState(e)
 	card := ui.Box(c.Key(e.ID)).Size(w, h).Radius(10).Role(ui.RoleArticle).Label(e.Name)
-	if lift {
-		card.ZIndex(6)
-	}
 	a.intoView(card, 0)
 	hover := card.Hovered()
 	var posts []explore.Post
@@ -1129,16 +1095,13 @@ func (a *App) cover(c *ui.Context, e *explore.Entry, w, h float32) {
 		}
 	}
 	card.Children(func() {
-		open := ui.ButtonBase(c.Key("open")).Label(e.Name + "：" + e.Intro).HasPopup(ui.PopupDialog).Absolute().Fill().Radius(10).FocusRing(false)
+		open := ui.ButtonBase(c.Key("open")).Label(locales.CommonNameColon(e.Name, e.Intro)).Absolute().Fill().Radius(10).FocusRing(false)
 		if ex.focus == "card:"+e.ID {
 			ex.focus = ""
 			open.Focus()
 		}
 		if open.FocusVisible() {
 			open.FocusRing(true)
-		}
-		if away {
-			open.InsetShadow(0, 0, 0, 1, theme.LineSoft)
 		}
 		if !a.still(c) {
 			s := float32(1)
@@ -1150,19 +1113,12 @@ func (a *App) cover(c *ui.Context, e *explore.Entry, w, h float32) {
 		}
 		zoom := a.zoom(c, card, hover)
 		open.Children(func() {
-			if !away {
-				a.plate(c, e, plateOpt{sharp: full, writer: true, round: 10, zoom: zoom, w: w, h: h})
-			}
+			a.plate(c, e, plateOpt{sharp: full, writer: true, round: 10, zoom: zoom, w: w, h: h})
 		})
 		if open.Clicked() {
-			a.showSheet(c, e, "site", open.LayoutBounds())
+			a.openFromExplore(c, e, "card:"+e.ID)
 		}
-		words := ui.Column(c.Key("read")).Absolute().Fill().Padding(18, 18, 16, 18).Gap(14).PassThrough().IgnoreInput(away)
-		if away {
-			words.Invisible()
-		} else {
-			a.backIn(c, words, e.ID)
-		}
+		words := ui.Column(c.Key("read")).Absolute().Fill().Padding(18, 18, 16, 18).Gap(14).PassThrough()
 		words.Children(func() {
 			ui.Row(c.Key("name")).Gap(8).AlignItems(ui.Center).IgnoreInput(true).Children(func() {
 				a.exFace(c, e, 20, isPress(e), 11)
@@ -1185,7 +1141,7 @@ func (a *App) cover(c *ui.Context, e *explore.Entry, w, h float32) {
 			lb.Children(func() {
 				title = style(c, latest.Title).Shrink(0)
 				a.underline(title, lb, lb.Hovered(), theme.Faint, 0.2*18)
-				a.end(title, page{kind: "explore"}, "title:"+trialID(latest.URL))
+				a.end(title, page{kind: "explore"}, "title:"+a.postID(latest.URL))
 				if latest.Excerpt != "" {
 					ui.Box(c.Key("ex")).Grow(1).Shrink(1).MinHeight(0).ClipY().Effect(coverFade).Children(func() {
 						ui.Text(c, latest.Excerpt).FontSize(14).LineHeight(1.65).TextColor(theme.Text2).Pretty().FillWidth()
@@ -1193,8 +1149,8 @@ func (a *App) cover(c *ui.Context, e *explore.Entry, w, h float32) {
 				} else {
 					ui.Box(c).Grow(1)
 				}
-				if latest.PublishedAt != nil && *latest.PublishedAt != "" {
-					ui.Text(c, dateLabel(latest.PublishedAt)).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).Shrink(0)
+				if d := dateText(latest.PublishedAt); d != "" {
+					ui.Text(c, d).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).FontFeatures(theme.Numbers).Shrink(0)
 				}
 			})
 			if lb.Clicked() {
@@ -1232,9 +1188,9 @@ func (a *App) toc(c *ui.Context, e *explore.Entry, posts []explore.Post, w, h fl
 				b.Children(func() {
 					title = style(c, p.Title).Grow(1).Shrink(1).MinWidth(0).TextColor(b.AnimateColor("fg", color, a.ease(140*time.Millisecond)))
 					a.underline(title, b, b.Hovered(), theme.UnderlineHover, 4)
-					a.end(title, page{kind: "explore"}, "title:"+trialID(p.URL))
-					if p.PublishedAt != nil && *p.PublishedAt != "" {
-						ui.Text(c, dateLabel(p.PublishedAt)).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).Shrink(0).NoWrap()
+					a.end(title, page{kind: "explore"}, "title:"+a.postID(p.URL))
+					if d := dateText(p.PublishedAt); d != "" {
+						ui.Text(c, d).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).FontFeatures(theme.Numbers).Shrink(0).NoWrap()
 					}
 				})
 				if b.Clicked() {

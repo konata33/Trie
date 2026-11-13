@@ -1,16 +1,17 @@
 package app
 
 import (
-	"fmt"
 	"math"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/egoist/mygo/i18n"
 	"github.com/egoist/mygo/ui"
 
 	"trie/internal/library"
+	"trie/internal/locales"
 	"trie/internal/motion"
 	"trie/internal/theme"
 	"trie/internal/web"
@@ -19,7 +20,7 @@ import (
 // layers are what shows over the pages: the subscription menu, the add
 // dialog, the shortcut sheet and the notices.
 type layers struct {
-	menu     string // the source whose subscription menu is open
+	menu     string // the open subscription menu: a source's ID for its sidebar row's, headMenu+ID for its page's
 	renaming string // the source being renamed in its row
 	name     string // the name being typed
 
@@ -30,7 +31,9 @@ type layers struct {
 	out    time.Duration
 }
 
-func (l *layers) openMenu(id string, at ui.Rect, pointer bool) { l.menu = id }
+// headMenu marks the subscription menu of an author's page, so that it and
+// the one on their sidebar row open on their own.
+const headMenu = "head:"
 
 // closeAll closes the menus as a page changes (sourceMenu.close()).
 func (l *layers) closeAll() { l.menu = "" }
@@ -39,9 +42,13 @@ func (l *layers) closeAll() { l.menu = "" }
 // its ··· button, which it returns: 重命名 / 在浏览器打开 / 取消订阅. small is the
 // sidebar's 24 square trigger.
 func (a *App) sourceMenu(c *ui.Context, key any, src *library.Source, side bool) ui.Element {
-	open := a.layers.menu == src.ID
+	slot := src.ID
+	if !side {
+		slot = headMenu + src.ID
+	}
+	open := a.layers.menu == slot
 	m := ui.MenuBase(c.Key(key), &open)
-	t := m.Trigger.Label(src.DisplayName+" 的订阅操作").Size(24, 24).Radius(6).Center().FocusRing(false)
+	t := m.Trigger.Label(locales.SidebarWriterActions(src.DisplayName)).Size(24, 24).Radius(6).Center().FocusRing(false)
 	if t.FocusVisible() {
 		t.FocusRing(true).FocusRingOffset(-2)
 	}
@@ -53,23 +60,18 @@ func (a *App) sourceMenu(c *ui.Context, key any, src *library.Source, side bool)
 		} else {
 			panel.AttachTo(m.Trigger, ui.AnchorBottomLeft, ui.AnchorTopLeft).Margin(8, 0, 0, 0)
 		}
-		if a.menuItem(c, m.Item(), "重命名", false, "").Clicked() {
+		if a.menuItem(c, m.Item(), locales.SidebarRename(), false, "").Clicked() {
 			a.layers.renaming, a.layers.name = src.ID, src.DisplayName
 		}
-		if a.menuItem(c, m.Item(), "在浏览器打开", false, "openArrow").Clicked() {
+		if a.menuItem(c, m.Item(), locales.CommonOpenInBrowser(), false, "openArrow").Clicked() {
 			a.openExternal(c, src.HomeURL)
 		}
 		ui.Box(c).Height(1).Margin(4, 8).Background(theme.Line).AccessHidden(true)
-		if a.menuItem(c, m.Item(), "取消订阅", true, "").Clicked() {
+		if a.menuItem(c, m.Item(), locales.CommonUnfollow(), true, "").Clicked() {
 			a.unsubscribe(src)
 		}
 	})
-	switch {
-	case open:
-		a.layers.menu = src.ID
-	case a.layers.menu == src.ID:
-		a.layers.menu = ""
-	}
+	a.layers.menu = keepOpen(a.layers.menu, slot, open)
 	return t
 }
 
@@ -107,7 +109,7 @@ func (a *App) menuItem(c *ui.Context, it ui.Element, label string, danger bool, 
 func (a *App) openExternal(c *ui.Context, raw string) {
 	u, err := web.ParseURL(raw, nil)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Username != "" || u.Password != "" {
-		a.fail("此地址不可用，未打开外部网站。")
+		a.fail(locales.ErrorAddressNotOpened())
 		return
 	}
 	c.Services().OpenURL(u.Href())
@@ -120,7 +122,7 @@ func (a *App) unsubscribe(src *library.Source) {
 		if cur := a.current(); cur.kind == "author" && cur.id == id {
 			a.page, a.from, a.came, a.left = page{kind: "home"}, nil, nil, nil
 		}
-		a.notify(fmt.Sprintf("已取消订阅 %s", name), face, library.SetSubscription{ID: id, Subscribed: true})
+		a.notify(locales.NoticeUnfollowed(name), face, library.SetSubscription{ID: id, Subscribed: true})
 	})
 }
 
@@ -128,24 +130,6 @@ func (a *App) unsubscribe(src *library.Source) {
 func (a *App) fail(text string) {
 	a.errText = text
 	a.toast.add(toastItem{text: text, err: true})
-}
-
-// The shortcut sheet: a reference, not a modal.
-var shortcuts = []struct {
-	keys []string
-	text string
-}{
-	{[]string{"J", "K"}, "在文章之间移动"},
-	{[]string{"↩"}, "打开文章"},
-	{[]string{"Esc"}, "返回，或退出筛选"},
-	{[]string{"S"}, "收藏或取消收藏"},
-	{[]string{"⌫"}, "收藏里：取消收藏这一篇"},
-	{[]string{"⌘", "⌫"}, "收藏里：取消收藏这位作者的全部"},
-	{[]string{"⌘", "Z"}, "撤销刚才的取消收藏、取消订阅或删除"},
-	{[]string{"O"}, "阅读时：打开原文"},
-	{[]string{"⌘", "E"}, "摘录选中的文字"},
-	{[]string{"⌘", "F"}, "搜索文章"},
-	{[]string{"?"}, "打开或关闭这张表"},
 }
 
 func (a *App) toggleSheet(from ui.Rect) {
@@ -175,9 +159,9 @@ func (a *App) buildLayers(c *ui.Context) {
 	open := a.layers.dialog != nil
 	a.centred(c, "dialog", &open, motion.Dialog(), func(panel ui.Element) {
 		// DESIGN.md dialog: elevated, 12px corners, the dialog shadow, 24 inside.
-		panel.Width(480).Padding(24).Shadow(0, 0, 0, 1, theme.Line).Shadow(0, 24, 64, 0, theme.ShadowDialog).Label("订阅一个博客")
+		panel.Width(480).Padding(24).Shadow(0, 0, 0, 1, theme.Line).Shadow(0, 24, 64, 0, theme.ShadowDialog).Label(locales.SubscribeTitle())
 	}, func() {
-		ui.Text(c, "订阅一个博客").FontSize(theme.Subtitle).FontWeight(600).LineHeight(1.4).Margin(0, 0, 8, 0)
+		ui.Text(c, locales.SubscribeTitle()).FontSize(theme.Subtitle).FontWeight(600).LineHeight(1.4).Margin(0, 0, 8, 0)
 		if f := a.layers.dialog; f != nil {
 			a.subscribeView(c, f)
 		}
@@ -190,19 +174,19 @@ func (a *App) buildLayers(c *ui.Context) {
 		}
 	}
 	a.centred(c, "sheet", &a.layers.sheet, motion.Sheet(), func(panel ui.Element) {
-		// A floating panel, 16 inside.
+		// A floating panel, 16 inside: the settings, the interface's language.
 		panel.Width(360).Padding(16).FontSize(theme.Body).LineHeight(1.5).InsetShadow(0, 0, 0, 1, theme.Line).
-			Shadow(0, 0, 0, 1, theme.ShadowEdge).Shadow(0, 12, 32, 0, theme.ShadowFloat).Label("快捷键")
+			Shadow(0, 0, 0, 1, theme.ShadowEdge).Shadow(0, 12, 32, 0, theme.ShadowFloat).Label(locales.Settings())
 	}, func() {
-		ui.Text(c, "快捷键").FontSize(theme.Item).FontWeight(600).LineHeight(1.45).Margin(0, 0, 12, 0)
-		ui.Grid(c).ColumnTracks(ui.FitContent(), ui.Fr(1)).GapX(16).GapY(8).AlignItems(ui.Center).TextColor(theme.Text2).Children(func() {
-			for _, k := range shortcuts {
-				ui.Row(c.Key(k.text)).Gap(4).Children(func() {
-					for _, key := range k.keys {
-						kbd(c, key)
-					}
-				})
-				ui.Text(c.Key(k.text+"·"), k.text).LineHeight(20.0 / 13)
+		ui.Row(c.Key("language")).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, locales.SettingsLanguage()).FontSize(theme.Item).FontWeight(600).LineHeight(1.45).Grow(1)
+			// Each language in its own words. ponytail: no way back to 跟随系统 here once one is
+			// chosen (System Settings' language of the app has it); add a third choice if readers miss it.
+			lang := map[bool]int{true: 0, false: 1}[strings.HasPrefix(i18n.Locale(), "zh")]
+			was := lang
+			a.segmented(c, "language", locales.SettingsLanguage(), []string{"中文", "English"}, &lang)
+			if lang != was && a.opt.SetLocale != nil {
+				a.opt.SetLocale([]string{"zh-Hans", "en"}[lang])
 			}
 		})
 	})
@@ -264,7 +248,7 @@ func (a *App) toasts(c *ui.Context) {
 		a.toast.undo = nil
 		if it.undo != nil {
 			undo, onUndo := it.undo, it.onUndo
-			t.Action, t.Timeout = "撤销", motion.UndoFor
+			t.Action, t.Timeout = locales.CommonUndo(), motion.UndoFor
 			run := func() {
 				a.toast.undo = nil
 				if onUndo != nil {
@@ -278,7 +262,7 @@ func (a *App) toasts(c *ui.Context) {
 	}
 	a.toast.queue = nil
 	ui.ToastViewportBase(c, func(viewport ui.Element, toasts []ui.Toast) {
-		viewport.Padding(0, 0, 24, 0).Justify(ui.End).AlignItems(ui.Center).Gap(8).Label("通知")
+		viewport.Padding(0, 0, 24, 0).Justify(ui.End).AlignItems(ui.Center).Gap(8).Label(locales.NoticesRegion())
 		for _, t := range toasts {
 			it, _ := t.Data.(toastItem)
 			tb := ui.ToastBase(c, t)
@@ -307,7 +291,7 @@ func (a *App) toasts(c *ui.Context) {
 					}
 					act.Children(func() { ui.Text(c, t.Action).TextColor(theme.Accent) })
 				}
-				cl := tb.CloseButton().Label("关闭提示").Size(24, 24).Radius(6).Center().FocusRing(false)
+				cl := tb.CloseButton().Label(locales.NoticeClose()).Size(24, 24).Radius(6).Center().FocusRing(false)
 				if cl.Hovered() {
 					cl.Background(theme.Hover)
 				}

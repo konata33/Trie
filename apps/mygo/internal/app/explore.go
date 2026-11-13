@@ -14,6 +14,7 @@ import (
 	xdraw "golang.org/x/image/draw"
 
 	"trie/internal/explore"
+	"trie/internal/locales"
 	"trie/internal/motion"
 	"trie/internal/theme"
 	"trie/internal/web"
@@ -58,7 +59,11 @@ type exWork struct {
 func (w exWork) key() string { return w.entry.ID + "#" + strconv.Itoa(w.index) }
 
 func (w exWork) post() explore.Post {
-	return explore.Post{Title: w.title, URL: w.url, PublishedAt: w.publishedAt}
+	p := explore.Post{Title: w.title, URL: w.url, PublishedAt: w.publishedAt}
+	if w.index < len(w.entry.Works) {
+		p.Kinds = w.entry.Works[w.index].Kinds
+	}
+	return p
 }
 
 // exFresh is a writer's latest post, for the writing room's front page.
@@ -76,18 +81,6 @@ type exPic struct {
 	bands map[bandKey]*ui.Bitmap
 	at    time.Time  // when it came, for its fade (set on the first frame that shows it)
 	dots  []ui.Color // its three main colours (palette)
-}
-
-// exOpen is an author's panel and the card it was opened from: "site" (a
-// card's surface grows into the panel) or "who" (a byline, which the panel
-// grows out of).
-type exOpen struct {
-	id, from string
-	opener   ui.Rect // the byline, for "who"
-	kbd      bool    // opened, or closed, from the keys: it is simply there or gone
-	run      uint64
-	focus    bool      // the close button takes the focus
-	closedAt time.Time // when it was closed: it goes as it closes
 }
 
 // roomMove is the rooms on their spring, from where they were toward room
@@ -158,15 +151,12 @@ type exploreState struct {
 	auras    map[auraKey]*ui.Bitmap
 	px       float32       // the screen's pixels a DIP, as the last frame drew the rooms
 	loads    chan struct{} // work pictures come a few at a time
-	open     *exOpen
-	closing  string // the card the panel shrinks back into
-	closeAt  time.Time
-	busy     string // the source being subscribed or let go
+	busy     string        // the source being subscribed or let go
 	busyAt   time.Time
-	errors   map[string]string
 	fresh2   map[string]bool // a pill just pressed: no 取消订阅 hint until the pointer leaves
 	live     string
-	focus    string // "close", "card:<id>", "post:<url>", "door"
+	focus    string // "card:<id>", "who:<id>", "post:<url>", "door"
+	opener   string // what opened the author's page last opened from here: the focus going back by the keys
 	prefetch struct {
 		url, entry string
 		at         time.Time
@@ -176,8 +166,10 @@ type exploreState struct {
 	// flying back to them.
 	faces map[string]ui.Rect
 
-	sheet      *exOpen              // the panel showing: the open one, or the one closing
-	landed     map[string]time.Time // cards whose surface landed back, for their words
+	people     map[string]*exPerson // the people not subscribed to, as their pages show them
+	kinds      map[string][]exWork  // the galleries' works by what they are shelved under, newest first
+	kindOf     map[string][]string  // and what each work is shelved under, by its address
+	walls      map[string]*kindWall // the kinds' pages
 	pills      map[string]*pillState
 	hoverPost  string    // the post under the pointer
 	leadHeld   bool      // the lead is pointed at, in focus or out at the edge
@@ -196,9 +188,9 @@ type exploreState struct {
 }
 
 func newExploreState() *exploreState {
-	return &exploreState{shown: [2]int{siteBatch, coverBatch}, pics: map[string]*exPic{}, errors: map[string]string{},
+	return &exploreState{shown: [2]int{siteBatch, coverBatch}, pics: map[string]*exPic{},
 		fresh2: map[string]bool{}, turns: map[string]*pickTurns{}, faces: map[string]ui.Rect{}, loads: make(chan struct{}, 4),
-		landed: map[string]time.Time{}, pills: map[string]*pillState{}}
+		pills: map[string]*pillState{}}
 }
 
 // ExploreChanged takes Explore's background read in (onExploreChanged): an
@@ -210,15 +202,12 @@ func (a *App) ExploreChanged() {
 	}
 }
 
-// exploreUnread is what the page says when the list could not be read.
-const exploreUnread = "推荐目录没能打开，稍后再试一次。"
-
 // loadExplore reads the list (loadExplore), its icons and small captures
 // decoded off the window's thread.
 func (a *App) loadExplore() {
 	ex, svc := a.ex, a.opt.Explore
 	if svc == nil {
-		ex.failed = "探索暂时不可用"
+		ex.failed = locales.ExploreUnavailable()
 		return
 	}
 	ex.req++
@@ -249,7 +238,7 @@ func (a *App) loadExplore() {
 			ex.loading = false
 			if err != nil {
 				if !ex.loaded {
-					ex.failed = exploreUnread
+					ex.failed = locales.ExploreUnread()
 				}
 				return
 			}
@@ -323,6 +312,15 @@ func (ex *exploreState) derive() {
 		}
 	}
 	slices.SortStableFunc(ex.works, func(x, y exWork) int { return cmpDesc(exTime(x.publishedAt), exTime(y.publishedAt)) })
+	ex.kinds, ex.kindOf = map[string][]exWork{}, map[string][]string{}
+	for _, w := range ex.works {
+		for _, k := range w.entry.Works[w.index].Kinds {
+			ex.kinds[k] = append(ex.kinds[k], w)
+		}
+		if ks := w.entry.Works[w.index].Kinds; len(ks) > 0 {
+			ex.kindOf[w.url] = ks
+		}
+	}
 	// The lead and the frames take works from as many galleries as possible, newest first.
 	var queues [][]exWork
 	for _, e := range ex.sites {
@@ -407,9 +405,6 @@ func (ex *exploreState) derive() {
 		}
 	}
 	ex.lead = min(ex.lead, max(0, len(ex.leads)-1))
-	if ex.open != nil && ex.find(ex.open.id) == nil {
-		ex.open = nil
-	}
 }
 
 func cmpDesc(x, y float64) int {
@@ -643,59 +638,6 @@ func glow(e *explore.Entry) ui.Color {
 // isPress tells a publication, which shows a square mark among the writers.
 func isPress(e *explore.Entry) bool { return strings.HasPrefix(e.Section, "设计写作") }
 
-// dateLabel is a list's date: 11月4日 this year, 2025年11月4日 before.
-func dateLabel(v *string) string {
-	if v == nil || *v == "" {
-		return "未提供日期"
-	}
-	s := *v
-	var y, m, d int
-	if n := len(s); (n == 4 || n == 7 || n == 10) && digitsAt(s, 0, 4) && (n == 4 || s[4] == '-' && digitsAt(s, 5, 2)) && (n < 10 || s[7] == '-' && digitsAt(s, 8, 2)) {
-		y = atoi(s[:4])
-		if n >= 7 {
-			m = atoi(s[5:7])
-		}
-		if n == 10 {
-			d = atoi(s[8:10])
-		}
-	} else {
-		ms, ok := web.JSDateParse(s)
-		if !ok {
-			return "未提供日期"
-		}
-		t := local(ms)
-		y, m, d = t.Year(), int(t.Month()), t.Day()
-	}
-	out := ""
-	if !(y == time.Now().Year() && m > 0) {
-		out = strconv.Itoa(y) + "年"
-	}
-	if m > 0 {
-		out += strconv.Itoa(m) + "月"
-		if d > 0 {
-			out += strconv.Itoa(d) + "日"
-		}
-	}
-	return out
-}
-
-func digitsAt(s string, at, n int) bool {
-	for i := at; i < at+n; i++ {
-		if s[i] < '0' || s[i] > '9' {
-			return false
-		}
-	}
-	return true
-}
-
-func atoi(s string) int {
-	n := 0
-	for i := 0; i < len(s); i++ {
-		n = n*10 + int(s[i]-'0')
-	}
-	return n
-}
-
 // --- The page.
 
 // exGeometry is the page's measures at the content area's width: the
@@ -749,19 +691,17 @@ func (a *App) explorePage(c *ui.Context, live bool) {
 			ex.enter = false
 		}
 	}
-	held := ex.open != nil
-	root := ui.Box(c.Key("explore")).Fill().Label("探索")
+	root := ui.Box(c.Key("explore")).Fill().Label(locales.TabExplore())
 	root.Children(func() {
 		sc := ui.Scroll(c.Key("scroll")).TrackScroll(&ex.scroll).Fill().Scrollbars(false)
 		sc.Children(func() {
-			ui.Column(c.Key("issue")).FillWidth().Padding(exTop, exPad, exFoot, exPad).IgnoreInput(held).Children(func() {
+			ui.Column(c.Key("issue")).FillWidth().Padding(exTop, exPad, exFoot, exPad).Children(func() {
 				a.rooms(c, g, live)
 			})
 		})
-		if live && !held {
+		if live {
 			a.scrolling = &ex.scroll
 		}
-		a.exploreLayer(c, g, live)
 	})
 
 	if live {
@@ -776,8 +716,8 @@ func (a *App) exploreWaiting(c *ui.Context) {
 	ex := a.ex
 	ui.Column(c.Key("issue-waiting")).Fill().Padding(exTop, exPad, exFoot, exPad).Children(func() {
 		if ex.failed != "" {
-			a.emptyStateAlert(c, "unreachable", "推荐暂时读不出来", ex.failed, func() {
-				if a.linkButton(c, "retry", "重试", true, false).Clicked() {
+			a.emptyStateAlert(c, "unreachable", locales.ExploreErrorTitle(), ex.failed, func() {
+				if a.linkButton(c, "retry", locales.CommonTryAgain(), true, false).Clicked() {
 					ex.failed = ""
 					a.loadExplore()
 				}
@@ -793,7 +733,7 @@ func (a *App) exploreWaiting(c *ui.Context) {
 			ex.shownAt = now
 		}
 		ui.Column(c.Key("loading")).AlignItems(ui.Center).MaxWidth(360).AlignSelf(ui.Center).Margin(a.area.H*0.2, 0, 0, 0).
-			Role(ui.RoleStatus).Label("正在读取推荐…").Children(func() { a.pictogram(c, "loading") })
+			Role(ui.RoleStatus).Label(locales.ExploreLoading()).Children(func() { a.pictogram(c, "loading") })
 	})
 }
 
@@ -893,7 +833,7 @@ func (a *App) rooms(c *ui.Context, g exGeometry, live bool) {
 		ex.x = x
 		// Pointing at the other room's edge draws the page toward it.
 		lean := float32(0)
-		peekHot := !both && ex.open == nil && ex.peekHot
+		peekHot := !both && ex.peekHot
 		if peekHot && !a.still(c) {
 			lean = map[int]float32{design: -12, writing: 12}[ex.room]
 		}
@@ -916,12 +856,12 @@ func (a *App) rooms(c *ui.Context, g exGeometry, live bool) {
 func (a *App) room(c *ui.Context, g exGeometry, room int, live, both bool, p float32, peekHot bool) {
 	ex := a.ex
 	on := room == ex.room
-	r := ui.Column(c.Key(room)).Width(g.w).Shrink(0).Role(ui.RoleRegion).Label(map[int]string{design: "设计", writing: "写作"}[room])
+	r := ui.Column(c.Key(room)).Width(g.w).Shrink(0).Role(ui.RoleRegion).Label(map[int]string{design: locales.ExploreDesign(), writing: locales.ExploreWriting()}[room])
 	// The room away is cut back to its front page, a step dimmer.
 	if !on && !both {
 		r.MaxHeight(g.front).ClipY()
 	}
-	if !on || ex.open != nil {
+	if !on {
 		r.IgnoreInput(true).AccessHidden(!on)
 	}
 	target := float32(0.6)
@@ -994,6 +934,7 @@ func (a *App) room(c *ui.Context, g exGeometry, room int, live, both bool, p flo
 		}
 		part.Children(func() {
 			if room == design {
+				a.kindShelf(c, g)
 				a.siteStream(c, g, live && on)
 			} else {
 				a.coverStream(c, g, live && on)
@@ -1026,15 +967,12 @@ func dim(c *ui.Context, o float32) {
 // as the front page.
 func (a *App) door(c *ui.Context, g exGeometry) {
 	ex := a.ex
-	label := map[int]string{design: "去写作：博主的最新文章", writing: "回到设计：设计网站和作品"}[ex.room]
+	label := map[int]string{design: locales.ExploreGoToWriting(), writing: locales.ExploreBackToDesign()}[ex.room]
 	b := ui.ButtonBase(c.Key("door")).Label(label).Absolute().Top(0).Width(exPeek + exPad).Height(g.front).FocusRing(false).ZIndex(2)
 	if ex.room == design {
 		b.Right(0)
 	} else {
 		b.Left(0)
-	}
-	if ex.open != nil {
-		b.IgnoreInput(true)
 	}
 	if ex.focus == "door" {
 		ex.focus = ""
@@ -1075,7 +1013,7 @@ func (a *App) exploreWheel(ev ui.InputEvent, g exGeometry) bool {
 			s.axis = 'x'
 		}
 	}
-	if s.axis != 'x' || ex.open != nil {
+	if s.axis != 'x' {
 		return false
 	}
 	// While the rooms are still on their spring, the tail of the same swipe
@@ -1139,7 +1077,7 @@ func (a *App) enterRoom(c *ui.Context, next int, kbd bool, velocity float32) {
 		return
 	}
 	ex.enter = false
-	ex.live = map[int]string{writing: "写作：博主的最新文章", design: "设计：设计网站和作品"}[next]
+	ex.live = map[int]string{writing: locales.ExploreInWriting(), design: locales.ExploreInDesign()}[next]
 	// Focus inside the room going away would be lost once it turns inert; it moves to the way back instead.
 	if ex.focusIn[ex.room] {
 		ex.focus = "door"

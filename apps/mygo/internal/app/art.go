@@ -12,6 +12,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
+	"trie/internal/locales"
 	"trie/internal/motion"
 	"trie/internal/theme"
 )
@@ -37,7 +38,7 @@ type glyph struct{ ink, accent *ui.SVG }
 var glyphs = sync.OnceValue(func() map[string]glyph {
 	m := map[string]glyph{}
 	for _, name := range []string{"home", "explore", "clips", "favorites", "add", "minus", "refresh", "search", "close", "back", "forward",
-		"openOriginal", "openArrow", "more", "check", "brokenImage", "play", "trash", "copy", "textSize", "time"} {
+		"openOriginal", "openArrow", "more", "check", "brokenImage", "play", "trash", "copy", "textSize", "time", "settings"} {
 		g := glyph{ink: artSVG("icon-" + name)}
 		if _, err := artFiles.Open("art/icon-" + name + "-accent.svg"); err == nil {
 			g.accent = artSVG("icon-" + name + "-accent")
@@ -116,6 +117,7 @@ var nudges = map[string]nudge{
 	"favorites":    {grow: 0.4, ox: 0.5, oy: 0.5},   // the centre swells
 	"more":         {grow: 0.4, ox: 0.5, oy: 0.5},   // the middle dot swells
 	"refresh":      {turn: 30, ox: 0.5, oy: 0.5},    // the arrow runs on round the ring
+	"settings":     {x: 0.125},                      // the upper knob slides along its line
 	"search":       {turn: 40, ox: 0.44, oy: 0.456}, // the glint sweeps round the lens
 	"openOriginal": {x: 0.125, y: -0.125},           // the arrow leaves its box
 	"openArrow":    {x: 0.125, y: -0.125},           // and leaves
@@ -196,7 +198,7 @@ func (a *App) pictogram(c *ui.Context, name string) ui.Element {
 var loadingMark = sync.OnceValue(func() *ui.SVG { return artSVG("loading-mark") })
 
 func (a *App) loading(c *ui.Context, size float32) ui.Element {
-	ic := ui.Icon(c, loadingMark()).Size(size, size).Shrink(0).Role(ui.RoleProgress).Label("加载中")
+	ic := ui.Icon(c, loadingMark()).Size(size, size).Shrink(0).Role(ui.RoleProgress).Label(locales.CommonLoading())
 	if a.still(c) {
 		return ic.Opacity(0.35 + 0.65*breathe(ic.Loop("breathe", 2*motion.LoadingBreath, ui.Linear)))
 	}

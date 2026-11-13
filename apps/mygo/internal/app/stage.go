@@ -1,11 +1,11 @@
 package app
 
 import (
-	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
 
+	"trie/internal/locales"
 	"trie/internal/motion"
 	"trie/internal/reader"
 	"trie/internal/theme"
@@ -77,15 +77,26 @@ func (a *App) current() page {
 	return a.page
 }
 
-// tabOf is the sidebar tab the page is under: an author's
-// page is Home's.
+// tabOf is the sidebar tab the page is under: an author's page or a kind's
+// is the tab's it was opened from, Home's from the sidebar.
 func (a *App) tabOf() string {
 	switch p := a.current(); p.kind {
-	case "author", "reader":
+	case "author", "reader", "kind":
+		if len(a.from) > 0 && a.from[0].kind != "author" && a.from[0].kind != "reader" {
+			return a.from[0].kind
+		}
 		return "home"
 	default:
 		return p.kind
 	}
+}
+
+// backTo is the page going back goes to: Home's, from the sidebar's.
+func (a *App) backTo() page {
+	if n := len(a.from); n > 0 {
+		return a.from[n-1]
+	}
+	return page{kind: "home"}
 }
 
 // tab goes to a sidebar tab; on it already, an open article closes at once.
@@ -94,8 +105,8 @@ func (a *App) tab(c *ui.Context, kind string) {
 	cur := a.current()
 	if cur.kind == kind {
 		switch {
-		case a.page.kind == "reader" && kind == "home" && isTrial(a.page.id):
-			a.back(c) // a post opened from 首页 goes back the way its own back does (closeTrial)
+		case a.page.kind == "reader" && kind == "home" && a.trials[a.page.id] != nil:
+			a.back(c) // a post of Explore's opened from 首页 goes back the way its own back does (closeTrial)
 		case a.page.kind == "reader":
 			a.goTo(c, cur, motion.Back, a.from[:len(a.from)-1]).noMotion()
 		}
@@ -132,17 +143,30 @@ func (a *App) openAuthor(c *ui.Context, id string) {
 	a.hoverAuthor = ""
 	m := a.goTo(c, page{"author", id}, motion.Deep, []page{{kind: "home"}})
 	if m != nil && !m.kbd && !a.still(c) {
-		a.fly("name:"+id, au.src.DisplayName, page{}, m.to, sideName, authorName, 24.0/13, motion.Deep)
+		a.fly("name:"+id, au.src.DisplayName, page{}, m.to, sideName, authorName, float32(theme.Headline)/theme.Body, motion.Deep)
 	}
 }
 
-// open goes into an article from its row: the row's ground spreads into
-// the article's page and the title travels to the headline (底色先动).
-func (a *App) open(c *ui.Context, id string, row ui.Rect) { a.openAs(c, id, row, rowTitle, theme.Item) }
+// open goes into an article from its card on an author's page: the card's
+// ground spreads into the article's page and the title travels to the
+// headline as the card last drew it (底色先动).
+func (a *App) open(c *ui.Context, id string, card ui.Rect) {
+	look, ok := a.looks[id]
+	if !ok {
+		look = titleLook{tileTitle(false), theme.Subtitle}
+	}
+	a.openAs(c, id, card, look.style, look.size)
+}
 
 // openAs opens an article from row, whose title is drawn as style draws it
 // at size: a list's row, a card in 收藏, a passage's card in 摘录.
 func (a *App) openAs(c *ui.Context, id string, row ui.Rect, style func(*ui.Context, string) ui.Element, size float32) {
+	// A post an unsubscribed person's page lists is kept in the library as it opens.
+	if a.article(id) == nil {
+		if t := a.listedPost(id); t != nil {
+			a.keep(&t.entry, t.post)
+		}
+	}
 	art := a.article(id)
 	if art == nil {
 		return
@@ -183,8 +207,12 @@ func (a *App) back(c *ui.Context) {
 	case m == nil || !m.kbd:
 	case to.kind == "home":
 		a.homeSt().focus = left.id // the article's row, or the post's opener
-	case isTrial(left.id):
-		a.ex.focus = "post:" + strings.TrimPrefix(left.id, "explore:")
+	case to.kind == "explore" && (left.kind == "author" || left.kind == "kind"):
+		a.ex.focus = a.ex.opener
+	case (to.kind == "explore" || to.kind == "kind") && left.kind == "reader":
+		if art := a.article(left.id); art != nil {
+			a.ex.focus = "post:" + art.URL
+		}
 	}
 	if m == nil || m.kbd {
 		return
@@ -192,8 +220,8 @@ func (a *App) back(c *ui.Context) {
 	still := a.still(c)
 	switch left.kind {
 	case "reader":
-		if isTrial(left.id) {
-			// Back to Explore it just crosses; from the keys, the focus goes back to the post.
+		if to.kind == "explore" || to.kind == "kind" || a.trials[left.id] != nil {
+			// Back to Explore, or to an Explore post's row on 首页, it just crosses; from the keys, the focus goes back to the post.
 			break
 		}
 		art := a.article(left.id)
@@ -204,10 +232,11 @@ func (a *App) back(c *ui.Context) {
 		// the row is laid out; without one, it melts where it is.
 		a.lay, a.layRow = &motion.Lay{Ground: motion.Gather, From: a.paper(), Run: a.run, Still: still}, left.id
 	case "author":
-		if !still {
+		// Back to the sidebar the name goes home to its row; elsewhere the page just crosses.
+		if !still && to.kind == "home" && a.exPersonOf(left.id) == nil {
 			if au := a.writer(left.id); au != nil {
 				m.chip = left.id
-				a.fly("name:"+left.id, au.src.DisplayName, left, page{}, authorName, sideName, 13.0/24, motion.Back)
+				a.fly("name:"+left.id, au.src.DisplayName, left, page{}, authorName, sideName, float32(theme.Body)/theme.Headline, motion.Back)
 			}
 		}
 	}
@@ -219,13 +248,14 @@ type titleLook struct {
 	size  float32
 }
 
-// rowLook is how page p draws article id's title, when it shows it: an
-// author's rows, or a card of 收藏's as its last build drew it. 摘录 shows
+// rowLook is how page p draws article id's title, when it shows it: a card
+// on an author's page or 收藏 as its last build drew it. 摘录 shows
 // passages, not titles: the title goes with its page there.
 func (a *App) rowLook(p page, id string) (titleLook, bool) {
 	switch p.kind {
 	case "author":
-		return titleLook{rowTitle, theme.Item}, a.showsRow(p, id)
+		look, ok := a.looks[id]
+		return look, ok && a.showsRow(p, id)
 	case "favorites":
 		look, ok := a.looks[id]
 		art := a.article(id)
@@ -237,7 +267,7 @@ func (a *App) rowLook(p page, id string) (titleLook, bool) {
 	return titleLook{}, false
 }
 
-// showsRow reports whether page p shows a row for article id.
+// showsRow reports whether page p shows a card for article id.
 func (a *App) showsRow(p page, id string) bool {
 	if p.kind != "author" {
 		return false
@@ -306,9 +336,6 @@ func (a *App) column() float32 {
 }
 
 // The texts both pages show, as each side draws them.
-func rowTitle(c *ui.Context, s string) ui.Element {
-	return ui.Text(c, s).FontSize(theme.Item).LineHeight(22.0 / 15).FontWeight(500).LetterSpacing(0.005 * 15).TextColor(theme.Text).SingleLine().Ellipsis("…")
-}
 
 // headline is the reader's (reader.Headline), at the width the reader
 // gives it.
@@ -320,17 +347,17 @@ func sideName(c *ui.Context, s string) ui.Element {
 	return ui.Text(c, s).FontSize(theme.Body).LineHeight(20.0 / 13).TextColor(theme.Text2).SingleLine().Ellipsis("…")
 }
 
-// authorName is the head of an author's page, its lines 32
-// high as Chrome sets them (reader.Lines), in the room beside the face and
-// the menu.
+// authorName is the name at the head of an author's page, 32, its lines 40
+// high as Chrome sets them (reader.Lines), in the room the column leaves
+// between the portrait and the menu.
 func authorName(c *ui.Context, s string) ui.Element {
-	return reader.Lines(c, s, theme.ReaderColumn-56-18-30, ui.Font{Family: theme.Sans, Size: theme.Title, Weight: 600, LineHeight: 32.0 / 24}, -0.24, false).
+	return reader.Lines(c, s, theme.ReaderColumn-portrait-20-40, ui.Font{Family: theme.Sans, Size: theme.Headline, Weight: 650, LineHeight: 40.0 / 32}, -0.012*theme.Headline, false).
 		TextColor(theme.Text)
 }
 
 func titleOf(s string) string {
 	if s == "" {
-		return "未提取到标题"
+		return locales.CommonUntitled()
 	}
 	return s
 }
@@ -394,6 +421,8 @@ func (a *App) pageView(c *ui.Context, p page, from []page, live bool) {
 		a.authorPage(c, p.id, live)
 	case "explore":
 		a.explorePage(c, live)
+	case "kind":
+		a.kindPage(c, p.id, live)
 	case "favorites":
 		a.favoritesPage(c, p.id, live)
 	case "clips":

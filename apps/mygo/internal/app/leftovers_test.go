@@ -13,11 +13,10 @@ import (
 
 	"trie/internal/motion"
 	"trie/internal/reader"
-	"trie/internal/theme"
 )
 
 const (
-	lobePic   = "放大查看：style-equivalence 报告总览"
+	lobePic   = "查看大图：style-equivalence 报告总览"
 	lobeAlt   = "style-equivalence 报告总览"
 	asyncPost = "https://antfu.me/posts/async-sync-in-between"
 )
@@ -118,168 +117,6 @@ func TestPictureViewer(t *testing.T) {
 	}
 }
 
-// pull swipes n moves of dx a gap apart over the reader, as two fingers do.
-func pull(tt *ui.Tester, n int, dx float32, gap time.Duration) {
-	for range n {
-		tt.Scroll(700, 400, dx, 0)
-		tt.Advance(gap)
-	}
-}
-
-// The swipe back: a short pull holds the mark and settles
-// back; up and down scrolls; past the arm, letting go goes back; a flick
-// goes back; fast past the arm it goes at once, and the rest of the swipe
-// does not reach the page it lands on.
-func TestSwipeBack(t *testing.T) {
-	a, tt, rp := openLobehub(t)
-	bar := func() float32 {
-		acc, _ := tt.AccessByRole(ui.RoleToolbar, "阅读操作")
-		return acc.Bounds.X
-	}
-	x0 := bar()
-	s := &rp.swipe
-	pull(tt, 5, -10, 30*time.Millisecond)
-	if !s.pulling || s.x != 50 || a.page.kind != "reader" {
-		t.Fatalf("a short pull: holding %v at %v on %v", s.pulling, s.x, a.page)
-	}
-	if d := bar() - x0; d < 7 || d > 9 {
-		t.Errorf("the page goes 24·(1−e^(−50/120)) with the fingers: %v", d)
-	}
-	tt.Advance(400 * time.Millisecond)
-	if s.pulling || a.page.kind != "reader" || bar() != x0 {
-		t.Fatalf("let go short: it settles back, %v, %v, %v", s.pulling, a.page, bar()-x0)
-	}
-	// Up and down scrolls the reader, not the swipe.
-	tt.Advance(time.Second)
-	y := rp.r.Scroll.Y
-	tt.Scroll(700, 400, 2, 120)
-	tt.Advance(16 * time.Millisecond)
-	if rp.r.Scroll.Y <= y || s.pulling {
-		t.Errorf("a vertical scroll scrolls: %v → %v, pulling %v", y, rp.r.Scroll.Y, s.pulling)
-	}
-	// Slowly past the arm: armed, it goes back as the fingers let go.
-	tt.Advance(time.Second)
-	pull(tt, 11, -10, 30*time.Millisecond)
-	if !s.pulling || s.x < swipeArm || s.speed > swipeFlick || a.page.kind != "reader" {
-		t.Fatalf("slowly past the arm: holding %v at %v (%v/s) on %v", s.pulling, s.x, s.speed, a.page)
-	}
-	tt.Advance(150 * time.Millisecond)
-	if a.page != (page{"author", "innei"}) {
-		t.Fatalf("let go armed: back, on %v", a.page)
-	}
-	// A flick short of the arm goes back as the fingers let go.
-	tt.Advance(time.Second)
-	must(t, tt.Click(lobeTitle))
-	settle(tt)
-	pull(tt, 3, -15, 16*time.Millisecond)
-	if a.page.kind != "reader" || rp.swipe.x != 45 || rp.swipe.speed < swipeFlick {
-		t.Fatalf("a flick: on %v at %v (%v/s)", a.page, rp.swipe.x, rp.swipe.speed)
-	}
-	tt.Advance(150 * time.Millisecond)
-	if a.page != (page{"author", "innei"}) {
-		t.Fatalf("a flick goes back: on %v", a.page)
-	}
-	// Fast past the arm it goes at once; the rest of the swipe does not
-	// scroll the page it lands on, until it dies out.
-	tt.Advance(time.Second)
-	must(t, tt.Click(lobeTitle))
-	settle(tt)
-	pull(tt, 7, -15, 16*time.Millisecond)
-	if a.page != (page{"author", "innei"}) {
-		t.Fatalf("fast past the arm: back at once, on %v", a.page)
-	}
-	l := a.lists["innei"]
-	for range 6 {
-		tt.Scroll(700, 400, -8, 20)
-		tt.Advance(30 * time.Millisecond)
-	}
-	if l.scroll.Y != 0 {
-		t.Errorf("the swipe's momentum is held from the page: %v", l.scroll.Y)
-	}
-	tt.Advance(300 * time.Millisecond)
-	tt.Scroll(700, 400, 0, 60)
-	tt.Advance(16 * time.Millisecond)
-	if l.scroll.Y == 0 {
-		t.Error("once it dies out, the page scrolls")
-	}
-}
-
-// Under less motion the swipe moves nothing: the mark only fades in where
-// it rests and arms, and the swipe still goes back.
-func TestSwipeBackStill(t *testing.T) {
-	a, tt, rp := openLobehub(t)
-	a.Reduce = true
-	acc, _ := tt.AccessByRole(ui.RoleToolbar, "阅读操作")
-	pull(tt, 11, -10, 30*time.Millisecond)
-	now, _ := tt.AccessByRole(ui.RoleToolbar, "阅读操作")
-	if now.Bounds.X != acc.Bounds.X || !rp.swipe.pulling {
-		t.Fatalf("less motion: the page stays, %v → %v", acc.Bounds.X, now.Bounds.X)
-	}
-	tt.Advance(150 * time.Millisecond)
-	if a.page != (page{"author", "innei"}) {
-		t.Fatalf("less motion: armed, it goes back, on %v", a.page)
-	}
-}
-
-// A swipe that starts on a code block that can still scroll that way is the
-// code block's; one that cannot is the swipe's.
-func TestSwipeLeavesCode(t *testing.T) {
-	a, _ := newTestApp(t)
-	a.fontSize = theme.ReadingMax // its code is wider than the column at this size
-	tt := ui.NewTester(a.View, 1280, 850)
-	settle(tt)
-	a.Press("author:antfu")
-	tt.Frame()
-	settle(tt)
-	a.Press("open:" + asyncPost)
-	tt.Frame()
-	settle(tt)
-	rp := a.readers[asyncPost]
-	// Down the article to a code block wider than the column.
-	var x, y float32
-	for range 40 {
-		for yy := float32(120); yy < 800 && x == 0; yy += 8 {
-			if rp.r.ScrollsAside(700, yy, 1) {
-				x, y = 700, yy
-			}
-		}
-		if x != 0 {
-			break
-		}
-		rp.r.Scroll.Y += 600
-		tt.Frame()
-		settle(tt)
-	}
-	if x == 0 {
-		t.Skip("no code block wider than the column")
-	}
-	tt.Move(x, y)
-	// At its start it cannot scroll right-to-left: the swipe takes it.
-	tt.Scroll(x, y, -10, 0)
-	tt.Advance(16 * time.Millisecond)
-	if !rp.swipe.pulling {
-		t.Fatal("a code block at its start leaves the swipe its pull")
-	}
-	tt.Advance(time.Second)
-	// Scrolled along, it takes the swipe that starts on it.
-	for range 4 {
-		tt.Scroll(x, y, 20, 0)
-		tt.Advance(16 * time.Millisecond)
-	}
-	if !rp.r.ScrollsAside(x, y, -1) || rp.swipe.pulling {
-		t.Fatal("the code block scrolls along")
-	}
-	tt.Advance(time.Second)
-	for range 12 {
-		tt.Scroll(x, y, -10, 0)
-		tt.Advance(30 * time.Millisecond)
-	}
-	tt.Advance(200 * time.Millisecond)
-	if rp.swipe.pulling || a.page.kind != "reader" || rp.r.ScrollsAside(x, y, -1) {
-		t.Errorf("a swipe on a code block that scrolls back is its: pulling %v, on %v", rp.swipe.pulling, a.page)
-	}
-}
-
 // openOptions opens the reading options and reads from the middle of the
 // article.
 func openOptions(t *testing.T) (*App, *ui.Tester, *readerPage) {
@@ -302,37 +139,102 @@ func samePlace(t *testing.T, before, after reader.Position, k float32) {
 	}
 }
 
-// A new size crosses over in place: the old
-// text lets go where it was, the scroll waiting for it, while the new comes
-// in as far up as keeps the paragraph being read where it was; then the
-// scroll takes the shift. The wider measure likewise.
-func TestReflowKeepsPlace(t *testing.T) {
-	a, tt, rp := openOptions(t)
-	before, y0 := rp.r.Position(), rp.r.Scroll.Y
-	plus, _ := tt.Access("放大正文字号")
-	tt.ClickAt(center(plus.Bounds))
-	tt.Advance(50 * time.Millisecond)
-	if a.fontSize != 18 || rp.r.Scroll.Y != y0 {
-		t.Fatalf("crossing: size %v, the scroll waits at %v (%v)", a.fontSize, rp.r.Scroll.Y, y0)
+// A larger type size glides there, the text laid out anew each frame, and the
+// block being read stays where it showed the whole way, rather than the text
+// fading over to its new layout.
+// Flowing to a new measure, the words show in every frame, the one it ends in too: none is the bare page.
+func TestFlowNeverBlank(t *testing.T) {
+	_, tt, _ := openLobehub(t)
+	must(t, tt.Click("阅读选项"))
+	settle(tt)
+	text := image.Rect(300, 260, 1200, 840)
+	ink := func() float64 {
+		m := tt.Image()
+		var s float64
+		n := 0
+		for y := text.Min.Y; y < text.Max.Y; y += 2 {
+			for x := text.Min.X; x < text.Max.X; x += 2 {
+				s += float64(m.RGBAAt(x, y).G)
+				n++
+			}
+		}
+		return s / float64(n)
 	}
-	samePlace(t, before, rp.r.Position(), 18.0/17)
-	tt.Advance(100 * time.Millisecond)
-	if rp.r.Scroll.Y == y0 {
-		t.Fatal("the old text gone, the scroll takes the shift")
+	for _, b := range []string{"宽松", "舒适"} {
+		before := ink()
+		must(t, tt.Click(b))
+		for i := range 40 {
+			if v := ink(); v < 0.8*before {
+				t.Fatalf("%s, frame %d: the text area is %.1f bright, against %.1f before: the words did not show", b, i, v, before)
+			}
+			tt.Advance(16 * time.Millisecond)
+		}
+		settle(tt)
 	}
-	samePlace(t, before, rp.r.Position(), 18.0/17)
-	// 宽松.
+}
+
+func TestTypeSizeGlidesInPlace(t *testing.T) {
+	a, tt, rp := openLobehub(t)
+	r := rp.r
+	// The second heading at the guide: it is the block held.
+	hd := rp.content.Headings[1]
+	for range 40 {
+		y, _, _ := r.AnchorBox(hd.ID)
+		if y-r.Scroll.Y <= 100 {
+			break
+		}
+		tt.Scroll(700, 500, 0, 40)
+		tt.Advance(16 * time.Millisecond)
+	}
+	// A little back up brings the bar back, with 阅读选项 on it.
+	for range 8 {
+		tt.Scroll(700, 500, 0, -1.5)
+		tt.Advance(16 * time.Millisecond)
+	}
 	tt.Advance(time.Second)
-	before, y0 = rp.r.Position(), rp.r.Scroll.Y
-	must(t, tt.Click("宽松"))
-	tt.Advance(50 * time.Millisecond)
-	if !a.wide || rp.r.Scroll.Y != y0 {
-		t.Fatalf("wider: %v, the scroll waits at %v (%v)", a.wide, rp.r.Scroll.Y, y0)
+	place := func() float32 {
+		box, ok := tt.Find(hd.Text)
+		if !ok {
+			t.Fatalf("%q does not show", hd.Text)
+		}
+		return box.Y
 	}
-	tt.Advance(100 * time.Millisecond)
-	after := rp.r.Position()
-	if after.UnitID == nil || *after.UnitID != *before.UnitID {
-		t.Errorf("wider, the same paragraph at the guide: %v, then %v", before.UnitID, after.UnitID)
+	before := place()
+	must(t, tt.Click("阅读选项"))
+	settle(tt)
+	must(t, tt.Click("放大字号"))
+	from, between := r.Size, false
+	for range 30 {
+		tt.Advance(16 * time.Millisecond)
+		if r.Size > from && r.Size < a.fontSize {
+			between = true
+		}
+		if y := place(); y < before-1 || y > before+1 {
+			t.Fatalf("the block being read moved from %v to %v at size %v", before, y, r.Size)
+		}
+	}
+	settle(tt)
+	if !between || r.Size != a.fontSize {
+		t.Errorf("the size went %v → %v (target %v), through sizes between: %v", from, r.Size, a.fontSize, between)
+	}
+	if y := place(); y < before-1 || y > before+1 {
+		t.Errorf("settled, the block being read is at %v, not %v", y, before)
+	}
+	// A wider measure is laid out at once, the words flowing over to it (reader flow.go), and the block being read
+	// is where it was once they have.
+	before = place()
+	must(t, tt.Click("宽松"))
+	tt.Advance(16 * time.Millisecond)
+	tt.Advance(16 * time.Millisecond)
+	if !r.Flowing() || r.Width != a.column() {
+		t.Fatalf("wider: flowing %v, width %v (target %v)", r.Flowing(), r.Width, a.column())
+	}
+	settle(tt)
+	if r.Flowing() {
+		t.Error("the flow did not end")
+	}
+	if y := place(); y < before-1 || y > before+1 {
+		t.Errorf("flowed, the block being read is at %v, not %v", y, before)
 	}
 }
 
@@ -340,14 +242,14 @@ func TestReflowKeepsPlace(t *testing.T) {
 // under less motion it still crosses over, as it only fades.
 func TestReflowAtOnce(t *testing.T) {
 	a, tt, rp := openOptions(t)
-	plus, _ := tt.Access("放大正文字号")
+	plus, _ := tt.Access("放大字号")
 	tt.ClickAt(center(plus.Bounds))
 	tt.Advance(time.Second)
 	tt.Key(0, ui.KeyTab)
 	tt.Key(ui.Shift, ui.KeyTab)
 	tt.Advance(16 * time.Millisecond)
-	if !tt.Focused("放大正文字号") {
-		t.Fatal("the keys on 放大正文字号")
+	if !tt.Focused("放大字号") {
+		t.Fatal("the keys on 放大字号")
 	}
 	before, y0 := rp.r.Position(), rp.r.Scroll.Y
 	tt.Key(0, ui.KeySpace)
@@ -360,7 +262,7 @@ func TestReflowAtOnce(t *testing.T) {
 	a.Reduce = true
 	tt.Advance(time.Second)
 	before, y0 = rp.r.Position(), rp.r.Scroll.Y
-	minus, _ := tt.Access("缩小正文字号")
+	minus, _ := tt.Access("缩小字号")
 	tt.ClickAt(center(minus.Bounds))
 	tt.Advance(50 * time.Millisecond)
 	if a.fontSize != 18 || rp.r.Scroll.Y != y0 {
@@ -455,7 +357,7 @@ func TestLeftoverFrames(t *testing.T) {
 		_ = a
 	}
 	// A larger size, and the wider measure, read from the middle.
-	for _, k := range []struct{ name, control string }{{"reflow-size", "放大正文字号"}, {"reflow-wide", "宽松"}} {
+	for _, k := range []struct{ name, control string }{{"reflow-size", "放大字号"}, {"reflow-wide", "宽松"}} {
 		_, tt, rp := openLobehub(t)
 		must(t, tt.Click("阅读选项"))
 		settle(tt)
@@ -492,25 +394,6 @@ func TestLeftoverFrames(t *testing.T) {
 		}
 		writeSheet(t, filepath.Join(dir, "moon-wane.png"), frames)
 		writeGIF(t, filepath.Join(dir, "moon-wane.gif"), frames, 20*time.Millisecond)
-	}
-	// The swipe: a pull that settles back, and one that goes back.
-	{
-		a, tt, _ := openLobehub(t)
-		tt.Move(700, 400)
-		settle(tt)
-		record("swipe-settle", tt, 480*time.Millisecond, func() {
-			for range 6 {
-				tt.Scroll(700, 400, -12, 0)
-				tt.Advance(30 * time.Millisecond)
-			}
-		}, 0)
-		record("swipe-back", tt, 640*time.Millisecond, func() {
-			for range 10 {
-				tt.Scroll(700, 400, -12, 0)
-				tt.Advance(30 * time.Millisecond)
-			}
-		}, 0)
-		_ = a
 	}
 }
 
@@ -572,7 +455,7 @@ func TestShotFrames(t *testing.T) {
 	settle(tt)
 	rp := a.readers[id]
 	for range 3 { // the strip 200 below the top of the window, as the recorded capture has it
-		b, ok := tt.Find("Extrafazant 的页面截图")
+		b, ok := tt.Find("Extrafazant 的截图")
 		if !ok {
 			t.Fatal("no strip of shots")
 		}
@@ -583,7 +466,7 @@ func TestShotFrames(t *testing.T) {
 		tt.Frame()
 		settle(tt)
 	}
-	first, ok := tt.Access("放大查看：Loader and Hero Variable Font Interaction")
+	first, ok := tt.Access("查看大图：Loader and Hero Variable Font Interaction")
 	if !ok {
 		t.Fatal("the first screen does not show the first shot")
 	}
@@ -612,6 +495,7 @@ func TestWorkRest(t *testing.T) {
 	if dir == "" || path == "" || label == "" {
 		t.Skip("LEFTOVERS, SHOTWORK or REST not set")
 	}
+	pinNow(t)
 	const id = "https://awwwards.com/sites/extrafazant"
 	work, err := os.ReadFile(path)
 	must(t, err)
@@ -627,12 +511,12 @@ func TestWorkRest(t *testing.T) {
 	a.Press("open:" + id)
 	settle(tt)
 	rp := a.readers[id]
-	for _, s := range []string{"11月8日", "Extrafazant 的首屏", "Extrafazant 的页面截图"} { // at the top: the head's date, then the work
+	for _, s := range []string{"11月8日", "Extrafazant 的首屏", "Extrafazant 的截图"} { // at the top: the head's date, then the work
 		r, ok := tt.Find(s)
 		t.Logf("at the top, %s: %v %v", s, r, ok)
 	}
 	for range 3 {
-		b, ok := tt.Find("Extrafazant 的页面截图")
+		b, ok := tt.Find("Extrafazant 的截图")
 		if !ok {
 			t.Fatal("no strip of shots")
 		}
@@ -646,7 +530,7 @@ func TestWorkRest(t *testing.T) {
 	tt.Move(1275, 845)
 	settle(tt)
 	savePNG(t, filepath.Join(dir, "work-rest-mygo-"+label+".png"), tt.Image())
-	for _, s := range []string{"Extrafazant 的页面截图", "Loader and Hero Variable Font Interaction", "由 Dylan Brouwer 设计", "extrafazant.nl",
+	for _, s := range []string{"Extrafazant 的截图", "Loader and Hero Variable Font Interaction", "由 Dylan Brouwer 设计", "extrafazant.nl",
 		"荣誉", "评分", "总分", "设计", "可用性", "创意", "内容", "7.22", "类别", "标签", "技术", "配色", "#101010"} {
 		r, ok := tt.Find(s)
 		t.Logf("%s: %v %v", s, r, ok)
@@ -654,7 +538,7 @@ func TestWorkRest(t *testing.T) {
 	for _, n := range []struct {
 		role ui.Role
 		name string
-	}{{ui.RoleArticle, "Extrafazant · 正文"}, {ui.RoleGroup, "文章信息"}} {
+	}{{ui.RoleArticle, "Extrafazant，正文"}} {
 		acc, ok := tt.AccessByRole(n.role, n.name)
 		t.Logf("%s: %v %v", n.name, acc.Bounds, ok)
 	}

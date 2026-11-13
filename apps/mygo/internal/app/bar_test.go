@@ -30,7 +30,7 @@ func openLobehub(t *testing.T) (*App, *ui.Tester, *readerPage) {
 // area, -53 sent away.
 func barTop(t *testing.T, tt *ui.Tester) float32 {
 	t.Helper()
-	acc, ok := tt.AccessByRole(ui.RoleToolbar, "阅读操作")
+	acc, ok := tt.AccessByRole(ui.RoleToolbar, "阅读工具条")
 	if !ok {
 		t.Fatal("no reader bar")
 	}
@@ -177,37 +177,6 @@ func TestBarKeyboard(t *testing.T) {
 	}
 }
 
-// Once the headline has passed under the bar, the bar carries the title.
-func TestBarCarriesTheTitle(t *testing.T) {
-	_, tt, rp := openLobehub(t)
-	count := func() int {
-		n := 0
-		for _, s := range tt.Texts() {
-			if s == lobeTitle {
-				n++
-			}
-		}
-		return n
-	}
-	if n := count(); n != 1 || rp.titled {
-		t.Fatalf("at the top the title shows %d times, titled %v", n, rp.titled)
-	}
-	scrollBy(tt, 100)
-	if rp.titled {
-		t.Error("the bar takes the title before the headline has passed under it")
-	}
-	scrollBy(tt, 100) // the headline's foot (167) is now above the bar's (52)
-	scrollBy(tt, -10) // the bar comes back
-	if n := count(); n != 2 || !rp.titled {
-		t.Errorf("past the headline the title shows %d times, titled %v", n, rp.titled)
-	}
-	scrollBy(tt, 3000)
-	scrollBy(tt, -20)
-	if !rp.titled {
-		t.Error("far down the bar lost the title")
-	}
-}
-
 // The bar shows how far the article was read, as the library keeps it:
 // nothing at 0, the share while being read, 读到结尾 at the end.
 func TestBarProgress(t *testing.T) {
@@ -229,6 +198,33 @@ func TestBarProgress(t *testing.T) {
 	scrollBy(tt, -10)
 	if got := percent(); len(got) != 1 || got[0] != "读到结尾" {
 		t.Errorf("at the end (%.2f), the bar shows %q", progressOf(a.article(lobehub)), got)
+	}
+}
+
+// The bar's progress follows the reading as it goes, not the place the library keeps once it stops; a jump to the
+// end measures the end, though the body was not laid out there in the frame it jumped.
+func TestBarProgressFollowsReading(t *testing.T) {
+	a, tt, rp := openLobehub(t)
+	rp.r.Scroll.Y = 1e6
+	tt.Frame()
+	settle(tt)
+	if p := rp.measured.Progress; p != 1 {
+		t.Fatalf("at the end the reader measures %v read", p)
+	}
+	// Back up a little, in less time than the place takes to be kept.
+	for range 25 {
+		tt.Scroll(700, 500, 0, -80)
+		tt.Advance(16 * time.Millisecond)
+	}
+	live := share(float64(rp.measured.Progress))
+	if live >= 95 {
+		t.Fatalf("scrolled back only to %d%%", live)
+	}
+	if kept := progressOf(a.article(lobehub)); kept != 1 {
+		t.Fatalf("the library already keeps %v", kept)
+	}
+	if got := barProgress(tt); len(got) == 0 || got[0] != "读到 "+itoa(live)+"%" {
+		t.Errorf("scrolled back to %d%%, the bar says %q", live, got)
 	}
 }
 
@@ -281,7 +277,7 @@ func TestBarRecord(t *testing.T) {
 	settle(tt)
 	rp := a.readers[lobehub]
 	var log strings.Builder
-	fmt.Fprintf(&log, "Native (TestBarRecord), LobeHub, the scroll set then 2 s: the bar's top in the content area, away, lifted, whether it carries the title, the progress texts, the headline's foot.\n")
+	fmt.Fprintf(&log, "Native (TestBarRecord), LobeHub, the scroll set then 2 s: the bar's top in the content area, away, lifted, the progress texts.\n")
 	for _, s := range []struct {
 		name string
 		y    float32
@@ -289,8 +285,8 @@ func TestBarRecord(t *testing.T) {
 		rp.r.Scroll.Y = s.y
 		tt.Frame()
 		settle(tt)
-		fmt.Fprintf(&log, "%-8s top %v bar %v away %v lifted %v titled %v progress %q head %v\n", s.name, rp.r.Scroll.Y,
-			barTop(t, tt)-a.area.Y, rp.away, rp.lifted, rp.titled, barProgress(tt), rp.titleBottom-a.area.Y)
+		fmt.Fprintf(&log, "%-8s top %v bar %v away %v lifted %v progress %q\n", s.name, rp.r.Scroll.Y,
+			barTop(t, tt)-a.area.Y, rp.away, rp.lifted, barProgress(tt))
 		if s.name != "150" {
 			savePNG(t, filepath.Join(dir, "lobehub-"+s.name+"-mygo.png"), tt.Image())
 		}

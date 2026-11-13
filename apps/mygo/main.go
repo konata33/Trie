@@ -23,6 +23,10 @@ import (
 	"trie/internal/app"
 	"trie/internal/explore"
 	"trie/internal/library"
+	// The interface in English and Chinese: English, the app's own, for any
+	// reader whose system is not in Chinese (PRODUCT.md).
+	"trie/internal/locales"
+	"trie/internal/reader"
 	"trie/internal/reading"
 	"trie/internal/subscription"
 )
@@ -62,9 +66,9 @@ var errHeld = errors.New("another window of this app has the library open")
 
 // refuse says in a dialog why the library stays closed, and quits.
 func refuse(err error) {
-	title, detail := "资料库打不开", err.Error()
+	title, detail := locales.ErrorLibraryCantOpen(), err.Error()
 	if errors.Is(err, errHeld) {
-		title, detail = "资料库已经在另一个 Trie 里打开", "同一个资料库一次只能在一个 Trie 里打开。"
+		title, detail = locales.ErrorLibraryInUse(), locales.ErrorLibraryInUseDetail()
 	}
 	mygo.App.SetName("Trie")
 	mygo.App.WhenReady(func() {
@@ -118,6 +122,9 @@ func main() {
 		return
 	}
 	defer store.Close()
+	// English articles are set in New York, which macOS hides from apps by
+	// name (DESIGN.md Typography); before any text is laid out.
+	reader.RegisterSerif()
 	// win is the window while it is open: closed, the app stays in the Dock (keepOpen).
 	var win atomic.Pointer[mygo.Window]
 	// post runs fn on the main thread, where the window builds, and redraws the window if it is open.
@@ -154,6 +161,7 @@ func main() {
 		Explore:       ex,
 		Post:          post,
 		Refresh:       os.Getenv("TRIE_NO_REFRESH") == "",
+		SetLocale:     mygo.App.SetLocale,
 	})
 	if err != nil {
 		log.Fatal("trie: ", err)

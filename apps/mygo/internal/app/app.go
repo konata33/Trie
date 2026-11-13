@@ -11,6 +11,7 @@ import (
 
 	"trie/internal/explore"
 	"trie/internal/library"
+	"trie/internal/locales"
 	"trie/internal/motion"
 	"trie/internal/reader"
 	"trie/internal/reading"
@@ -37,16 +38,23 @@ type Options struct {
 	Sync bool
 	// Refresh reads the subscriptions once as the window opens.
 	Refresh bool
-	// Thumbs loads a list row's picture; nil uses the library and the
-	// network (thumb.go).
+	// Thumbs is the tests' stand-in for articles' pictures: set, the cards
+	// load none (keepPic); nil uses the library and the network (thumb.go).
 	Thumbs func(id string, index int) (*ui.Bitmap, error)
+	// SetLocale chooses the interface's language (mygo.App.SetLocale), from
+	// the settings panel. Nil, as in the tests, keeps dates in Chinese.
+	SetLocale func(tag string)
 }
 
 // page is what the content area shows: a sidebar tab (home, favorites,
 // explore, clips), an author's page or an article.
 type page struct{ kind, id string }
 
-var tabs = []struct{ kind, label, icon string }{{"home", "首页", "home"}, {"favorites", "收藏", "favorites"}, {"explore", "探索", "explore"}, {"clips", "摘录", "clips"}}
+var tabs = []struct {
+	kind  string
+	label func() string
+	icon  string
+}{{"home", locales.TabHome, "home"}, {"favorites", locales.TabFavorites, "favorites"}, {"explore", locales.TabExplore, "explore"}, {"clips", locales.TabClips, "clips"}}
 
 // App is the window's state; its view builds the interface from it.
 type App struct {
@@ -81,7 +89,6 @@ type App struct {
 	area    ui.Rect         // the content area, as the frame before laid it out
 
 	moonBack *moonBack // a list's moon waning as the article's reader is left
-	held     time.Time // a swipe went back: its momentum is held until it dies out
 	viewer   viewer    // a picture shown large
 
 	lists   map[string]*listState // an author's page by source ID
@@ -92,7 +99,6 @@ type App struct {
 	positions map[string]reader.Position
 	fontSize  float32 // the body's size, for the session
 	wide      bool    // 宽松
-	focused   bool    // 专注阅读: the sidebar slides away
 
 	refresh refreshState
 	fresh   map[string]bool    // authors with new articles from the last refresh
@@ -103,13 +109,13 @@ type App struct {
 	fav      *favState   // 收藏
 	clips    *clipsState // 摘录
 	ex       *exploreState
-	trials   map[string]*trial      // Explore's posts read in place, by reader ID
+	trials   map[string]*trial      // Explore's posts opened, by the library ID they are kept by
+	byURL    map[string]string      // the library's articles by every address they are known by (postID)
 	chipAt   map[string]ui.Rect     // the sidebar's faces, as the frame before laid them out
 	flights2 []*faceFlight          // faces flying to and from the sidebar
 	lights   map[string]time.Time   // places a face just landed on
 	parting  map[string]*partingRow // sidebar rows of authors just let go, kept a beat
 	faceLeft map[string]bool        // rows whose face flew off as they were let go
-	intros   map[string]string      // Explore's line about an author's site, by source ID
 
 	layers layers
 	toast  toastState
@@ -153,7 +159,7 @@ func New(opt Options) (*App, error) {
 		lists: map[string]*listState{}, readers: map[string]*readerPage{}, thumbs: map[string]*thumb{},
 		positions: map[string]reader.Position{}, fontSize: theme.ReadingSize, icons: map[string]*siteIcon{}, fresh: map[string]bool{},
 		ex: newExploreState(), trials: map[string]*trial{}, chipAt: map[string]ui.Rect{}, lights: map[string]time.Time{},
-		parting: map[string]*partingRow{}, faceLeft: map[string]bool{}, intros: map[string]string{}, shelfFaces: map[string]ui.Rect{},
+		parting: map[string]*partingRow{}, faceLeft: map[string]bool{}, shelfFaces: map[string]ui.Rect{},
 		looks: map[string]titleLook{}}
 	a.accept(lib)
 	return a, nil
@@ -230,6 +236,7 @@ func (a *App) observe(ev ui.InputEvent) {
 
 // View builds the window.
 func (a *App) View(c *ui.Context) {
+	hourCycle = c.Region().HourCycle
 	c.SetTheme(a.theme)
 	for len(a.waiting) > 0 {
 		fns := a.waiting
@@ -293,7 +300,6 @@ func (a *App) View(c *ui.Context) {
 		a.moonBack = nil // the page gone back to does not show its row
 	}
 	a.dragStrip(c, holes)
-	a.holdSwipe(c)
 	a.buildLayers(c)
 	// What Explore says as it changes (a room crossed, a subscription), for screen readers.
 	if a.ex.live != "" {
@@ -374,7 +380,7 @@ func (a *App) mutateOr(action library.LibraryAction, after, failed func()) {
 		return func() {
 			a.busy = false
 			if err != nil {
-				a.fail("未能保存更改，记录未更新。" + err.Error())
+				a.fail(locales.ErrorNotSaved(err.Error()))
 				if failed != nil {
 					failed()
 				}

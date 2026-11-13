@@ -447,6 +447,7 @@ func TestFavoritesKeyboard(t *testing.T) {
 // (or ⌘Z) puts the passage back; the card's title opens the article at
 // the passage and comes back into it.
 func TestClipsPage(t *testing.T) {
+	pinNow(t)
 	a, _ := newSeededApp(t)
 	tt := ui.NewTester(a.View, 1280, 850)
 	settle(tt)
@@ -475,7 +476,7 @@ func TestClipsPage(t *testing.T) {
 	}
 	tt.ClickAt(cardCopy(a))
 	tt.Frame()
-	if got := tt.Clipboard(); !strings.Contains(got, "> "+leadText) || !strings.Contains(got, "备注：验收要让人看得见") {
+	if got := tt.Clipboard(); !strings.Contains(got, "> "+leadText) || !strings.Contains(got, "想法：验收要让人看得见") {
 		t.Errorf("复制引文 copied %q", got)
 	}
 	if !tt.HasText("已复制") {
@@ -492,7 +493,7 @@ func TestClipsPage(t *testing.T) {
 	right, top := lead.X+lead.W, lead.Y
 	tt.ClickAt(right-16, top-12) // 删除, at the passage's corner
 	settle(tt)
-	if slices.ContainsFunc(a.lib.Clips, func(cl library.Clip) bool { return cl.ID == leadClip }) || !tt.HasText("摘录已删除") {
+	if slices.ContainsFunc(a.lib.Clips, func(cl library.Clip) bool { return cl.ID == leadClip }) || !tt.HasText("已删除摘录") {
 		t.Fatalf("delete: %d clips, %q", len(a.lib.Clips), tt.Texts())
 	}
 	tt.Key(ui.Cmd, ui.KeyZ)
@@ -678,12 +679,12 @@ func TestFavClipsSearchAndEmpty(t *testing.T) {
 	must(t, err)
 	a.accept(lib)
 	settle(tt)
-	if !tt.HasText("留住一句好文字") || !tt.HasText("摘下的段落，连同出处收在这里") {
+	if !tt.HasText("留住一句好文字") || !tt.HasText("摘下的段落连同出处，都收在这里。") {
 		t.Errorf("摘录 empty: %q", tt.Texts())
 	}
 	tt.Key(ui.Cmd, ui.Key2)
 	settle(tt)
-	if !tt.HasText("留一篇，慢慢读") || !tt.HasText("收藏的文章，会按作者收在这里") {
+	if !tt.HasText("留一篇，慢慢读") || !tt.HasText("收藏的文章按作者收在这里。") {
 		t.Errorf("收藏 empty: %q", tt.Texts())
 	}
 }

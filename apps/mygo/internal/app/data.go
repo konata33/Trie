@@ -3,7 +3,6 @@ package app
 import (
 	"bytes"
 	"encoding/base64"
-	"fmt"
 	"image"
 	"image/color"
 	_ "image/gif"
@@ -21,6 +20,7 @@ import (
 
 	"trie/internal/explore"
 	"trie/internal/library"
+	"trie/internal/locales"
 	"trie/internal/reader"
 	"trie/internal/web"
 )
@@ -37,6 +37,16 @@ type author struct {
 
 // derive works out what the pages show from the library.
 func (a *App) derive() {
+	// Every address an article is known by, for Explore's posts to find theirs (postID).
+	a.byURL = map[string]string{}
+	for i := range a.lib.Articles {
+		art := &a.lib.Articles[i]
+		for _, u := range append([]string{art.ID, art.URL}, art.Aliases...) {
+			if k, err := web.URLKey(u); err == nil {
+				a.byURL[k] = art.ID
+			}
+		}
+	}
 	subscribed := map[string]bool{}
 	for i := range a.lib.Sources {
 		s := &a.lib.Sources[i]
@@ -129,7 +139,12 @@ func byDate(x, y *library.Article) int {
 	return strings.Compare(x.Title, y.Title)
 }
 
+// writer is the author of page ID id: a subscribed one, or someone Explore
+// has who is not subscribed to.
 func (a *App) writer(id string) *author {
+	if p := a.exPersonOf(id); p != nil {
+		return p.au
+	}
 	for _, au := range a.authors {
 		if au.src.ID == id {
 			return au
@@ -139,6 +154,9 @@ func (a *App) writer(id string) *author {
 }
 
 func (a *App) source(id string) *library.Source {
+	if p := a.exPersonOf(id); p != nil {
+		return p.au.src
+	}
 	for i := range a.lib.Sources {
 		if a.lib.Sources[i].ID == id {
 			return &a.lib.Sources[i]
@@ -147,14 +165,14 @@ func (a *App) source(id string) *library.Source {
 	return nil
 }
 
+// article is article id: the library's, else the Explore post standing for
+// it until the library has it.
 func (a *App) article(id string) *library.Article {
+	if art := a.libArticle(id); art != nil {
+		return art
+	}
 	if t := a.trials[id]; t != nil {
 		return &t.art
-	}
-	for i := range a.lib.Articles {
-		if a.lib.Articles[i].ID == id {
-			return &a.lib.Articles[i]
-		}
 	}
 	return nil
 }
@@ -162,7 +180,7 @@ func (a *App) article(id string) *library.Article {
 // sourceOf is the source an article shows under: the author page's it was
 // opened from, else its first subscribed one.
 func (a *App) sourceOf(art *library.Article) *library.Source {
-	if t := a.trials[art.ID]; t != nil {
+	if t := a.trials[art.ID]; t != nil && a.libArticle(art.ID) == nil {
 		return &t.src
 	}
 	ids := memberships(art)
@@ -181,7 +199,7 @@ func (a *App) sourceOf(art *library.Article) *library.Source {
 
 func nameOf(s *library.Source) string {
 	if s == nil {
-		return "未知来源"
+		return locales.CommonUnknownSource()
 	}
 	return s.DisplayName
 }
@@ -220,93 +238,14 @@ func litOf(art *library.Article) float32 {
 	return float32(max(0.06, 1-p))
 }
 
-func percentOf(art *library.Article) int { return min(99, int(math.Round(progressOf(art)*100))) }
+func percentOf(art *library.Article) int { return share(progressOf(art)) }
 
-// Dates, as the pages write them, in local time.
-func local(ms int64) time.Time { return time.UnixMilli(ms).In(time.Local) }
+// share is a progress as the whole percent read, 99 at most: 100 only says the end, which the pages say in words.
+func share(p float64) int { return min(99, int(math.Round(p*100))) }
 
-// ago is how long ago ms was: 今天, 3 天前, 2 个月前, 1 年前.
-func ago(ms int64) string {
-	days := max(0, int(math.Round(float64(time.Now().UnixMilli()-ms)/864e5)))
-	switch {
-	case days == 0:
-		return "今天"
-	case days < 31:
-		return fmt.Sprintf("%d 天前", days)
-	case days < 365:
-		return fmt.Sprintf("%d 个月前", int(math.Round(float64(days)/30)))
-	}
-	return fmt.Sprintf("%d 年前", int(math.Round(float64(days)/365)))
-}
-
+// dateOnly tells a date written alone, 2026-11-04.
 var dateOnly = func(s string) bool {
 	return len(s) == 10 && s[4] == '-' && s[7] == '-'
-}
-
-// dayTime is the moment a date shows as: a date alone is that day's
-// midnight here, a time is itself.
-func dayTime(v string) (time.Time, bool) {
-	if len(v) < 10 || v[4] != '-' || v[7] != '-' {
-		return time.Time{}, false
-	}
-	if dateOnly(v) {
-		t, err := time.ParseInLocation("2006-01-02", v, time.Local)
-		return t, err == nil
-	}
-	ms, ok := web.JSDateParse(v)
-	if !ok {
-		return time.Time{}, false
-	}
-	return local(ms), true
-}
-
-// metaDate is the reader's: 11月4日 this year, 2025年11月4日 before.
-func metaDate(v string) string {
-	t, ok := dayTime(v)
-	if !ok {
-		return formatDate(v)
-	}
-	if t.Year() == time.Now().Year() {
-		return fmt.Sprintf("%d月%d日", t.Month(), t.Day())
-	}
-	return fmt.Sprintf("%d年%d月%d日", t.Year(), t.Month(), t.Day())
-}
-
-// dayOf is the day a piece is dated, as a signature gives it.
-func dayOf(v *string) string {
-	if v == nil {
-		return ""
-	}
-	t, ok := dayTime(*v)
-	if !ok {
-		return ""
-	}
-	return fmt.Sprintf("%d年%d月%d日", t.Year(), t.Month(), t.Day())
-}
-
-// fullDate is 文章信息's: 2026年11月4日 19:08, the day alone for a date.
-func fullDate(v *string) string {
-	if v == nil || *v == "" {
-		return "未提供日期"
-	}
-	if dateOnly(*v) {
-		return dayOf(v)
-	}
-	t, ok := dayTime(*v)
-	if !ok {
-		return formatDate(*v)
-	}
-	return fmt.Sprintf("%d年%d月%d日 %02d:%02d", t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute())
-}
-
-// formatDate is the dates' fallback (zh-CN, year, short month, day).
-func formatDate(v string) string {
-	ms, ok := web.JSDateParse(v)
-	if !ok {
-		return "未提供日期"
-	}
-	t := local(ms)
-	return fmt.Sprintf("%d年%d月%d日", t.Year(), t.Month(), t.Day())
 }
 
 func initial(s string) string {
@@ -316,14 +255,6 @@ func initial(s string) string {
 		return "?"
 	}
 	return strings.ToUpper(string(r))
-}
-
-func hostOf(u string) string {
-	p, err := web.ParseURL(u, nil)
-	if err != nil {
-		return u
-	}
-	return strings.TrimPrefix(p.Hostname(), "www.")
 }
 
 // siteIcon is a source's icon as the dark interface shows it:

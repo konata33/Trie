@@ -2,11 +2,12 @@ package reader
 
 import (
 	"net/url"
+	"regexp"
 	"strings"
-	"sync"
 	"unicode"
 	"unicode/utf8"
 
+	"trie/internal/locales"
 	"trie/internal/theme"
 
 	"github.com/egoist/mygo/ui"
@@ -44,6 +45,7 @@ const (
 	cjk       // Han, kana and their punctuation: drawn in PingFang SC, as the browser falls back to it
 	autospace // an ideograph meeting a Latin letter or digit: 1/8 em after it, as text-autospace: normal
 	halfwidth // closing punctuation before more punctuation, set half wide, as text-spacing-trim: normal
+	glyph     // the mark of the site the link after it goes to (glyph.go): one U+FFFC, an inline object
 )
 
 // run is a stretch of a paragraph's text in one style.
@@ -51,6 +53,7 @@ type run struct {
 	text  string
 	style style
 	href  string // an http(s) URL or a #fragment
+	glyph string // a glyph run's mark
 }
 
 // block is a block of the body. Margins are in ems of the body's text; the
@@ -68,7 +71,9 @@ type block struct {
 	code        *codeView
 	pic         *picture
 	rows        [][]*cell
+	numeric     []bool         // a table's columns of figures, set to the right
 	side        ui.ScrollState // a table's sideways scrolling
+	marker      *markerShape   // a paragraph's layout its links' grounds are drawn on
 	top, bottom float32
 }
 
@@ -91,8 +96,15 @@ type Body struct {
 	// end mark show: 约 3 分钟, 1,234 字.
 	Minutes int
 	Size    string
-	pics    []*picture
+	// Face is how its text is set, by its language.
+	Face Face
+	pics []*picture
 }
+
+// interactiveExample is the link the extractor puts where a page's
+// interactive example was (extract.go), as the library keeps it: shown in
+// the interface's language.
+const interactiveExample = "互动示例，在原网页查看"
 
 // skipped are the tags whose content never shows: the HTML of articles
 // stored without a document may still hold them, and the copy buttons an
@@ -119,6 +131,7 @@ type builder struct {
 	roles  bool // the tokens name roles (format 4); older ones name a light theme's colors
 	pics   []*picture
 	depth  int
+	face   Face // how the body is set (faceOf)
 }
 
 // Prepare makes the blocks of c: from its document, or else from its HTML. It decodes the pictures, so call it off the
@@ -135,13 +148,65 @@ func Prepare(c *Content) *Body {
 	} else {
 		nodes = parseHTML(c.HTML)
 	}
+	b.face = faceOf(nodes)
+	body.Face = b.face
 	f := &flow{b: b}
 	f.nodes(nodes, 0, "")
 	body.blocks = f.done()
+	settleHeadings(body.blocks)
 	body.pics = b.pics
 	body.Minutes, body.Size = readingTime(body.blocks)
 	decodePictures(b.pics)
 	return body
+}
+
+// headingStyle is how the body sets a heading of a level: its size over the body's text, its line height, and its
+// margins above and below, in ems of the body's text. A heading sits further from what comes before it than from
+// what it heads. Quiet headings take the secondary text colour.
+type headingStyle struct {
+	size, lineHeight, top, bottom float32
+	quiet                         bool
+}
+
+// headingStyles are the levels the body sets, 2 to 6 (settleHeadings): at 17, 24, 20, 17, 15 and 15.
+var headingStyles = [7]headingStyle{
+	2: {float32(theme.Title) / theme.ReadingSize, 1.35, 2.8, .7, false},
+	3: {float32(theme.Subtitle) / theme.ReadingSize, 1.4, 1.9, .5, false},
+	4: {1, 1.5, 1.6, .4, false},
+	5: {float32(theme.Item) / theme.ReadingSize, 1.5, 1.4, .3, true},
+	6: {float32(theme.Item) / theme.ReadingSize, 1.5, 1.4, .3, true},
+}
+
+// settleHeadings sets a body's headings by their place among its own: its highest level is set as level 2, the
+// article's sections, whether its author began them at h1 or at h3; the levels under it follow, down to 6.
+func settleHeadings(bs []*block) {
+	top := 7
+	walkBlocks(bs, func(b *block) {
+		if b.kind == Heading {
+			top = min(top, b.level)
+		}
+	})
+	walkBlocks(bs, func(b *block) {
+		if b.kind != Heading {
+			return
+		}
+		b.level = max(2, min(6, b.level-top+2))
+		s := headingStyles[b.level]
+		b.top, b.bottom = s.top, s.bottom
+	})
+}
+
+// walkBlocks calls fn on every block of bs, those in lists, quotes, figures and table cells too.
+func walkBlocks(bs []*block, fn func(*block)) {
+	for _, b := range bs {
+		fn(b)
+		walkBlocks(b.children, fn)
+		for _, row := range b.rows {
+			for _, cl := range row {
+				walkBlocks(cl.blocks, fn)
+			}
+		}
+	}
 }
 
 // flow gathers the blocks of a container; loose inline content becomes
@@ -152,6 +217,7 @@ type flow struct {
 	out   []*block
 	para  *block
 	space bool // the open paragraph is empty or ends in white space
+	glue  bool // a site's mark was just added: the words after it are joined to it
 }
 
 func (f *flow) open() *block {
@@ -222,8 +288,64 @@ func (f *flow) text(s string, st style, href string) {
 		}
 	}
 	if sb.Len() > 0 {
-		f.add(run{sb.String(), st, href})
+		text := sb.String()
+		if f.glue {
+			// A word joiner keeps the mark on the line of the link's first word.
+			text, f.glue = "\u2060"+text, false
+		}
+		f.add(run{text: text, style: st, href: href})
 	}
+}
+
+// magicLink is a link written as markdown-it-magic-link writes it, which some feeds leave as it is: {@user} or
+// {@user|Name}, a GitHub user; {Name|https://…}, a page.
+var magicLink = regexp.MustCompile(`\{@([A-Za-z0-9][A-Za-z0-9-]{0,38})(?:\|([^{}|\n]{1,80}))?\}|\{([^{}|@\n]{1,80})\|(https?://[^{}\s|]+)\}`)
+
+// magic adds text whose magic links become links: a user's to their GitHub page, under their name or else their
+// handle.
+func (f *flow) magic(s string, st style) {
+	at := 0
+	for _, m := range magicLink.FindAllStringSubmatchIndex(s, -1) {
+		var name, href string
+		if m[2] >= 0 {
+			name, href = s[m[2]:m[3]], "https://github.com/"+s[m[2]:m[3]]
+			if m[4] >= 0 {
+				name = s[m[4]:m[5]]
+			}
+		} else {
+			name, href = s[m[6]:m[7]], link(s[m[8]:m[9]])
+		}
+		if name = strings.TrimSpace(name); name == "" || href == "" {
+			continue
+		}
+		f.text(s[at:m[0]], st, "")
+		f.mark(href, st)
+		f.text(name, st, href)
+		at = m[1]
+	}
+	f.text(s[at:], st, "")
+}
+
+// mark adds the mark of the site href goes to, if it has one, before the link's words: outside the link, which does
+// not underline it.
+func (f *flow) mark(href string, st style) {
+	if g := glyphOf(href); g != "" {
+		f.add(run{text: "\uFFFC", style: st&^(mono|sup|sub) | glyph, glyph: g})
+		f.space, f.glue = true, true // the mark keeps its own room before the words
+	}
+}
+
+// hasWords reports whether n holds words, rather than only a picture.
+func hasWords(n *node) bool {
+	if n.Type == "text" {
+		return strings.TrimSpace(n.Value) != ""
+	}
+	for _, ch := range n.Children {
+		if hasWords(ch) {
+			return true
+		}
+	}
+	return false
 }
 
 func (f *flow) add(r run) {
@@ -245,7 +367,15 @@ func (f *flow) node(n *node, st style, href string) {
 	switch n.Type {
 	case "text":
 		if f.para != nil || strings.TrimSpace(n.Value) != "" {
-			f.text(n.Value, st, href)
+			v := n.Value
+			if v == interactiveExample {
+				v = locales.ReaderInteractiveExample()
+			}
+			if st&mono == 0 && href == "" {
+				f.magic(v, st)
+			} else {
+				f.text(v, st, href)
+			}
 		}
 		return
 	case "element":
@@ -277,10 +407,7 @@ func (f *flow) node(n *node, st style, href string) {
 	case "p":
 		sub(block{kind: Paragraph, bottom: 1.15})
 	case "h1", "h2", "h3", "h4", "h5", "h6":
-		level := int(tag[1] - '0')
-		// 1.8em above and .6em below, in the heading's own size: 24, 20, then 17.
-		size := [7]float32{0, theme.Title, theme.Subtitle, theme.ReadingSize, theme.ReadingSize, theme.ReadingSize, theme.ReadingSize}[level] / theme.ReadingSize
-		sub(block{kind: Heading, level: level, top: 1.8 * size, bottom: .6 * size})
+		sub(block{kind: Heading, level: int(tag[1] - '0')}) // its level and margins as the body sets them: settleHeadings
 	case "figcaption", "caption":
 		sub(block{kind: Caption})
 	case "ul", "ol":
@@ -357,7 +484,7 @@ func (f *flow) child(n *node, unit string) []*block {
 func (f *flow) inline(n *node, st style, href string) {
 	switch n.Tag {
 	case "br":
-		f.add(run{"\n", st, href})
+		f.add(run{text: "\n", style: st, href: href})
 		f.space = true
 		return
 	case "wbr":
@@ -369,7 +496,7 @@ func (f *flow) inline(n *node, st style, href string) {
 		// inline image does: the paragraph's margins, and under the picture
 		// the line's room below its baseline.
 		if f.tmpl.kind == Paragraph {
-			pic.top, pic.bottom = f.tmpl.top, f.tmpl.bottom+strut()
+			pic.top, pic.bottom = f.tmpl.top, f.tmpl.bottom+strut(f.b.face)
 		}
 		f.out = append(f.out, pic)
 		return
@@ -388,6 +515,9 @@ func (f *flow) inline(n *node, st style, href string) {
 	case "a":
 		if h := link(n.prop("href")); h != "" {
 			href = h
+			if hasWords(n) {
+				f.mark(h, st)
+			}
 		}
 	}
 	f.nodes(n.Children, st, href)
@@ -458,8 +588,77 @@ func (f *flow) table(n *node, unit, id string) {
 	}
 	visit(n)
 	if len(t.rows) > 0 {
+		t.numeric = numericColumns(t.rows)
 		f.out = append(f.out, t)
 	}
+}
+
+// numericColumns are the columns of rows whose cells under the head hold figures alone (1,024, 56ms, 9%, −3.5),
+// at least one of them, the rest empty or a dash.
+func numericColumns(rows [][]*cell) []bool {
+	cols := 0
+	for _, row := range rows {
+		n := 0
+		for _, cl := range row {
+			n += cl.colSpan
+		}
+		cols = max(cols, n)
+	}
+	figures, other := make([]int, cols), make([]bool, cols)
+	for _, row := range rows[headRows(rows):] {
+		col := 0
+		for _, cl := range row {
+			if col >= cols {
+				break
+			}
+			switch text := strings.TrimSpace(cellText(cl)); {
+			case cl.colSpan > 1 || cl.header:
+				other[col] = true
+			case text == "" || text == "-" || text == "–" || text == "—":
+			case figure.MatchString(text):
+				figures[col]++
+			default:
+				other[col] = true
+			}
+			col += cl.colSpan
+		}
+	}
+	out := make([]bool, cols)
+	for i := range out {
+		out[i] = figures[i] > 0 && !other[i]
+	}
+	return out
+}
+
+// figure is a cell's text that is a figure: a sign, a currency, digits with their separators, a unit.
+var figure = regexp.MustCompile(`^[+\-−±~≈]?[$¥€£]?\d[\d,.\s]*(%|‰|x|×|[kKMGT]?B|ms|μs|ns|s|px|k|K|M)?$`)
+
+// headRows is how many rows open the table holding headers alone, its head; none when every row does.
+func headRows(rows [][]*cell) int {
+	n := 0
+	for _, row := range rows {
+		for _, cl := range row {
+			if !cl.header {
+				if n == len(rows) {
+					return 0
+				}
+				return n
+			}
+		}
+		n++
+	}
+	return 0
+}
+
+// cellText is the words of a cell.
+func cellText(cl *cell) string {
+	var b strings.Builder
+	walkBlocks(cl.blocks, func(bl *block) {
+		for _, rn := range bl.runs {
+			b.WriteString(rn.text)
+		}
+	})
+	return b.String()
 }
 
 func hasClass(n *node, name string) bool {
@@ -660,11 +859,3 @@ func trimPunctuation(runs []run) []run {
 	}
 	return out
 }
-
-// strut is the room under the baseline of a line of the body, in ems: its
-// half-leading and the system face's descent (1.85 lines).
-var strut = sync.OnceValue(func() float32 {
-	const size = theme.ReadingSize
-	m := ui.Font{Family: "system-ui", Size: size}.Metrics()
-	return ((theme.ReadingLineHeight*size-m.Ascent-m.Descent)/2 + m.Descent) / size
-})

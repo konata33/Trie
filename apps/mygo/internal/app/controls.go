@@ -333,41 +333,6 @@ func kbd(c *ui.Context, key string) ui.Element {
 		FontSize(theme.Label).LineHeight(20.0/12).FontWeight(500).TextColor(theme.Text).InsetShadow(0, -1, 0, 0, theme.Line).NoWrap()
 }
 
-// switchControl is Switch: a 32×18 track, the thumb sliding across, its
-// two ends on the two springs (弹一下): drawn out on the way, a little lower
-// for it, and landing.
-func (a *App) switchControl(c *ui.Context, key any, label string, on *bool) ui.Element {
-	b := ui.SwitchBase(c.Key(key), on).Label(label).Size(32, 18).Radius(9).Shrink(0).FocusRing(false)
-	track := theme.SwitchTrack
-	if b.Hovered() {
-		track = theme.SwitchHover
-	}
-	thumb := theme.Text
-	if *on {
-		track, thumb = theme.Accent, theme.OnAccent
-	}
-	if b.FocusVisible() {
-		b.FocusRing(true)
-	}
-	b.Background(b.AnimateColor("track", track, a.ease(motion.Hover)))
-	x := float32(0)
-	if *on {
-		x = 14
-	}
-	return b.Children(func() {
-		t := ui.Box(c).Absolute().Radius(7).Background(b.AnimateColor("thumb", thumb, a.ease(motion.State)))
-		var l, r float32
-		if a.kbd || a.still(c) {
-			l, r = t.Jump("l", 2+x), t.Jump("r", 16+x)
-		} else {
-			start, end := motion.Ends(!*on)
-			l, r = t.AnimateTo("l", 2+x, start), t.AnimateTo("r", 16+x, end)
-		}
-		low := max(0, r-l-14) / 2 // as much lower as half what it is drawn out
-		t.Left(l).Width(max(0, r-l)).Top(2 + low/2).Height(14 - low)
-	})
-}
-
 // segmented is Segmented: one choice of a few, the selected ground sliding
 // between them on the shared spring.
 func (a *App) segmented(c *ui.Context, key any, label string, options []string, chosen *int) ui.Element {
@@ -428,7 +393,15 @@ func (a *App) stepper(c *ui.Context, key any, label string, value *float32, lo, 
 			*value--
 		}
 		plusOff := *value >= hi
-		a.count(c, key, int(*value), 16).MinWidth(24).Padding(0, 4).FontSize(theme.Body).LineHeight(16.0 / 13).TextAlign(ui.Center).Justify(ui.Center)
+		// The size shows as a share of the default, 100%: one setting sets
+		// Chinese at 17 and English at 20 (DESIGN.md Reading), so a size in
+		// px would tell one language's alone.
+		pct := int(*value/theme.ReadingSize*100 + 0.5)
+		ui.Row(c).MinWidth(44).Padding(0, 4).Justify(ui.Center).AlignItems(ui.Center).FontSize(theme.Body).LineHeight(16.0 / 13).
+			Label(strconv.Itoa(pct) + "%").Children(func() {
+			a.count(c, key, pct, 16).AccessHidden(true)
+			ui.Text(c, "%").FixedLineHeight(16).AccessHidden(true)
+		})
 		plus := a.iconButton(c, "plus", "add", more, "", false, false).Size(28, 28)
 		if plusOff {
 			plus.Opacity(0.4)

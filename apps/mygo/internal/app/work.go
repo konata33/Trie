@@ -20,6 +20,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"trie/internal/library"
+	"trie/internal/locales"
 	"trie/internal/motion"
 	"trie/internal/reader"
 	"trie/internal/reading"
@@ -86,9 +87,9 @@ func stageName(rp *readerPage, s int) string {
 	case s > 0:
 		return rp.work.Sections[s-1].Name
 	case recorded(rp):
-		return "录屏"
+		return locales.WorkRecording()
 	}
-	return "首屏"
+	return locales.WorkHomepageShot()
 }
 
 // stagePic is picture s as the viewer shows it; without a picture if it did not load.
@@ -242,10 +243,10 @@ func (a *App) workHero(c *ui.Context, rp *readerPage, art *library.Article, afte
 		}
 		var by []string
 		if w.Designer != nil && *w.Designer != "" {
-			by = append(by, "由 "+*w.Designer+" 设计")
+			by = append(by, locales.WorkDesignedBy(*w.Designer))
 		}
 		if w.BuiltWith != nil && *w.BuiltWith != "" {
-			by = append(by, *w.BuiltWith+" 搭建")
+			by = append(by, locales.WorkBuiltWith(*w.BuiltWith))
 		}
 		site := w.Site != nil && *w.Site != ""
 		if len(by) == 0 && !site {
@@ -277,7 +278,7 @@ func (a *App) workHero(c *ui.Context, rp *readerPage, art *library.Article, afte
 					ui.Text(c, host).Underline().UnderlineOffset(3).DecorationColor(b.AnimateColor("line", line, a.ease(motion.LinkHover)))
 					a.pressIcon(c, "openArrow", 16, false, b.Pressed())
 				})
-				a.tip(c, b, "在浏览器中打开", false)
+				a.tip(c, b, locales.WorkOpenInBrowserTip(), false)
 			}
 		})
 	})
@@ -305,9 +306,9 @@ func (a *App) workStage(c *ui.Context, rp *readerPage, s, first int, playing boo
 		ratio = max(1, float32(pw)/float32(max(1, ph))) // no taller than it is wide: a long page shows its top
 	}
 	name := stageName(rp, s)
-	alt, coming := name, name+"：截图载入中"
+	alt, coming := name, locales.WorkShotLoading(name)
 	if s == 0 {
-		alt, coming = w.Name+" 的首屏", w.Name+" 的首屏载入中"
+		alt, coming = locales.WorkHomepageShotOf(w.Name), locales.WorkHomepageShotLoading(w.Name)
 	}
 	// Over the strip, which a picture picked grows up out of.
 	hero := ui.Box(c.Key("poster")).FillWidth().AspectRatio(ratio).Radius(10).Margin(margin, 0, 0, 0).Background(theme.Surface).
@@ -347,13 +348,13 @@ func (a *App) workStage(c *ui.Context, rp *readerPage, s, first int, playing boo
 			a.workRecording(c, rp, hero, ratio)
 			return
 		}
-		b := ui.ButtonBase(c.Key("zoom")).Label("放大查看：" + name).Absolute().Fill().Radius(10).Center().TextColor(theme.Faint).
+		b := ui.ButtonBase(c.Key("zoom")).Label(locales.ReaderViewLargerAlt(name)).Absolute().Fill().Radius(10).Center().TextColor(theme.Faint).
 			Cursor(ui.CursorZoomIn).FocusRing(false)
 		if b.FocusVisible() {
 			b.FocusRing(true).FocusRingOffset(-2)
 		}
 		if b.Clicked() {
-			*v = viewer{open: true, rp: rp, shot: s - first + 1, label: "截图", run: v.run + 1, since: now, instant: a.kbd}
+			*v = viewer{open: true, rp: rp, shot: s - first + 1, label: locales.ViewerScreenshots(), run: v.run + 1, since: now, instant: a.kbd}
 		}
 		if img == nil && !waiting {
 			b.Children(func() { a.icon(c, "brokenImage", 20, false) })
@@ -363,11 +364,11 @@ func (a *App) workStage(c *ui.Context, rp *readerPage, s, first int, playing boo
 
 // workStrip is the strip of the work's pictures, first to n, under its first screen: a contact sheet, with an amber
 // line under s, the one the first screen shows, that slides along to the one picked. It rests with a picture at its
-// start, and keeps a swipe that starts on it while it can scroll that way. A picture that came is picked by a click,
+// start. A picture that came is picked by a click,
 // Enter or Space; one on its way breathes in its place, and one that did not load cannot be picked.
 func (a *App) workStrip(c *ui.Context, rp *readerPage, s, first, n int, margin float32) {
 	tw := (a.column() - 32) / 5
-	rp.r.Aside(c, "shots").ScrollSnap(ui.SnapProximity).Margin(margin, 0, 0, 0).Scrollbars(false).Label(rp.work.Name + " 的页面截图").Children(func() {
+	rp.r.Aside(c, "shots").ScrollSnap(ui.SnapProximity).Margin(margin, 0, 0, 0).Scrollbars(false).Label(locales.WorkScreenshotsOf(rp.work.Name)).Children(func() {
 		ui.Row(c).Gap(8).Padding(0, 0, 4, 0).Children(func() {
 			for i := first; i <= n; i++ {
 				img, part := a.stageImage(rp, i)
@@ -377,9 +378,9 @@ func (a *App) workStrip(c *ui.Context, rp *readerPage, s, first, n int, margin f
 				label := name
 				switch {
 				case waiting:
-					label = name + "：截图载入中"
+					label = locales.WorkShotLoading(name)
 				case !ok:
-					label = name + "：截图没能载入"
+					label = locales.WorkShotFailed(name)
 				}
 				cur := i == s
 				b := ui.ButtonBase(c.Key(i)).Label(label).Role(ui.RoleRadio).Checked(cur).Column().AlignItems(ui.Stretch).
@@ -508,9 +509,9 @@ func (a *App) workRecording(c *ui.Context, rp *readerPage, hero ui.Element, rati
 		dim := ui.Box(c).Absolute().Fill().Radius(10).Background(theme.ShadowFloat.Alpha(0.6)).IgnoreInput(true).AccessHidden(true)
 		dim.Opacity(dim.AnimateTo("dim", map[bool]float32{true: 1, false: 0}[paused], fade(motion.WorkDim)))
 	}
-	label := "播放 " + w.Name + " 的页面录屏"
+	label := locales.WorkPlayRecording(w.Name)
 	if started && !paused {
-		label = "暂停 " + w.Name + " 的页面录屏"
+		label = locales.WorkPauseRecording(w.Name)
 	}
 	b := ui.ButtonBase(c.Key("recording")).Label(label).Role(ui.RoleToggleButton).Checked(started && !paused).Absolute().Fill().
 		Radius(10).Center().FocusRing(false)
@@ -852,8 +853,8 @@ func (a *App) workFacts(c *ui.Context, w *library.GalleryWork) (top, bottom floa
 		}
 		ui.Grid(c.Key("credits")).ColumnTracks(tracks...).GapX(32).GapY(28).Children(func() {
 			for _, f := range credits {
-				ui.Column(c.Key(f.label)).Gap(10).MinWidth(0).Role(ui.RoleGroup).Label(f.label).Children(func() {
-					ui.Text(c, f.label).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted)
+				ui.Column(c.Key(f.label)).Gap(10).MinWidth(0).Role(ui.RoleGroup).Label(storedText(f.label)).Children(func() {
+					ui.Text(c, storedText(f.label)).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted)
 					a.workCredit(c, f)
 				})
 			}
@@ -867,7 +868,7 @@ func (a *App) workFacts(c *ui.Context, w *library.GalleryWork) (top, bottom floa
 func (a *App) workPalette(c *ui.Context, palette []string) {
 	still := a.still(c)
 	ui.Row(c.Key("palette")).FillWidth().Height(72).AlignItems(ui.Stretch).Radius(10).ClipX().ClipY().Shadow(0, 0, 0, 1, theme.LineSoft).
-		Role(ui.RoleGroup).Label("配色").Children(func() {
+		Role(ui.RoleGroup).Label(locales.WorkPalette()).Children(func() {
 		for _, v := range palette {
 			sw, _ := swatchOf(v)
 			gradient := strings.EqualFold(v, "gradient")
@@ -875,7 +876,7 @@ func (a *App) workPalette(c *ui.Context, palette []string) {
 			if !hexColor.MatchString(v) {
 				name = strings.ToUpper(v[:1]) + v[1:]
 			}
-			b := ui.ButtonBase(c.Key(v)).Label("复制色值 "+name).Basis(0).MinWidth(0).FocusRing(false).Cursor(ui.CursorPointer).
+			b := ui.ButtonBase(c.Key(v)).Label(locales.WorkCopyColor(name)).Basis(0).MinWidth(0).FocusRing(false).Cursor(ui.CursorPointer).
 				Column().Justify(ui.End).AlignItems(ui.Start).Padding(0, 12, 10, 12)
 			copied := ui.Local(b, "copied", func() time.Time { return time.Time{} })
 			if b.Clicked() {
@@ -908,13 +909,13 @@ func (a *App) workPalette(c *ui.Context, palette []string) {
 			}
 			label := name
 			if held {
-				label = "已复制"
+				label = locales.CommonCopied()
 			}
 			b.Children(func() {
 				t := ui.Text(c, label).FontSize(theme.Label).LineHeight(16.0 / 12).FontFeatures(theme.Numbers).TextColor(ink).NoWrap()
 				t.Opacity(t.AnimateTo("lit", map[bool]float32{true: 1, false: 0.72}[lit], a.ease(motion.Hover)))
 			})
-			a.tip(c, b, "复制色值", false)
+			a.tip(c, b, locales.WorkCopyColorTip(), false)
 		}
 	})
 }
@@ -985,7 +986,7 @@ func workScore(c *ui.Context, values []string) {
 	name := func(m mark) {
 		ink := map[bool]ui.Color{true: theme.Text, false: theme.Text2}[above(m)]
 		ui.Row(c.Key(m.name)).Gap(6).FontSize(theme.Label).LineHeight(16.0 / 12).Children(func() {
-			ui.Text(c, m.name).TextColor(theme.Muted)
+			ui.Text(c, storedText(m.name)).TextColor(theme.Muted)
 			ui.Text(c, m.n).FontFeatures(theme.Numbers).TextColor(ink)
 		})
 	}
@@ -1041,14 +1042,14 @@ func workScore(c *ui.Context, values []string) {
 		}
 	}).Children(func() {
 		if total != "" {
-			ui.Text(c, total).Label("总分 " + total).Absolute().Left(0).Right(0).Top(cy - 10).Height(20).TextAlign(ui.Center).FontSize(theme.Item).
+			ui.Text(c, total).Label(locales.WorkOverallScore(total)).Absolute().Left(0).Right(0).Top(cy - 10).Height(20).TextAlign(ui.Center).FontSize(theme.Item).
 				LineHeight(20.0 / 15).FontWeight(600).FontFeatures(theme.Numbers).TextColor(theme.Text)
 		}
 		// Each name at its axis's end: above the top, below the bottom, beside the sides.
 		for i, m := range marks {
 			a := angle(i)
 			ex, ey := cx+(radarRadius+8)*float32(math.Cos(a)), cy+(radarRadius+8)*float32(math.Sin(a))
-			wn, _ := c.MeasureText(0, ui.Span{Text: m.name, Size: theme.Label})
+			wn, _ := c.MeasureText(0, ui.Span{Text: storedText(m.name), Size: theme.Label})
 			wv, _ := c.MeasureText(0, ui.Span{Text: m.n, Size: theme.Label})
 			w, h := wn+6+wv, float32(16)
 			x, y := ex-w/2, ey-h/2

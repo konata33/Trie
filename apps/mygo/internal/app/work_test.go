@@ -110,7 +110,7 @@ func TestWorkRecording(t *testing.T) {
 	if _, ok := tt.Find("Test Work 的首屏"); !ok || rp.rec.player != nil {
 		t.Fatalf("the page does not open on its first screen: %v, %v", ok, rp.rec.player)
 	}
-	if _, ok := tt.Find("播放 Test Work 的页面录屏"); !ok {
+	if _, ok := tt.Find("播放 Test Work 的录屏"); !ok {
 		t.Error("the picture is not the recording's control before it plays")
 	}
 	until(t, tt, "the recording does not open", func() bool { return rp.rec.player != nil })
@@ -122,11 +122,11 @@ func TestWorkRecording(t *testing.T) {
 		}
 		return len(seen) >= 3
 	})
-	acc, ok := tt.AccessByRole(ui.RoleToggleButton, "暂停 Test Work 的页面录屏")
+	acc, ok := tt.AccessByRole(ui.RoleToggleButton, "暂停 Test Work 的录屏")
 	if !ok || !acc.Checked {
 		t.Fatalf("playing, the control is not pressed: %+v", acc)
 	}
-	must(t, tt.Click("暂停 Test Work 的页面录屏"))
+	must(t, tt.Click("暂停 Test Work 的录屏"))
 	settle(tt)
 	if rp.rec.player.Playing() {
 		t.Fatal("a click does not pause it")
@@ -139,10 +139,10 @@ func TestWorkRecording(t *testing.T) {
 	if got := heroAt(t, tt); got != held {
 		t.Errorf("paused, it moves on: %v then %v", held, got)
 	}
-	if _, ok := tt.Find("播放 Test Work 的页面录屏"); !ok {
+	if _, ok := tt.Find("播放 Test Work 的录屏"); !ok {
 		t.Error("paused, the control does not offer to play")
 	}
-	must(t, tt.Click("播放 Test Work 的页面录屏"))
+	must(t, tt.Click("播放 Test Work 的录屏"))
 	tt.Frame()
 	if !rp.rec.player.Playing() {
 		t.Fatal("a second click does not play it on")
@@ -160,7 +160,7 @@ func TestWorkRecordingKeys(t *testing.T) {
 	until(t, tt, "the recording does not open", func() bool { return rp.rec.player != nil })
 	settle(tt)
 	focused := func() bool {
-		acc, ok := tt.AccessByRole(ui.RoleToggleButton, "暂停 Test Work 的页面录屏")
+		acc, ok := tt.AccessByRole(ui.RoleToggleButton, "暂停 Test Work 的录屏")
 		return ok && acc.Focused
 	}
 	for range 40 {
@@ -254,7 +254,7 @@ func TestWorkRecordingStill(t *testing.T) {
 	if rp.rec.player != nil || rp.rec.still != nil || rp.rec.opening || !posterGrey(heroAt(t, tt)) {
 		t.Fatalf("under less motion the recording starts on its own: %v", heroAt(t, tt))
 	}
-	must(t, tt.Click("播放 Test Work 的页面录屏"))
+	must(t, tt.Click("播放 Test Work 的录屏"))
 	seen := map[color.RGBA]bool{}
 	until(t, tt, "asked, the recording does not play", func() bool {
 		if c := heroAt(t, tt); !posterGrey(c) {
@@ -262,7 +262,7 @@ func TestWorkRecordingStill(t *testing.T) {
 		}
 		return len(seen) >= 3
 	})
-	must(t, tt.Click("暂停 Test Work 的页面录屏"))
+	must(t, tt.Click("暂停 Test Work 的录屏"))
 	settle(tt)
 	held := heroAt(t, tt)
 	for range 5 {
@@ -283,7 +283,7 @@ func TestWorkRecordingBroken(t *testing.T) {
 	if _, ok := tt.Find("Test Work 的首屏"); !ok {
 		t.Error("the first screen went with the recording")
 	}
-	if _, ok := tt.Find("播放 Test Work 的页面录屏"); ok {
+	if _, ok := tt.Find("播放 Test Work 的录屏"); ok {
 		t.Error("a recording that does not play still offers to")
 	}
 }
@@ -352,7 +352,7 @@ func shotsTester(t *testing.T) (*App, *ui.Tester, *readerPage) {
 	})
 	settle(tt)
 	for range 3 {
-		b, ok := tt.Find("Test Work 的页面截图")
+		b, ok := tt.Find("Test Work 的截图")
 		if !ok {
 			t.Fatal("no strip of shots")
 		}
@@ -364,47 +364,6 @@ func shotsTester(t *testing.T) (*App, *ui.Tester, *readerPage) {
 		settle(tt)
 	}
 	return a, tt, rp
-}
-
-// A two-finger swipe that starts on the strip of shots while it can still
-// scroll that way is the strip's: it scrolls
-// and the page stays; at the strip's start the swipe goes back.
-func TestWorkShotsSwipe(t *testing.T) {
-	a, tt, rp := shotsTester(t)
-	strip, _ := tt.Find("Test Work 的页面截图")
-	x, y := strip.X+strip.W/2, strip.Y+30
-	tt.Move(x, y)
-	tt.Advance(time.Second)
-	for range 8 {
-		tt.Scroll(x, y, 20, 0)
-		tt.Advance(16 * time.Millisecond)
-	}
-	if !rp.r.ScrollsAside(x, y, -1) || rp.swipe.pulling {
-		t.Fatalf("along the strip: it scrolls %v, the swipe pulls %v", rp.r.ScrollsAside(x, y, -1), rp.swipe.pulling)
-	}
-	tt.Advance(time.Second)
-	for range 20 {
-		tt.Scroll(x, y, -10, 0)
-		tt.Advance(30 * time.Millisecond)
-	}
-	if rp.swipe.pulling || a.page.kind != "reader" {
-		t.Fatalf("back along a strip that scrolls back: the swipe pulls %v, on %v", rp.swipe.pulling, a.page)
-	}
-	tt.Advance(time.Second)
-	if rp.r.ScrollsAside(x, y, -1) {
-		t.Fatal("the strip is not back at its start")
-	}
-	for range 11 {
-		tt.Scroll(x, y, -10, 0)
-		tt.Advance(30 * time.Millisecond)
-	}
-	if !rp.swipe.pulling {
-		t.Fatal("at its start the strip leaves the swipe its pull")
-	}
-	tt.Advance(150 * time.Millisecond)
-	if a.page != (page{"author", "innei"}) {
-		t.Fatalf("armed at the strip's start, it goes back: on %v", a.page)
-	}
 }
 
 // stageTester is shotsTester with the page scrolled back, so that the first
@@ -447,7 +406,7 @@ func TestWorkStage(t *testing.T) {
 	if !checked("首屏") || checked("Shot 1") {
 		t.Fatal("the work's own first screen leads the strip, checked")
 	}
-	hero, ok := tt.Access("放大查看：首屏")
+	hero, ok := tt.Access("查看大图：首屏")
 	if !ok {
 		t.Fatal("the first screen is not a button")
 	}
@@ -473,7 +432,7 @@ func TestWorkStage(t *testing.T) {
 	if !checked("Shot 3") || checked("首屏") {
 		t.Error("the strip does not check Shot 3")
 	}
-	if _, ok := tt.Access("放大查看：Shot 3"); !ok {
+	if _, ok := tt.Access("查看大图：Shot 3"); !ok {
 		t.Error("the first screen is not called after Shot 3")
 	}
 	// From the keys: Tab reaches Shot 4, Enter shows it at once.
@@ -515,7 +474,7 @@ func TestWorkStage(t *testing.T) {
 // the strip's pictures.
 func TestWorkStageScroll(t *testing.T) {
 	_, tt, rp := stageTester(t)
-	hero, _ := tt.Access("放大查看：首屏")
+	hero, _ := tt.Access("查看大图：首屏")
 	b, _ := tt.AccessByRole(ui.RoleRadio, "Shot 3")
 	from := ui.Rect{X: b.Bounds.X - hero.Bounds.X, Y: b.Bounds.Y - hero.Bounds.Y, W: b.Bounds.W, H: b.Bounds.W * 10 / 16}
 	tt.Move(center(b.Bounds))
@@ -525,7 +484,7 @@ func TestWorkStageScroll(t *testing.T) {
 		tt.Scroll(700, 760, 0, 12)
 		tt.Advance(16 * time.Millisecond)
 	}
-	moved, _ := tt.Access("放大查看：Shot 3")
+	moved, _ := tt.Access("查看大图：Shot 3")
 	if moved.Bounds.Y > hero.Bounds.Y-20 {
 		t.Fatalf("the page did not scroll: the first screen at %v, then %v", hero.Bounds.Y, moved.Bounds.Y)
 	}
@@ -544,7 +503,7 @@ func TestWorkStageScroll(t *testing.T) {
 	_ = rp
 	tt.Advance(time.Second)
 	pic, _ = tt.AccessByRole(ui.RoleImage, "Shot 3")
-	moved, _ = tt.Access("放大查看：Shot 3")
+	moved, _ = tt.Access("查看大图：Shot 3")
 	if pic.Bounds != moved.Bounds {
 		t.Errorf("it lands on the first screen: %+v, not %+v", pic.Bounds, moved.Bounds)
 	}
@@ -567,7 +526,7 @@ func TestWorkShotsViewer(t *testing.T) {
 	tt.Advance(time.Second)
 	tt.ClickAt(center(b.Bounds))
 	tt.Advance(time.Second)
-	hero, ok := tt.Access("放大查看：Shot 1")
+	hero, ok := tt.Access("查看大图：Shot 1")
 	if !ok {
 		t.Fatal("the first screen does not show Shot 1")
 	}
@@ -644,8 +603,8 @@ func TestWorkShotsViewer(t *testing.T) {
 	// Esc: the focus goes back to the first screen, which shows Shot 4 now.
 	tt.Key(0, ui.KeyEscape)
 	tt.Advance(16 * time.Millisecond)
-	if v.open || !tt.Focused("放大查看：Shot 4") {
-		t.Fatalf("Esc: open %v, the focus back on the first screen %v", v.open, tt.Focused("放大查看：Shot 4"))
+	if v.open || !tt.Focused("查看大图：Shot 4") {
+		t.Fatalf("Esc: open %v, the focus back on the first screen %v", v.open, tt.Focused("查看大图：Shot 4"))
 	}
 	if c := at(hx, hy); c.G < 150 || c.B > 80 {
 		t.Errorf("closed, the first screen shows Shot 4: %v", c)
@@ -666,7 +625,7 @@ func TestWorkShotsViewer(t *testing.T) {
 		t.Errorf("closed by the pointer, it flies back to the first screen: open %v, for %v", v.open, v.until.Sub(tt.Now()))
 	}
 	tt.Advance(time.Second)
-	if !tt.Focused("放大查看：Shot 3") {
+	if !tt.Focused("查看大图：Shot 3") {
 		t.Error("the focus is not back on the first screen")
 	}
 	if c := at(hx, hy); c.B < 200 || c.R > 60 {
@@ -715,8 +674,8 @@ func TestWorkBodyGap(t *testing.T) {
 		gap        float32
 	}{
 		{"who made it", "<p>Words of the work.</p>", by, "由 Someone 设计", 24},
-		{"who made it, a heading first", "<h2>Heading</h2><p>Words of the work.</p>", by, "由 Someone 设计", 36}, // 1.8em of 20
-		{"the strip", "<p>Words of the work.</p>", map[string]any{"sections": shot}, "Test Work 的页面截图", 0},
+		{"who made it, a heading first", "<h2>Heading</h2><p>Words of the work.</p>", by, "由 Someone 设计", 24}, // the head's room, not the heading's 2.8em
+		{"the strip", "<p>Words of the work.</p>", map[string]any{"sections": shot}, "Test Work 的截图", 0},
 		{"the first screen", "<p>Words of the work.</p>", map[string]any{}, "Test Work 的首屏", 0},
 	} {
 		t.Run(k.name, func(t *testing.T) {
@@ -730,7 +689,7 @@ func TestWorkBodyGap(t *testing.T) {
 				t.Errorf("the body sits %v under %s, not %v", d, k.last, k.gap)
 			}
 			if k.last == "由 Someone 设计" {
-				if d := last.Y - (find(t, tt, "Test Work 的页面截图").Y + find(t, tt, "Test Work 的页面截图").H); abs32(d-16) > 0.5 {
+				if d := last.Y - (find(t, tt, "Test Work 的截图").Y + find(t, tt, "Test Work 的截图").H); abs32(d-16) > 0.5 {
 					t.Errorf("who made it sits %v under the strip, not 16", d)
 				}
 			}
@@ -740,7 +699,7 @@ func TestWorkBodyGap(t *testing.T) {
 
 // The facts go before the body's first h2, else after
 // its last block, their margins (40 above, none under) collapsing with the
-// blocks' around them: 40 from the paragraph before them, a heading's 1.8em
+// blocks' around them: 40 from the paragraph before them, a heading's 2.8em
 // after them; the sign-off 48 under them.
 func TestWorkFactsPlace(t *testing.T) {
 	facts := map[string]any{"facts": []any{map[string]any{"label": "技术", "values": []any{"WebGL"}}}}
@@ -758,20 +717,16 @@ func TestWorkFactsPlace(t *testing.T) {
 		if d := top - (intro.Y + intro.H); abs32(d-40) > 0.5 {
 			t.Errorf("the facts sit %v under the paragraph before them, not 40", d)
 		}
-		if d := section.Y - bottom; abs32(d-1.8*20) > 0.5 {
-			t.Errorf("the h2 sits %v under the facts, not its 1.8em", d)
+		if d := section.Y - bottom; abs32(d-2.8*17) > 0.5 {
+			t.Errorf("the h2 sits %v under the facts, not its 2.8em", d)
 		}
 	})
 	t.Run("after the last block", func(t *testing.T) {
 		_, tt, _ := workWith(t, "<p>Intro.</p><p>More.</p>", facts)
-		top, bottom := box(t, tt)
+		top, _ := box(t, tt)
 		more := find(t, tt, "More.")
 		if d := top - (more.Y + more.H); abs32(d-40) > 0.5 {
 			t.Errorf("the facts sit %v under the last paragraph, not 40", d)
-		}
-		sign, ok := tt.AccessByRole(ui.RoleGroup, "文章信息")
-		if d := sign.Bounds.Y - bottom; !ok || abs32(d-48) > 0.5 {
-			t.Errorf("the sign-off sits %v under the facts, not 48", d)
 		}
 	})
 	t.Run("categories and tags alone show nothing", func(t *testing.T) {
