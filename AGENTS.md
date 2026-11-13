@@ -51,4 +51,4 @@ Trie 是 macOS 上的博客阅读应用，代码在 `apps/mygo`：Go + MyGo 原�
 - 开工先 `git status`，查清没提交的改动属于谁，只改自己那一块。
 - 共用文件（`docs/DESIGN.md`、`docs/PAGES.md`、`apps/mygo/go.mod`、`apps/mygo/main.go`）改之前重读一遍，只改需要的几行。
 - `.context/` 是本机的临时协作目录，不进版本库；部分测试会读其中的样本，没有时自动跳过。
-- 沟通、界面文案、项目文档用中文；代码注释用英文。
+- 沟通、项目文档用中文；代码注释用英文。界面文字中英两份，写在 `apps/mygo/internal/locales`，不写进代码；口吻和用词见 `docs/DESIGN.md` 的 Copy 一节。

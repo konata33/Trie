@@ -65,7 +65,7 @@ go tool mygo build -skip-dmg
 
 - 颜色和字号只从 `internal/theme` 取，动效的曲线和时长只从 `internal/motion` 取。
 - 联网一律经过 `internal/fetch`。
-- 界面文案用中文，代码注释用英文。
+- 界面文字中英两份，写在 `internal/locales` 的 `en.json` 和 `zh-Hans.json`，改完运行 `go tool mygo generate`；口吻和用词见 `docs/DESIGN.md` 的 Copy 一节。代码注释用英文。
 - MyGo 的界面生命周期、线程和测试写法见 [apps/mygo/.agents/skills/mygo-maintenance/SKILL.md](apps/mygo/.agents/skills/mygo-maintenance/SKILL.md)。
 - 应用的模块划分见 [apps/mygo/README.md](apps/mygo/README.md)。
 

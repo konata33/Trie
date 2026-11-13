@@ -1,0 +1,1657 @@
+{
+  "@@locale": "en",
+  "tabHome": "Home",
+  "@tabHome": {
+    "description": "Sidebar tab: the home page."
+  },
+  "tabFavorites": "Favorites",
+  "@tabFavorites": {
+    "description": "Sidebar tab: the writers and articles the reader favorited."
+  },
+  "tabExplore": "Explore",
+  "@tabExplore": {
+    "description": "Sidebar tab: the catalog of writers and design sites to discover."
+  },
+  "tabClips": "Clips",
+  "@tabClips": {
+    "description": "Sidebar tab: passages the reader clipped from articles."
+  },
+  "settings": "Settings",
+  "@settings": {
+    "description": "The settings button in the sidebar's foot and the settings panel's name."
+  },
+  "settingsLanguage": "Language",
+  "@settingsLanguage": {
+    "description": "Settings panel: the row that chooses the interface's language."
+  },
+  "commonUndo": "Undo",
+  "@commonUndo": {
+    "description": "Button in a notice that takes back what was just done."
+  },
+  "commonTryAgain": "Try Again",
+  "@commonTryAgain": {
+    "description": "Button that repeats an action that failed."
+  },
+  "commonClose": "Close",
+  "@commonClose": {
+    "description": "Button or accessible name that closes a panel, notice or view."
+  },
+  "commonCancel": "Cancel",
+  "@commonCancel": {
+    "description": "Button that dismisses a dialog without doing anything."
+  },
+  "commonDelete": "Delete",
+  "@commonDelete": {
+    "description": "Button that deletes the item it belongs to."
+  },
+  "commonCopy": "Copy",
+  "@commonCopy": {
+    "description": "Button that copies something to the clipboard."
+  },
+  "commonCopied": "Copied",
+  "@commonCopied": {
+    "description": "Shown where Copy was pressed, for a moment, once the copy is made."
+  },
+  "commonSearch": "Search",
+  "@commonSearch": {
+    "description": "Search button and the search field's name."
+  },
+  "commonRefresh": "Refresh",
+  "@commonRefresh": {
+    "description": "Button that reads every followed writer's feed again."
+  },
+  "commonOpenInBrowser": "Open in Browser",
+  "@commonOpenInBrowser": {
+    "description": "Button or menu item that opens the page in the default browser."
+  },
+  "commonFollow": "Follow",
+  "@commonFollow": {
+    "description": "Button that follows a writer (subscribes to their feed)."
+  },
+  "commonUnfollow": "Unfollow",
+  "@commonUnfollow": {
+    "description": "Menu item that stops following a writer."
+  },
+  "commonFavorite": "Favorite",
+  "@commonFavorite": {
+    "description": "Button that adds an article to Favorites."
+  },
+  "commonRemoveFavorite": "Remove from Favorites",
+  "@commonRemoveFavorite": {
+    "description": "Button that removes an article from Favorites."
+  },
+  "commonBack": "Back",
+  "@commonBack": {
+    "description": "Back button's name when there is no earlier page to name."
+  },
+  "commonCopyLink": "Copy Link",
+  "@commonCopyLink": {
+    "description": "Menu item that copies the page's address to the clipboard."
+  },
+  "commonLinkCopied": "Link copied",
+  "@commonLinkCopied": {
+    "description": "Brief status after the page's address was copied."
+  },
+  "commonCloseTip": "Close · Esc",
+  "@commonCloseTip": {
+    "description": "Tooltip of a Close button, with its key."
+  },
+  "commonOpenInBrowserTip": "Open in browser",
+  "@commonOpenInBrowserTip": {
+    "description": "Tooltip of a link that opens a writer's site in the default browser."
+  },
+  "readerNotInLibrary": "This article is no longer in the library.",
+  "@readerNotInLibrary": {
+    "description": "Reader: why an article can't be opened, when it was removed from the library."
+  },
+  "readerPositionNotSaved": "Couldn't save your place. You can keep reading.",
+  "@readerPositionNotSaved": {
+    "description": "Reader: brief status when the reading position could not be saved."
+  },
+  "readerRegion": "Article",
+  "@readerRegion": {
+    "description": "Accessible name of the reader's page region."
+  },
+  "readerTextName": "{title}, article text",
+  "@readerTextName": {
+    "description": "Accessible name of the article's text in the reader.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Designing calm software"
+      }
+    }
+  },
+  "readerMinutes": "{minutes} min read",
+  "@readerMinutes": {
+    "description": "Reader byline: the estimated reading time.",
+    "placeholders": {
+      "minutes": {
+        "type": "int",
+        "example": "6"
+      }
+    }
+  },
+  "readerTextUnavailableNow": "Try again later, or read the original in your browser.",
+  "@readerTextUnavailableNow": {
+    "description": "Reader: the explanation under the failed state when nothing more specific is known."
+  },
+  "readerUnreachableTitle": "Couldn't load the text",
+  "@readerUnreachableTitle": {
+    "description": "Reader: title of the state shown when the article's text could not be read."
+  },
+  "readerUpdateFailed": "Couldn't update. Showing the saved copy.",
+  "@readerUpdateFailed": {
+    "description": "Reader: strip above the text when refreshing the article failed and the saved copy is shown."
+  },
+  "readerSummaryOnly": "The feed only has a summary. The full article is on the writer's site.",
+  "@readerSummaryOnly": {
+    "description": "Reader: strip above a text that is only the feed's summary."
+  },
+  "readerRestricted": "The site limits access to this article. Open the original to see how to read it.",
+  "@readerRestricted": {
+    "description": "Reader: strip above a text the site does not let the app read in full."
+  },
+  "readerTextUnavailable": "Couldn't get the text. Try again later.",
+  "@readerTextUnavailable": {
+    "description": "Reader: strip above a text that could not be read, when nothing more specific is known."
+  },
+  "readerLoading": "Loading the text…",
+  "@readerLoading": {
+    "description": "Reader: accessible status while the article's text is being read."
+  },
+  "readerReadOriginal": "Read Original",
+  "@readerReadOriginal": {
+    "description": "Reader: link after a notice that opens the article on its own site."
+  },
+  "readerToolbar": "Reading toolbar",
+  "@readerToolbar": {
+    "description": "Accessible name of the bar at the top of the reader."
+  },
+  "readerOpenOriginal": "Open in Browser",
+  "@readerOpenOriginal": {
+    "description": "Button and menu item that opens the article on its site in the default browser."
+  },
+  "readerOpenOriginalTip": "Open in browser · O. Right-click to copy the link · ⇧⌘C",
+  "@readerOpenOriginalTip": {
+    "description": "Tooltip of the reader's Open in Browser button, with its shortcuts."
+  },
+  "readerTools": "Reading tools",
+  "@readerTools": {
+    "description": "Accessible name of the group of reading options in the reader's bar."
+  },
+  "readerProgress": "{percent}% read",
+  "@readerProgress": {
+    "description": "How much of an article has been read, as a whole percent.",
+    "placeholders": {
+      "percent": {
+        "type": "int",
+        "example": "42"
+      }
+    }
+  },
+  "readerFinished": "Finished",
+  "@readerFinished": {
+    "description": "Reading progress of an article read to its end."
+  },
+  "readerTypography": "Typography",
+  "@readerTypography": {
+    "description": "Accessible name of the text size and width controls that open from Aa."
+  },
+  "readerTextSize": "Text size",
+  "@readerTextSize": {
+    "description": "Accessible name of the stepper that sets the article's text size."
+  },
+  "readerTextSmaller": "Make Text Smaller",
+  "@readerTextSmaller": {
+    "description": "Text size stepper: the button that makes the article's text smaller."
+  },
+  "readerTextLarger": "Make Text Larger",
+  "@readerTextLarger": {
+    "description": "Text size stepper: the button that makes the article's text larger."
+  },
+  "readerTextWidth": "Width",
+  "@readerTextWidth": {
+    "description": "Accessible name of the segmented control that sets the reading column's width."
+  },
+  "readerWidthComfortable": "Comfortable",
+  "@readerWidthComfortable": {
+    "description": "Width option: the standard reading column."
+  },
+  "readerWidthWide": "Wide",
+  "@readerWidthWide": {
+    "description": "Width option: a wider reading column."
+  },
+  "readerOptions": "Reading Options",
+  "@readerOptions": {
+    "description": "Accessible name of the Aa button that shows the text size and width controls."
+  },
+  "readerOptionsTip": "Text size and width",
+  "@readerOptionsTip": {
+    "description": "Tooltip of the reader's Aa button."
+  },
+  "readerSelectionActions": "Selection toolbar",
+  "@readerSelectionActions": {
+    "description": "Accessible name of the small bar over selected text in the reader."
+  },
+  "readerClip": "Clip",
+  "@readerClip": {
+    "description": "Button over selected text that keeps it as a clip (⌘E)."
+  },
+  "readerUnclip": "Remove Clip",
+  "@readerUnclip": {
+    "description": "Button over a clipped passage that removes the clip (⌘E)."
+  },
+  "readerSelectionTooLong": "The selection is too long to clip.",
+  "@readerSelectionTooLong": {
+    "description": "Reader: brief status when the selection is too long to keep as a clip."
+  },
+  "readerClipped": "Clipped",
+  "@readerClipped": {
+    "description": "Reader: brief status after the selection was kept as a clip."
+  },
+  "readerClipNotSaved": "Couldn't save the clip. Try again.",
+  "@readerClipNotSaved": {
+    "description": "Reader: brief status when keeping a clip failed."
+  },
+  "readerNoTitle": "Untitled",
+  "@readerNoTitle": {
+    "description": "Reader headline when no title could be found for the article."
+  },
+  "readerCopyCode": "Copy Code",
+  "@readerCopyCode": {
+    "description": "Accessible name of the Copy button on a code block."
+  },
+  "readerPlainText": "Plain text",
+  "@readerPlainText": {
+    "description": "Code block header when the code names no language."
+  },
+  "readerTableScroll": "Table, scrolls horizontally",
+  "@readerTableScroll": {
+    "description": "Accessible name of a wide table in an article."
+  },
+  "readerViewLarger": "View Larger",
+  "@readerViewLarger": {
+    "description": "Accessible name of a picture in an article that opens it large."
+  },
+  "readerViewLargerAlt": "View Larger: {name}",
+  "@readerViewLargerAlt": {
+    "description": "Accessible name of a picture that opens it large, with its description.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "The settings window"
+      }
+    }
+  },
+  "readerImageFailed": "Couldn't load image",
+  "@readerImageFailed": {
+    "description": "Shown in place of a picture that could not be loaded."
+  },
+  "readerImageFailedAlt": "Couldn't load image: {alt}",
+  "@readerImageFailedAlt": {
+    "description": "Accessible name of a picture that could not be loaded, with its description.",
+    "placeholders": {
+      "alt": {
+        "type": "String",
+        "example": "The settings window"
+      }
+    }
+  },
+  "readerUpdated": "Updated {date}",
+  "@readerUpdated": {
+    "description": "Reader byline: the date an article was last modified, when it has no publication date.",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Nov 4"
+      }
+    }
+  },
+  "readerNoDate": "No date",
+  "@readerNoDate": {
+    "description": "Reader byline when the article gives no date."
+  },
+  "readerCharacters": "{count, plural, one {# character} other {# characters}}",
+  "@readerCharacters": {
+    "description": "Length of an article mostly in Chinese or Japanese, in characters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "1234"
+      }
+    }
+  },
+  "readerWords": "{count, plural, one {# word} other {# words}}",
+  "@readerWords": {
+    "description": "Length of an article, in words.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "1234"
+      }
+    }
+  },
+  "viewerImagePreview": "Image preview",
+  "@viewerImagePreview": {
+    "description": "Accessible name of the viewer that shows an article's picture large."
+  },
+  "viewerScreenshots": "Screenshots",
+  "@viewerScreenshots": {
+    "description": "Accessible name of the viewer that shows a work's screenshots large."
+  },
+  "viewerPrevious": "Previous",
+  "@viewerPrevious": {
+    "description": "Viewer button that shows the previous picture."
+  },
+  "viewerPreviousTip": "Previous · ←",
+  "@viewerPreviousTip": {
+    "description": "Tooltip of the viewer's Previous button, with its key."
+  },
+  "viewerNext": "Next",
+  "@viewerNext": {
+    "description": "Viewer button that shows the next picture."
+  },
+  "viewerNextTip": "Next · →",
+  "@viewerNextTip": {
+    "description": "Tooltip of the viewer's Next button, with its key."
+  },
+  "workRecording": "Recording",
+  "@workRecording": {
+    "description": "Work page: caption and name of the work's screen recording."
+  },
+  "workHomepageShot": "Homepage",
+  "@workHomepageShot": {
+    "description": "Work page: caption and name of the captured first screen of the work's site."
+  },
+  "workDesignedBy": "Designed by {designer}",
+  "@workDesignedBy": {
+    "description": "Work page credit line: who designed the site.",
+    "placeholders": {
+      "designer": {
+        "type": "String",
+        "example": "Studio North"
+      }
+    }
+  },
+  "workBuiltWith": "Built with {tool}",
+  "@workBuiltWith": {
+    "description": "Work page credit line: what the site is built with.",
+    "placeholders": {
+      "tool": {
+        "type": "String",
+        "example": "Framer"
+      }
+    }
+  },
+  "workOpenInBrowserTip": "Open in browser",
+  "@workOpenInBrowserTip": {
+    "description": "Tooltip of the work's site link, which opens it in the default browser."
+  },
+  "workShotLoading": "{name}: loading screenshot",
+  "@workShotLoading": {
+    "description": "Accessible name of a screenshot still on its way.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "About"
+      }
+    }
+  },
+  "workShotFailed": "{name}: couldn't load screenshot",
+  "@workShotFailed": {
+    "description": "Accessible name of a screenshot that could not be loaded.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "About"
+      }
+    }
+  },
+  "workHomepageShotOf": "Homepage of {name}",
+  "@workHomepageShotOf": {
+    "description": "Accessible name of the captured first screen of a work's site.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Linear"
+      }
+    }
+  },
+  "workHomepageShotLoading": "{name}: loading homepage",
+  "@workHomepageShotLoading": {
+    "description": "Accessible status while the work's first screen is on its way.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Linear"
+      }
+    }
+  },
+  "workScreenshotsOf": "Screenshots of {name}",
+  "@workScreenshotsOf": {
+    "description": "Accessible name of the strip of a work's screenshots.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Linear"
+      }
+    }
+  },
+  "workPlayRecording": "Play Recording of {name}",
+  "@workPlayRecording": {
+    "description": "Accessible name of the button that plays a work's screen recording.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Linear"
+      }
+    }
+  },
+  "workPauseRecording": "Pause Recording of {name}",
+  "@workPauseRecording": {
+    "description": "Accessible name of the button that pauses a work's screen recording.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Linear"
+      }
+    }
+  },
+  "workPalette": "Palette",
+  "@workPalette": {
+    "description": "Accessible name of the band of a work's colours."
+  },
+  "workCopyColor": "Copy Color {value}",
+  "@workCopyColor": {
+    "description": "Accessible name of a colour in a work's palette, which copies its value.",
+    "placeholders": {
+      "value": {
+        "type": "String",
+        "example": "#1F2937"
+      }
+    }
+  },
+  "workCopyColorTip": "Copy color",
+  "@workCopyColorTip": {
+    "description": "Tooltip of a colour in a work's palette."
+  },
+  "workOverallScore": "Overall score {score}",
+  "@workOverallScore": {
+    "description": "Accessible name of the overall jury score at the centre of a work's score chart.",
+    "placeholders": {
+      "score": {
+        "type": "String",
+        "example": "7.8"
+      }
+    }
+  },
+  "favoritesMatches": "{count, plural, one {# match} other {# matches}}",
+  "@favoritesMatches": {
+    "description": "Favorites: how many favorites match the search.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "favoritesSearch": "Search favorites",
+  "@favoritesSearch": {
+    "description": "Favorites: accessible name of the search field."
+  },
+  "favoritesSearchPlaceholder": "Search titles and writers",
+  "@favoritesSearchPlaceholder": {
+    "description": "Favorites: placeholder of the search field."
+  },
+  "favoritesEmptyTitle": "Keep one, read it slowly",
+  "@favoritesEmptyTitle": {
+    "description": "Favorites: title of the empty page."
+  },
+  "favoritesEmptyText": "Articles you favorite are kept here, by writer.",
+  "@favoritesEmptyText": {
+    "description": "Favorites: the sentence under the empty page's title."
+  },
+  "favoritesNoMatches": "No matching favorites",
+  "@favoritesNoMatches": {
+    "description": "Favorites: shown when the search matches nothing."
+  },
+  "favoritesSearchResults": "Search results",
+  "@favoritesSearchResults": {
+    "description": "Favorites: accessible name of the list of search results."
+  },
+  "favoritesFrom": "Favorites from {name}",
+  "@favoritesFrom": {
+    "description": "Favorites: accessible name of the list of one writer's favorites.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Rauno Freiberg"
+      }
+    }
+  },
+  "favoritesWriters": "Favorite writers",
+  "@favoritesWriters": {
+    "description": "Favorites: accessible name of the list of writers with favorites."
+  },
+  "favoritesWriterCount": "{name}, {count, plural, one {# favorite} other {# favorites}}",
+  "@favoritesWriterCount": {
+    "description": "Favorites: accessible name of a writer's card, which opens their favorites.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Rauno Freiberg"
+      },
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "favoritesCount": "{count, plural, one {# favorite} other {# favorites}}",
+  "@favoritesCount": {
+    "description": "Favorites: how many of a writer's articles are favorites, beside their site.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "favoritesWriterActions": "Actions for {name}",
+  "@favoritesWriterActions": {
+    "description": "Favorites: accessible name of a writer's ··· menu button.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Rauno Freiberg"
+      }
+    }
+  },
+  "favoritesRecentFrom": "Recent favorites from {name}",
+  "@favoritesRecentFrom": {
+    "description": "Favorites: accessible name of the few latest favorites under a writer's name.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Rauno Freiberg"
+      }
+    }
+  },
+  "favoritesRemoveAll": "Remove All {count} from Favorites",
+  "@favoritesRemoveAll": {
+    "description": "Menu item that removes all of a writer's favorites (always more than one).",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "favoritesArticleActions": "Actions for “{title}”",
+  "@favoritesArticleActions": {
+    "description": "Favorites: accessible name of an article's ··· menu button.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Designing calm software"
+      }
+    }
+  },
+  "favoritesRemovedFrom": "{count, plural, one {Removed # favorite by {name}} other {Removed # favorites by {name}}}",
+  "@favoritesRemovedFrom": {
+    "description": "Notice after several of a writer's favorites were removed; offers Undo.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Rauno Freiberg"
+      },
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "favoritesRemoved": "Removed “{title}” from Favorites",
+  "@favoritesRemoved": {
+    "description": "Notice after one article was removed from Favorites; offers Undo.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Designing calm software"
+      }
+    }
+  },
+  "clipsAuthorSeparator": ", ",
+  "@clipsAuthorSeparator": {
+    "description": "Between the names of a clip's authors, as in “Ana, Ben”."
+  },
+  "clipsAuthorAtSite": "{author} ({site})",
+  "@clipsAuthorAtSite": {
+    "description": "A clip's author and the site it is from, in the Markdown a clip is copied as.",
+    "placeholders": {
+      "author": {
+        "type": "String",
+        "example": "Ana Lee"
+      },
+      "site": {
+        "type": "String",
+        "example": "Smashing Magazine"
+      }
+    }
+  },
+  "clipsMarkdownNote": "Note: {note}",
+  "@clipsMarkdownNote": {
+    "description": "The reader's note on a clip, in the Markdown a clip is copied as.",
+    "placeholders": {
+      "note": {
+        "type": "String",
+        "example": "Use for the onboarding copy"
+      }
+    }
+  },
+  "clipsUntitled": "Untitled",
+  "@clipsUntitled": {
+    "description": "Title of a clip's article when it has none."
+  },
+  "clipsSearch": "Search clips, notes, articles, and writers",
+  "@clipsSearch": {
+    "description": "Clips: accessible name of the search field."
+  },
+  "clipsSearchPlaceholder": "Search clips",
+  "@clipsSearchPlaceholder": {
+    "description": "Clips: placeholder of the search field."
+  },
+  "clipsEmptyTitle": "Keep a line you liked",
+  "@clipsEmptyTitle": {
+    "description": "Clips: title of the empty page."
+  },
+  "clipsEmptyText": "Passages you clip are kept here, with their sources.",
+  "@clipsEmptyText": {
+    "description": "Clips: the sentence under the empty page's title."
+  },
+  "clipsNoResults": "No results for “{query}”",
+  "@clipsNoResults": {
+    "description": "Clips: shown when the search finds nothing.",
+    "placeholders": {
+      "query": {
+        "type": "String",
+        "example": "motion"
+      }
+    }
+  },
+  "clipsByWriter": "Clips by writer",
+  "@clipsByWriter": {
+    "description": "Clips: accessible name of the page's list of clips, grouped by writer."
+  },
+  "clipsActions": "Clip toolbar",
+  "@clipsActions": {
+    "description": "Accessible name of the small bar of actions on one clip."
+  },
+  "clipsCopyQuote": "Copy Quote",
+  "@clipsCopyQuote": {
+    "description": "Button that copies a clip with its source and link as Markdown."
+  },
+  "clipsDeleted": "Clip deleted",
+  "@clipsDeleted": {
+    "description": "Notice after a clip was deleted; offers Undo."
+  },
+  "clipsCard": "Clip",
+  "@clipsCard": {
+    "description": "Accessible name of the card that shows one clip in full."
+  },
+  "clipsPrevious": "Previous Clip",
+  "@clipsPrevious": {
+    "description": "Clip card button that shows the previous clip."
+  },
+  "clipsPreviousTip": "Previous clip · ←",
+  "@clipsPreviousTip": {
+    "description": "Tooltip of the clip card's Previous Clip button, with its key."
+  },
+  "clipsNext": "Next Clip",
+  "@clipsNext": {
+    "description": "Clip card button that shows the next clip."
+  },
+  "clipsNextTip": "Next clip · →",
+  "@clipsNextTip": {
+    "description": "Tooltip of the clip card's Next Clip button, with its key."
+  },
+  "clipsShowInArticle": "Show this passage in the article",
+  "@clipsShowInArticle": {
+    "description": "Tooltip of a clip's article title, which opens the article at the passage."
+  },
+  "clipsClippedOn": "Clipped {date}",
+  "@clipsClippedOn": {
+    "description": "Clip card: when the clip was made.",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Nov 4"
+      }
+    }
+  },
+  "clipsNote": "Note",
+  "@clipsNote": {
+    "description": "Accessible name of a clip's note and of the field that edits it."
+  },
+  "clipsNotePlaceholder": "Why you clipped it, and where you'll use it",
+  "@clipsNotePlaceholder": {
+    "description": "Placeholder of the field for a clip's note."
+  },
+  "clipsNoteLabel": "Note: {note}",
+  "@clipsNoteLabel": {
+    "description": "Accessible name of a clip's note, which edits it when pressed.",
+    "placeholders": {
+      "note": {
+        "type": "String",
+        "example": "Use for the onboarding copy"
+      }
+    }
+  },
+  "clipsAddNote": "Add a Note…",
+  "@clipsAddNote": {
+    "description": "Clip card button that starts writing a note on the clip."
+  },
+  "clipsCopyTip": "Copy as Markdown, with source and link",
+  "@clipsCopyTip": {
+    "description": "Tooltip of Copy Quote on a clip without a note."
+  },
+  "clipsCopyTipWithNote": "Copy as Markdown, with source, link, and note",
+  "@clipsCopyTipWithNote": {
+    "description": "Tooltip of Copy Quote on a clip with a note."
+  },
+  "clipsArticleGone": "The article for this clip is no longer in the library.",
+  "@clipsArticleGone": {
+    "description": "Error when a clip's article was removed from the library."
+  },
+  "dateToday": "Today",
+  "@dateToday": {
+    "description": "A date in Home's recent lists, for an article from today."
+  },
+  "dateYesterday": "Yesterday",
+  "@dateYesterday": {
+    "description": "A date in Home's recent lists, for an article from yesterday."
+  },
+  "dateUpdated": "Updated {date}",
+  "@dateUpdated": {
+    "description": "An article's date when it has only a modified date; date is written by the app, as Nov 4.",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Nov 4"
+      }
+    }
+  },
+  "dateUpdatedToday": "Updated today",
+  "@dateUpdatedToday": {
+    "description": "Home: an article with only a modified date, modified today."
+  },
+  "dateUpdatedYesterday": "Updated yesterday",
+  "@dateUpdatedYesterday": {
+    "description": "Home: an article with only a modified date, modified yesterday."
+  },
+  "dateRefreshedToday": "Refreshed today at {time}",
+  "@dateRefreshedToday": {
+    "description": "Home's status line: the feeds were last read today; time is on the user's clock.",
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "9:37 AM"
+      }
+    }
+  },
+  "dateRefreshedYesterday": "Refreshed yesterday at {time}",
+  "@dateRefreshedYesterday": {
+    "description": "Home's status line: the feeds were last read yesterday; time is on the user's clock.",
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "9:05 PM"
+      }
+    }
+  },
+  "dateRefreshed": "Refreshed {date}",
+  "@dateRefreshed": {
+    "description": "Home's status line: the feeds were last read on an earlier day.",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Nov 4"
+      }
+    }
+  },
+  "commonLoading": "Loading",
+  "@commonLoading": {
+    "description": "Accessible name of the turning loading mark."
+  },
+  "commonUntitled": "Untitled",
+  "@commonUntitled": {
+    "description": "Shown in place of an article's title when none could be read from it."
+  },
+  "commonUnknownSource": "Unknown source",
+  "@commonUnknownSource": {
+    "description": "Shown in place of a writer's name when the article's writer is not in the library."
+  },
+  "commonFavorited": "Favorited",
+  "@commonFavorited": {
+    "description": "Accessible name of the small amber mark beside an article that is in Favorites."
+  },
+  "commonPercentRead": "{percent}% read",
+  "@commonPercentRead": {
+    "description": "Accessible name of the moon beside an article read partway.",
+    "placeholders": {
+      "percent": {
+        "type": "int",
+        "example": "42"
+      }
+    }
+  },
+  "commonNoMatchingArticles": "No matching articles",
+  "@commonNoMatchingArticles": {
+    "description": "Shown when a search of Home or of a writer's page finds no article."
+  },
+  "commonClearSearch": "Clear Search",
+  "@commonClearSearch": {
+    "description": "Link button under No matching articles: empties the search field."
+  },
+  "commonRefreshing": "Refreshing…",
+  "@commonRefreshing": {
+    "description": "Home's status line and the refresh button's name while the feeds are being read."
+  },
+  "commonNameColon": "{name}: {text}",
+  "@commonNameColon": {
+    "description": "Accessible name of a card: the writer's name, then the post's title or the writer's introduction.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Josh Comeau"
+      },
+      "text": {
+        "type": "String",
+        "example": "The Height Enigma"
+      }
+    }
+  },
+  "commonListSeparator": ", ",
+  "@commonListSeparator": {
+    "description": "Separates the names in a list of writers, as in Couldn't update A, B."
+  },
+  "errorNotSaved": "Couldn't save the change. Your library is unchanged. {detail}",
+  "@errorNotSaved": {
+    "description": "Error notice when a change to the library could not be saved; detail is the library's reason.",
+    "placeholders": {
+      "detail": {
+        "type": "String",
+        "example": "database is locked"
+      }
+    }
+  },
+  "errorAddressNotOpened": "This address can't be opened in the browser.",
+  "@errorAddressNotOpened": {
+    "description": "Error notice when a link is not an http or https address, so the browser is not opened."
+  },
+  "noticeFollowing": "Now following {name}",
+  "@noticeFollowing": {
+    "description": "Notice, and spoken announcement, once a writer is followed.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Josh Comeau"
+      }
+    }
+  },
+  "noticeFollowingThisBlog": "Now following this blog",
+  "@noticeFollowingThisBlog": {
+    "description": "Notice once a blog is followed, when its name is not known yet."
+  },
+  "noticeUnfollowed": "Unfollowed {name}",
+  "@noticeUnfollowed": {
+    "description": "Notice, with Undo, once a writer is unfollowed; also spoken on Explore.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Josh Comeau"
+      }
+    }
+  },
+  "noticesRegion": "Notifications",
+  "@noticesRegion": {
+    "description": "Accessible name of the area at the window's foot where notices appear."
+  },
+  "noticeClose": "Close Notice",
+  "@noticeClose": {
+    "description": "Accessible name of the × button on a notice."
+  },
+  "sidebarRegion": "Sidebar",
+  "@sidebarRegion": {
+    "description": "Accessible name of the sidebar."
+  },
+  "sidebarTabs": "Tabs",
+  "@sidebarTabs": {
+    "description": "Accessible name of the row of tabs at the sidebar's head."
+  },
+  "sidebarFollowBlog": "Follow a Blog…",
+  "@sidebarFollowBlog": {
+    "description": "The + button at the sidebar's foot and its tooltip: opens the Follow a Blog dialog."
+  },
+  "sidebarLatest": "Latest: {title}",
+  "@sidebarLatest": {
+    "description": "Accessible description of a writer's row in the sidebar: their newest article's title.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "The Height Enigma"
+      }
+    }
+  },
+  "sidebarRefreshFailedTip": "Couldn't refresh. Click to try again.",
+  "@sidebarRefreshFailedTip": {
+    "description": "Tooltip of the refresh mark on a writer's row whose feed could not be read."
+  },
+  "sidebarRefreshAgain": "Refresh {name} Again",
+  "@sidebarRefreshAgain": {
+    "description": "Accessible name of the refresh mark on a writer's row whose feed could not be read.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Innei"
+      }
+    }
+  },
+  "sidebarRefreshingWriter": "Refreshing {name}…",
+  "@sidebarRefreshingWriter": {
+    "description": "Accessible name of the refresh mark on a writer's row while their feed is read again.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Innei"
+      }
+    }
+  },
+  "sidebarRenameField": "Name",
+  "@sidebarRenameField": {
+    "description": "Accessible name of the field that renames a writer in the sidebar."
+  },
+  "sidebarWriterActions": "Actions for {name}",
+  "@sidebarWriterActions": {
+    "description": "Accessible name of the ··· button that opens a writer's menu.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Innei"
+      }
+    }
+  },
+  "sidebarRename": "Rename",
+  "@sidebarRename": {
+    "description": "Menu item in a writer's menu: edits their name in place in the sidebar."
+  },
+  "refreshNoResponse": "The feed didn't respond.",
+  "@refreshNoResponse": {
+    "description": "Why a writer's feed could not be read, when the feed gave no reason."
+  },
+  "refreshChecking": "Checking for new articles…",
+  "@refreshChecking": {
+    "description": "Spoken announcement as a refresh starts."
+  },
+  "refreshWriterUpdated": "{name} updated",
+  "@refreshWriterUpdated": {
+    "description": "Spoken announcement once one writer's feed has been read again.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Innei"
+      }
+    }
+  },
+  "refreshFeedUpdated": "Feed updated",
+  "@refreshFeedUpdated": {
+    "description": "Spoken announcement once one feed has been read again, when its writer has no name."
+  },
+  "refreshAllUpdated": "All feeds updated",
+  "@refreshAllUpdated": {
+    "description": "Spoken announcement once every feed has been read again."
+  },
+  "refreshSomeFailed": "{updated} of {total} updated. Couldn't update {names}.",
+  "@refreshSomeFailed": {
+    "description": "Spoken announcement after a refresh in which some feeds could not be read; names lists those writers.",
+    "placeholders": {
+      "updated": {
+        "type": "int",
+        "example": "2"
+      },
+      "total": {
+        "type": "int",
+        "example": "3"
+      },
+      "names": {
+        "type": "String",
+        "example": "Innei"
+      }
+    }
+  },
+  "refreshUnnamedFeed": "Unnamed feed",
+  "@refreshUnnamedFeed": {
+    "description": "Stands for a writer with no name in the list of feeds that could not be read."
+  },
+  "homeMatches": "{count, plural, one {# match} other {# matches}}",
+  "@homeMatches": {
+    "description": "Home's status line while searching: how many articles match.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "homeSearchLabel": "Search articles from writers you follow",
+  "@homeSearchLabel": {
+    "description": "Accessible name of Home's search field."
+  },
+  "homeSearchPlaceholder": "Search titles and writers",
+  "@homeSearchPlaceholder": {
+    "description": "Placeholder of Home's search field."
+  },
+  "homeResumeRegion": "Continue Reading",
+  "@homeResumeRegion": {
+    "description": "Accessible name of Home's row of the articles left half-read; no visible heading."
+  },
+  "homeResume": "Continue reading: {title}, {percent}% read",
+  "@homeResume": {
+    "description": "Accessible name of Home's button that reopens the article left half-read.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "The Height Enigma"
+      },
+      "percent": {
+        "type": "int",
+        "example": "42"
+      }
+    }
+  },
+  "homeTodaysExample": "Today's design example",
+  "@homeTodaysExample": {
+    "description": "Accessible name of Home's large picture of today's design example."
+  },
+  "homeLatest": "Latest article",
+  "@homeLatest": {
+    "description": "Accessible name of Home's large picture of the newest article from a followed writer."
+  },
+  "homePopular": "Popular",
+  "@homePopular": {
+    "description": "Accessible name of Home's section of articles popular on link aggregators."
+  },
+  "homeFollowing": "Following",
+  "@homeFollowing": {
+    "description": "Accessible name of Home's section of the writers the reader follows."
+  },
+  "authorSearchLabel": "Search this writer's articles",
+  "@authorSearchLabel": {
+    "description": "Accessible name of the search field on a writer's page."
+  },
+  "authorSearchPlaceholder": "Search titles",
+  "@authorSearchPlaceholder": {
+    "description": "Placeholder of the search field on a writer's page."
+  },
+  "authorArticles": "Articles by {name}",
+  "@authorArticles": {
+    "description": "Accessible name of the list of articles on a writer's page.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Innei"
+      }
+    }
+  },
+  "authorEmptyTitle": "No articles yet",
+  "@authorEmptyTitle": {
+    "description": "Empty state title on a writer's page with no articles."
+  },
+  "authorEmptyText": "New articles from this writer will arrive here.",
+  "@authorEmptyText": {
+    "description": "Empty state sentence on a writer's page with no articles."
+  },
+  "exploreUnavailable": "Explore isn't available right now.",
+  "@exploreUnavailable": {
+    "description": "Explore's error sentence, and the reader's, when the app has no Explore service."
+  },
+  "exploreUnread": "The list didn't open. Try again later.",
+  "@exploreUnread": {
+    "description": "Explore's error sentence when the recommendations could not be read."
+  },
+  "exploreErrorTitle": "Couldn't load recommendations",
+  "@exploreErrorTitle": {
+    "description": "Explore's error state title when the recommendations could not be read."
+  },
+  "exploreLoading": "Loading recommendations…",
+  "@exploreLoading": {
+    "description": "Accessible name of Explore's loading picture."
+  },
+  "exploreDesign": "Design",
+  "@exploreDesign": {
+    "description": "Accessible name of Explore's design room: design sites and galleries."
+  },
+  "exploreWriting": "Writing",
+  "@exploreWriting": {
+    "description": "Accessible name of Explore's writing room: writers and publications."
+  },
+  "exploreGoToWriting": "Go to Writing: writers' latest articles",
+  "@exploreGoToWriting": {
+    "description": "Accessible name of the edge of Explore that crosses from Design to Writing."
+  },
+  "exploreBackToDesign": "Back to Design: design sites and work",
+  "@exploreBackToDesign": {
+    "description": "Accessible name of the edge of Explore that crosses back from Writing to Design."
+  },
+  "exploreInWriting": "Writing: writers' latest articles",
+  "@exploreInWriting": {
+    "description": "Spoken once Explore has crossed to Writing."
+  },
+  "exploreInDesign": "Design: design sites and work",
+  "@exploreInDesign": {
+    "description": "Spoken once Explore has crossed to Design."
+  },
+  "exploreGalleryNewest": "Latest from design galleries",
+  "@exploreGalleryNewest": {
+    "description": "Accessible name of the newest gallery works on Explore's Design front page."
+  },
+  "exploreNewWork": "Newly added work",
+  "@exploreNewWork": {
+    "description": "Accessible name of the strip of newly added gallery work on Explore."
+  },
+  "exploreWorkNumber": "Work {n}: {title}",
+  "@exploreWorkNumber": {
+    "description": "Accessible name of a dot that shows one of the works in a gallery's carousel.",
+    "placeholders": {
+      "n": {
+        "type": "int",
+        "example": "2"
+      },
+      "title": {
+        "type": "String",
+        "example": "Linear"
+      }
+    }
+  },
+  "exploreWorkCard": "{title}, {name}",
+  "@exploreWorkCard": {
+    "description": "Accessible name of a gallery work: its title, then the gallery.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Linear"
+      },
+      "name": {
+        "type": "String",
+        "example": "Godly"
+      }
+    }
+  },
+  "exploreWriters": "Writers",
+  "@exploreWriters": {
+    "description": "Accessible name of Explore's sections of writers."
+  },
+  "exploreWritersLatest": "Writers' latest articles",
+  "@exploreWritersLatest": {
+    "description": "Accessible name of Explore's row of writers' newest articles."
+  },
+  "exploreDesignSites": "Design sites",
+  "@exploreDesignSites": {
+    "description": "Accessible name of Explore's section of design sites."
+  },
+  "exploreFollowWriter": "Follow {name}",
+  "@exploreFollowWriter": {
+    "description": "Accessible name of the Follow pill for a writer not followed yet.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Josh Comeau"
+      }
+    }
+  },
+  "exploreUnfollowingWriter": "Unfollowing {name}…",
+  "@exploreUnfollowingWriter": {
+    "description": "Accessible name of the Follow pill while the writer is being unfollowed.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Josh Comeau"
+      }
+    }
+  },
+  "exploreFollowingWriter": "Following {name}…",
+  "@exploreFollowingWriter": {
+    "description": "Accessible name of the Follow pill while the writer is being followed.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Josh Comeau"
+      }
+    }
+  },
+  "exploreFollowedWriter": "Following {name}. Press to unfollow.",
+  "@exploreFollowedWriter": {
+    "description": "Accessible name of the Follow pill for a writer already followed.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Josh Comeau"
+      }
+    }
+  },
+  "exploreFollowed": "Following",
+  "@exploreFollowed": {
+    "description": "Text of the Follow pill once the writer is followed."
+  },
+  "subscribeTitle": "Follow a Blog",
+  "@subscribeTitle": {
+    "description": "Title and accessible name of the dialog that follows a blog by its address."
+  },
+  "subscribeAddress": "Blog or feed address",
+  "@subscribeAddress": {
+    "description": "Label and accessible name of the address field in the Follow a Blog dialog."
+  },
+  "subscribeFind": "Find Feed",
+  "@subscribeFind": {
+    "description": "Button beside the address field: looks up the feed at the address."
+  },
+  "subscribeFollow": "Follow",
+  "@subscribeFollow": {
+    "description": "The Follow a Blog dialog's main button, once a feed is found."
+  },
+  "subscribeUpdate": "Update",
+  "@subscribeUpdate": {
+    "description": "The Follow a Blog dialog's main button when the blog is already followed: reads it again."
+  },
+  "subscribeReading": "Looking for the feed…",
+  "@subscribeReading": {
+    "description": "Spoken announcement while the dialog looks up the feed at the address."
+  },
+  "subscribeCantRead": "Couldn't read this address. Try again.",
+  "@subscribeCantRead": {
+    "description": "Error under the address field when the lookup failed without a reason."
+  },
+  "subscribeNotSaved": "Couldn't follow this blog. Try again.",
+  "@subscribeNotSaved": {
+    "description": "Error under the address field when following failed without a reason."
+  },
+  "subscribeInvalidAddress": "This address won't work. Enter the address of a blog or its feed.",
+  "@subscribeInvalidAddress": {
+    "description": "Error under the address field when it is not a usable address."
+  },
+  "subscribeNoArticles": "This feed has no articles yet. You can refresh it after following.",
+  "@subscribeNoArticles": {
+    "description": "In the dialog's preview: the feed is empty for now."
+  },
+  "subscribeArticleCount": "{count, plural, one {# article in the feed} other {# articles in the feed}}",
+  "@subscribeArticleCount": {
+    "description": "In the dialog's preview: how many articles the feed has now.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "subscribeAlreadyFollowing": "You already follow this blog. It'll be updated, not added twice.",
+  "@subscribeAlreadyFollowing": {
+    "description": "In the dialog's preview, when the blog is already followed."
+  },
+  "subscribeSavedBefore": "You followed this blog before. You can follow it again.",
+  "@subscribeSavedBefore": {
+    "description": "In the dialog's preview, when the blog was followed once and later unfollowed."
+  },
+  "subscribeSaved": "Followed. {imported, plural, one {# new article} other {# new articles}}, {updated} updated.",
+  "@subscribeSaved": {
+    "description": "Spoken announcement once a blog is followed: how many articles were added and updated.",
+    "placeholders": {
+      "imported": {
+        "type": "int",
+        "example": "12"
+      },
+      "updated": {
+        "type": "int",
+        "example": "0"
+      }
+    }
+  },
+  "readerCantReadText": "Couldn't get the text. Try again, or open the original.",
+  "@readerCantReadText": {
+    "description": "Reader: the article's text could not be read and no copy is saved."
+  },
+  "readerLatestUnavailable": "Couldn't get the latest version. Showing the saved copy.",
+  "@readerLatestUnavailable": {
+    "description": "Reader: reading the article again failed; the saved copy stays on screen."
+  },
+  "readerNoNewerText": "There's no newer text yet. Showing the saved copy.",
+  "@readerNoNewerText": {
+    "description": "Reader: reading again gave no full text; the saved copy stays on screen."
+  },
+  "readerNewImagesIncomplete": "Some images in the new version weren't saved. Showing the saved copy.",
+  "@readerNewImagesIncomplete": {
+    "description": "Reader: the new version lost images the saved copy has, so the saved copy stays."
+  },
+  "readerNewLayoutUnavailable": "Couldn't lay out the new version. Showing the saved copy.",
+  "@readerNewLayoutUnavailable": {
+    "description": "Reader: the new version could not be formatted; the saved copy stays on screen."
+  },
+  "readerLayoutUnavailable": "Couldn't lay out this article. Showing it as is.",
+  "@readerLayoutUnavailable": {
+    "description": "Reader: formatting failed, so the article is shown as extracted, without the reader's layout."
+  },
+  "readerLayoutNotUpdated": "Couldn't update the layout. Showing the saved copy.",
+  "@readerLayoutNotUpdated": {
+    "description": "Reader: a saved article could not be reformatted for this version of the app."
+  },
+  "readerSiteNeedsSignIn": "The site requires a sign-in or payment. Sign in there to read this article.",
+  "@readerSiteNeedsSignIn": {
+    "description": "Reader: the article's site answered that it needs a sign-in or payment."
+  },
+  "readerSiteRefused": "The site refused to share this article. Open the original to see how to read it.",
+  "@readerSiteRefused": {
+    "description": "Reader: the article's site refused the request (HTTP 403)."
+  },
+  "readerTextTooLarge": "The text is too large to read here. Open the original instead.",
+  "@readerTextTooLarge": {
+    "description": "Reader: a members-only article whose text is larger than the reader handles."
+  },
+  "readerFeedSummaryReadOn": "The feed only has a summary. Open the original to read the rest.",
+  "@readerFeedSummaryReadOn": {
+    "description": "Reader notice, saved with the article: the body is the feed's summary."
+  },
+  "readerFeedSummary": "The feed only has a summary.",
+  "@readerFeedSummary": {
+    "description": "Reader notice, saved with the article: the feed carries a summary, not the article."
+  },
+  "readerSignInPublicKept": "The original needs a sign-in or subscription. Only the public part is saved.",
+  "@readerSignInPublicKept": {
+    "description": "Reader notice, saved with the article: a members-only article of which only the public part is kept."
+  },
+  "readerSignInSummaryOnly": "The original needs a sign-in or subscription. Only the publisher's public summary is shown.",
+  "@readerSignInSummaryOnly": {
+    "description": "Reader notice, saved with the article: a members-only article shown as its public description."
+  },
+  "readerInteractiveExample": "Interactive example. View it on the original page.",
+  "@readerInteractiveExample": {
+    "description": "Link that stands in an article for an interactive example the reader can't show; opens the original page."
+  },
+  "workFactScore": "Score",
+  "@workFactScore": {
+    "description": "Work page: label over the jury's score of a gallery work."
+  },
+  "workFactTechnology": "Technology",
+  "@workFactTechnology": {
+    "description": "Work page: label over the technologies a site is built with."
+  },
+  "workFactTypefaces": "Typefaces",
+  "@workFactTypefaces": {
+    "description": "Work page: label over the typefaces a site uses."
+  },
+  "workScoreDesign": "Design",
+  "@workScoreDesign": {
+    "description": "Work page score chart: the jury's mark for design."
+  },
+  "workScoreUsability": "Usability",
+  "@workScoreUsability": {
+    "description": "Work page score chart: the jury's mark for usability."
+  },
+  "workScoreCreativity": "Creativity",
+  "@workScoreCreativity": {
+    "description": "Work page score chart: the jury's mark for creativity."
+  },
+  "workScoreContent": "Content",
+  "@workScoreContent": {
+    "description": "Work page score chart: the jury's mark for content."
+  },
+  "refreshFailedKept": "Couldn't refresh. Saved articles are still here. Check your connection or the feed address, then try again.",
+  "@refreshFailedKept": {
+    "description": "Why a writer's feed could not be refreshed; saved with the writer and shown until the next refresh."
+  },
+  "refreshNothingToRefresh": "Nothing to refresh yet. Follow a blog first.",
+  "@refreshNothingToRefresh": {
+    "description": "Refresh was asked for while no writer is followed."
+  },
+  "subscribeConnectionLost": "The connection was interrupted. Try again later.",
+  "@subscribeConnectionLost": {
+    "description": "Follow a Blog dialog: the connection dropped twice while reading the address."
+  },
+  "subscribeFeedHTTPError": "The site answered with error {status}, so the feed couldn't be read. Saved articles aren't affected.",
+  "@subscribeFeedHTTPError": {
+    "description": "Follow a Blog dialog: the address answered with an HTTP error; status is the code.",
+    "placeholders": {
+      "status": {
+        "type": "int",
+        "example": "503"
+      }
+    }
+  },
+  "subscribeNoFeedOnPage": "This page doesn't point to a feed. Enter the full RSS or Atom address.",
+  "@subscribeNoFeedOnPage": {
+    "description": "Follow a Blog dialog: the page names no feed Trie can find."
+  },
+  "subscribeFeedUnreadable": "Found a feed, but couldn't read it. Try again later, or enter the feed address.",
+  "@subscribeFeedUnreadable": {
+    "description": "Follow a Blog dialog: the page names a feed, but reading it failed."
+  },
+  "subscribePreviewExpired": "This preview has expired. Find the feed again.",
+  "@subscribePreviewExpired": {
+    "description": "Follow a Blog dialog: Follow was pressed more than ten minutes after Find Feed."
+  },
+  "subscribePageTooLarge": "This page is too large to search for a feed. Enter the RSS or Atom address instead.",
+  "@subscribePageTooLarge": {
+    "description": "Follow a Blog dialog: the page is too large to look for its feed in."
+  },
+  "subscribeInvalidFeed": "This address didn't return a valid RSS or Atom feed.",
+  "@subscribeInvalidFeed": {
+    "description": "Follow a Blog dialog: the address answered with something that is not well-formed XML."
+  },
+  "subscribeFeedTooLarge": "This feed is too large or uses an unsupported XML declaration.",
+  "@subscribeFeedTooLarge": {
+    "description": "Follow a Blog dialog: the feed is over 5 MB or declares a doctype or entities."
+  },
+  "subscribeNotFeed": "This address isn't an RSS or Atom feed.",
+  "@subscribeNotFeed": {
+    "description": "Follow a Blog dialog: the address gives XML that is not a feed."
+  },
+  "subscribeFeedTooComplex": "This feed's structure is too large to read.",
+  "@subscribeFeedTooComplex": {
+    "description": "Follow a Blog dialog: the feed has too many elements."
+  },
+  "subscribeFeedTooDeep": "This feed is nested too deeply to read.",
+  "@subscribeFeedTooDeep": {
+    "description": "Follow a Blog dialog: the feed's elements are nested too deeply."
+  },
+  "subscribeFeedNoChannel": "This feed is missing its channel details.",
+  "@subscribeFeedNoChannel": {
+    "description": "Follow a Blog dialog: an RSS feed without its channel element."
+  },
+  "subscribeFeedTooMany": "This feed lists more than 1,000 articles. Use a smaller feed.",
+  "@subscribeFeedTooMany": {
+    "description": "Follow a Blog dialog: the feed has more than 1,000 items."
+  },
+  "subscribeInvalidCharacters": "Invalid characters in this feed were removed.",
+  "@subscribeInvalidCharacters": {
+    "description": "Follow a Blog dialog, under the preview: control characters were removed from the feed."
+  },
+  "subscribeSkippedItems": "{count, plural, one {# article has no public web address and wasn't added.} other {# articles have no public web address and weren't added.}}",
+  "@subscribeSkippedItems": {
+    "description": "Follow a Blog dialog, under the preview: feed items left out because they link to no public page.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "errorNotPublicAddress": "Only public web addresses (HTTP or HTTPS) can be read.",
+  "@errorNotPublicAddress": {
+    "description": "Error shown where an address is read: it is not a public http or https address."
+  },
+  "errorRedirectOutOfScope": "The site redirected to another site, or in a loop.",
+  "@errorRedirectOutOfScope": {
+    "description": "Error shown where an address is read: a redirect left the site or came back to itself."
+  },
+  "errorReadBudget": "Reading this article took too many requests.",
+  "@errorReadBudget": {
+    "description": "Error shown where an address is read: the article used up the requests one read may make."
+  },
+  "errorLookupTimeout": "Looking up the site's address took too long.",
+  "@errorLookupTimeout": {
+    "description": "Error shown where an address is read: the DNS lookup timed out."
+  },
+  "errorPrivateAddress": "The site's address isn't on the public internet.",
+  "@errorPrivateAddress": {
+    "description": "Error shown where an address is read: the host resolves to a private or local address."
+  },
+  "errorUnsupportedEncoding": "The page uses a text encoding that isn't supported.",
+  "@errorUnsupportedEncoding": {
+    "description": "Error shown where an address is read: the page's character set is unknown."
+  },
+  "errorTooLarge": "The page or image is too large.",
+  "@errorTooLarge": {
+    "description": "Error shown where an address is read: the response is over the size limit."
+  },
+  "errorTimeout": "The site took too long to respond.",
+  "@errorTimeout": {
+    "description": "Error shown where an address is read: the site stopped sending."
+  },
+  "errorTooManyRedirects": "The site redirected too many times.",
+  "@errorTooManyRedirects": {
+    "description": "Error shown where an address is read: more redirects than allowed."
+  },
+  "errorHTTPSDowngrade": "The site redirected from HTTPS to plain HTTP, so it wasn't followed.",
+  "@errorHTTPSDowngrade": {
+    "description": "Error shown where an address is read: a secure page redirected to an insecure one."
+  },
+  "errorInvalidClipID": "The clip's ID isn't valid.",
+  "@errorInvalidClipID": {
+    "description": "Why a change was not saved, after errorNotSaved: a clip's identifier is malformed."
+  },
+  "errorInvalidArticleID": "The article's ID isn't valid.",
+  "@errorInvalidArticleID": {
+    "description": "Why a change was not saved, after errorNotSaved: an article's identifier is malformed."
+  },
+  "errorClipLength": "A clip can be 1 to 20,000 characters long.",
+  "@errorClipLength": {
+    "description": "Why a change was not saved, after errorNotSaved: a clip is empty or too long."
+  },
+  "errorInvalidClipParagraph": "The clip's paragraph isn't valid.",
+  "@errorInvalidClipParagraph": {
+    "description": "Why a change was not saved, after errorNotSaved: a clip's place in the article is malformed."
+  },
+  "errorInvalidTextVersion": "The text's version isn't valid.",
+  "@errorInvalidTextVersion": {
+    "description": "Why a change was not saved, after errorNotSaved: the version of the article's text a clip was made from is malformed."
+  },
+  "errorInvalidClipDate": "The clip's date isn't valid.",
+  "@errorInvalidClipDate": {
+    "description": "Why a change was not saved, after errorNotSaved: a clip's creation time is malformed."
+  },
+  "errorNoteTooLong": "A note can be up to 4,000 characters long.",
+  "@errorNoteTooLong": {
+    "description": "Why a change was not saved, after errorNotSaved: a clip's note is too long."
+  },
+  "errorInvalidPosition": "The reading position isn't valid.",
+  "@errorInvalidPosition": {
+    "description": "Why the reading position was not saved: it is malformed."
+  },
+  "errorInvalidItemID": "The item's ID isn't valid.",
+  "@errorInvalidItemID": {
+    "description": "Why a change was not saved, after errorNotSaved: the identifier of an article or writer is malformed."
+  },
+  "errorInvalidChange": "This change isn't valid.",
+  "@errorInvalidChange": {
+    "description": "Why a change was not saved, after errorNotSaved: no change was given."
+  },
+  "errorInvalidFavoritesChange": "This change to Favorites isn't valid.",
+  "@errorInvalidFavoritesChange": {
+    "description": "Why a change was not saved, after errorNotSaved: a change to many favorites at once is malformed."
+  },
+  "errorInvalidBatchChange": "This change to several articles isn't valid.",
+  "@errorInvalidBatchChange": {
+    "description": "Why a change was not saved, after errorNotSaved: a change to many articles at once is malformed."
+  },
+  "errorWriterNameLength": "A writer's name can be 1 to 40 characters long.",
+  "@errorWriterNameLength": {
+    "description": "Why renaming a writer was not saved: the name is empty or too long."
+  },
+  "errorUnsupportedChange": "This change isn't supported.",
+  "@errorUnsupportedChange": {
+    "description": "Why a change was not saved, after errorNotSaved: the library does not know the kind of change."
+  },
+  "exploreNotListed": "This article is no longer in Explore.",
+  "@exploreNotListed": {
+    "description": "Reader: an Explore article was asked for that Explore no longer lists."
+  },
+  "exploreFeaturedOn": "Featured on {name}",
+  "@exploreFeaturedOn": {
+    "description": "Explore: a writer's or site's line when a recommender found it; name is the recommender, such as Hacker News or a gallery.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Hacker News"
+      }
+    }
+  },
+  "errorLibraryCantOpen": "Can't Open the Library",
+  "@errorLibraryCantOpen": {
+    "description": "Title of the dialog shown at launch when the library can't be opened; the app then quits."
+  },
+  "errorLibraryInUse": "Library Open in Another Trie",
+  "@errorLibraryInUse": {
+    "description": "Title of the dialog shown at launch when another running Trie has the library open; the app then quits."
+  },
+  "errorLibraryInUseDetail": "A library can be open in only one Trie at a time.",
+  "@errorLibraryInUseDetail": {
+    "description": "Text of the dialog shown at launch when another running Trie has the library open."
+  },
+  "readerCalloutNote": "Note",
+  "@readerCalloutNote": {
+    "description": "Reader: the label of a NOTE callout in an article."
+  },
+  "readerCalloutTip": "Tip",
+  "@readerCalloutTip": {
+    "description": "Reader: the label of a TIP callout in an article."
+  },
+  "readerCalloutImportant": "Important",
+  "@readerCalloutImportant": {
+    "description": "Reader: the label of an IMPORTANT callout in an article."
+  },
+  "readerCalloutWarning": "Warning",
+  "@readerCalloutWarning": {
+    "description": "Reader: the label of a WARNING callout in an article."
+  },
+  "readerCalloutCaution": "Caution",
+  "@readerCalloutCaution": {
+    "description": "Reader: the label of a CAUTION callout in an article."
+  },
+  "kindLanding": "Landing Pages",
+  "@kindLanding": {
+    "description": "Explore's kind of design work: landing pages."
+  },
+  "kindPortfolio": "Portfolios",
+  "@kindPortfolio": {
+    "description": "Explore's kind of design work: portfolio sites."
+  },
+  "kindMotion": "Motion",
+  "@kindMotion": {
+    "description": "Explore's kind of design work: motion, scroll effects and animation."
+  },
+  "kindType": "Type",
+  "@kindType": {
+    "description": "Explore's kind of design work: typography and typefaces in use."
+  },
+  "kindBrand": "Branding",
+  "@kindBrand": {
+    "description": "Explore's kind of design work: brand identities, logos and packaging."
+  },
+  "exploreKinds": "Browse by What You Make",
+  "@exploreKinds": {
+    "description": "Accessible name of the row of kinds under Explore's design front page; no visible heading."
+  },
+  "favoritesKinds": "Kept Designs",
+  "@favoritesKinds": {
+    "description": "Accessible name of the board of kept designs, by kind, on the first screen of Favorites; no visible heading."
+  }
+}

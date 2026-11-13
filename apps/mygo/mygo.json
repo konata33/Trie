@@ -2,5 +2,9 @@
   "name": "Trie",
   "identifier": "com.example.trie",
   "version": "0.1.0",
-  "out": "build"
+  "out": "build",
+  "i18n": {
+    "dir": "internal/locales",
+    "source": "en"
+  }
 }
