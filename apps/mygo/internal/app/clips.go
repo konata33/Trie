@@ -655,9 +655,7 @@ func (a *App) personPage(c *ui.Context, p page, pp *person, hero bool, sh shape,
 		a.clipRow(c, p, cl, article, below, last, terms, live)
 	}
 	return page.Children(func() {
-		if pp.icon != nil {
-			a.aura(c, pp.icon.hues, hero)
-		}
+		a.aura(c, hero)
 		first := ui.Column(c.Key("first")).MinWidth(0)
 		if sh != card && !wide && !poster {
 			first.MaxWidth(680)
@@ -723,12 +721,13 @@ func (a *App) focusIn(e ui.Element) {
 	}
 }
 
-// aura is the two strongest colours of a person's avatar, resting as a
-// soft halo at the top of their page (Explore's covers use the same). The
+// aura is a soft grey halo resting at the top of a person's page, the same
+// for everyone, as Explore's covers glow (not their avatar's colours). The
 // page or the card it rests in cuts it at its rounded corners: a clip of
 // its own there would reach into them, and be drawn as a mask on the CPU
 // again wherever the page moves.
-func (a *App) aura(c *ui.Context, hues [2]ui.Color, hero bool) {
+func (a *App) aura(c *ui.Context, hero bool) {
+	hues := grey
 	ui.Box(c.Key("aura")).Absolute().Fill().ZIndex(-1).IgnoreInput(true).AccessHidden(true).Children(func() {
 		near, far := [3]float32{-240, -120, 400}, [3]float32{-260, 180, 320}
 		if hero {
@@ -1227,10 +1226,7 @@ func (a *App) cardContent(c *ui.Context, p page, cl *library.Clip, at, total int
 		next := cs.order[at+1].ID
 		c.OnShortcut(0, ui.KeyRight, func() { a.kbd = true; a.showClip(next, ui.Rect{}) })
 	}
-	// Their halo comes along into the card.
-	if ic != nil {
-		a.aura(c, ic.hues, false)
-	}
+	a.aura(c, false)
 	// The person crosses over with the words only when the card turns to someone else.
 	if cs.who != who {
 		cs.who = who

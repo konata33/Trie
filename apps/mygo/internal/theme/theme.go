@@ -140,12 +140,9 @@ const (
 	ReaderWide   = 840
 )
 
-// Explore's own: the halo of a colourless avatar
-// (amber) and of a writer with none (grey); a palette dot's ring; a link's
+// Explore's own: the grey halo every writer glows; a palette dot's ring; a link's
 // underline on a picture's band; the subscribe pill pointed at once on.
 var (
-	HaloAmber      = ui.RGB(150, 112, 60)
-	HaloAmberDeep  = ui.RGB(70, 56, 40)
 	HaloGrey       = ui.RGB(118, 118, 124)
 	HaloGreyDeep   = ui.RGB(58, 58, 62)
 	DotRing        = ui.RGBA(255, 255, 255, 0.28)

@@ -331,9 +331,8 @@ func hostOf(u string) string {
 type siteIcon struct {
 	raw   *ui.Bitmap // as drawn: the reader's byline puts it on a light disc
 	toned *ui.Bitmap
-	dim   *ui.Bitmap  // saturate(0.55) brightness(0.92)
-	inset bool        // ink and clear marks keep 12% around them
-	hues  [2]ui.Color // its two strongest colours, for a halo
+	dim   *ui.Bitmap // saturate(0.55) brightness(0.92)
+	inset bool       // ink and clear marks keep 12% around them
 }
 
 // bundled are the icons of the seeded sources.
@@ -480,7 +479,7 @@ func toneIcon(img image.Image) *siteIcon {
 		db := (0.213-0.213*s)*r + (0.715-0.715*s)*g + (0.072+0.928*s)*b
 		dim.Pix[i], dim.Pix[i+1], dim.Pix[i+2], dim.Pix[i+3] = byte(clamp01(dr*0.92)*255+0.5), byte(clamp01(dg*0.92)*255+0.5), byte(clamp01(db*0.92)*255+0.5), src.Pix[i+3]
 	}
-	return &siteIcon{raw: ui.NewBitmap(src), toned: ui.NewBitmap(toned), dim: ui.NewBitmap(dim), inset: tone == "ink" || tone == "clear", hues: hues(img)}
+	return &siteIcon{raw: ui.NewBitmap(src), toned: ui.NewBitmap(toned), dim: ui.NewBitmap(dim), inset: tone == "ink" || tone == "clear"}
 }
 
 func invert9(v float64) float64 { return 0.9 - 0.8*v }

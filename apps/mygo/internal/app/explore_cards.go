@@ -583,10 +583,9 @@ func (a *App) ink(c *ui.Context, e *explore.Entry, full *exPic, kind inkKind, w,
 				{Color: theme.Scrim.Alpha(0.12), At: 92 / h}, {Color: theme.Scrim.Alpha(0), At: 112 / h}}})
 			return
 		}
+		// Every writer's ground glows the same quiet grey, whoever wrote it: a wall of cards each in its writer's
+		// own colours reads as a row of paint swatches, not as pages.
 		colors := grey
-		if p := a.ex.pics["icon:"+e.ID]; p != nil && p.bmp != nil {
-			colors = p.hues
-		}
 		// The two halos, baked into one picture for the box (bakeHalos): two
 		// gradients each larger than the card cost the GPU more than the rest
 		// of it in every frame of a scroll.

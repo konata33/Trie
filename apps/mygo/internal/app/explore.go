@@ -76,7 +76,6 @@ type exPic struct {
 	bands map[bandKey]*ui.Bitmap
 	at    time.Time  // when it came, for its fade (set on the first frame that shows it)
 	dots  []ui.Color // its three main colours (palette)
-	hues  [2]ui.Color
 }
 
 // exOpen is an author's panel and the card it was opened from: "site" (a
@@ -453,7 +452,7 @@ func decodePic(data string, soft bool) *exPic {
 		return p
 	}
 	p.bmp = ui.NewBitmap(img)
-	p.dots, p.hues = mainColours(img), hues(img)
+	p.dots = mainColours(img)
 	if soft {
 		p.small = shrinkTo(img, 40)
 		p.soft = ui.NewBitmap(p.small)
@@ -619,49 +618,8 @@ func squash(img image.Image, n int) image.Image {
 	return out
 }
 
-// hues is an avatar's two most saturated colours, for its halo: a
-// colourless one glows a faint amber.
-func hues(img image.Image) [2]ui.Color {
-	small := squash(img, 32)
-	b := small.Bounds()
-	count := map[int]int{}
-	var order []int
-	for y := b.Min.Y; y < b.Max.Y; y++ {
-		for x := b.Min.X; x < b.Max.X; x++ {
-			r, g, bl, al := small.At(x, y).RGBA()
-			if al>>8 < 128 {
-				continue
-			}
-			// Straight colour, as a canvas reads it.
-			r, g, bl = r*0xffff/max(al, 1), g*0xffff/max(al, 1), bl*0xffff/max(al, 1)
-			hi, lo := max(r, g, bl)>>8, min(r, g, bl)>>8
-			if hi < 50 || float64(hi-lo)/float64(hi) < 0.28 {
-				continue
-			}
-			k := int(r>>13)<<6 | int(g>>13)<<3 | int(bl>>13)
-			if count[k] == 0 {
-				order = append(order, k)
-			}
-			count[k]++
-		}
-	}
-	if len(order) == 0 {
-		return amber
-	}
-	slices.SortStableFunc(order, func(x, y int) int { return count[y] - count[x] })
-	at := func(k int) ui.Color { return ui.RGB(uint8(k>>6&7)*32+16, uint8(k>>3&7)*32+16, uint8(k&7)*32+16) }
-	second := order[0]
-	if len(order) > 1 {
-		second = order[1]
-	}
-	return [2]ui.Color{at(order[0]), at(second)}
-}
-
-// The halos of a colourless avatar, and of a writer with none.
-var (
-	amber = [2]ui.Color{theme.HaloAmber, theme.HaloAmberDeep}
-	grey  = [2]ui.Color{theme.HaloGrey, theme.HaloGreyDeep}
-)
+// The halo every writer and person glows, whoever they are.
+var grey = [2]ui.Color{theme.HaloGrey, theme.HaloGreyDeep}
 
 // glow is how bright a writer's name is: as recent as their latest post, in
 // the sidebar's four steps.
