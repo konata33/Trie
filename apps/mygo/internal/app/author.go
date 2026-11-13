@@ -167,7 +167,7 @@ func (a *App) backLink(c *ui.Context, label string) {
 	if b.FocusVisible() {
 		b.FocusRing(true)
 	}
-	a.press(b, motion.Pressed)
+	a.press(b, motion.Squashed)
 	a.control(b)
 	b.Children(func() {
 		a.icon(c, "back", 16, false)
@@ -205,7 +205,7 @@ func (a *App) searchField(c *ui.Context, query *string, search *bool, label, pla
 			if b.Clicked() {
 				*search = true
 			}
-			b.Children(func() { a.icon(c, "search", 16, false) })
+			b.Children(func() { a.pressIcon(c, "search", 16, false, b.Pressed()) })
 			a.tip(c, b, "搜索 · ⌘F", false)
 			return
 		}
@@ -279,7 +279,7 @@ func (a *App) authorCard(c *ui.Context, au *author, p page, live bool) {
 				a.tip(c, site, "在浏览器中打开", false)
 				sep(c)
 				ui.Text(c, "收录")
-				a.count(c, len(au.arts), 18).Margin(0, 3.3)
+				a.count(c, "count:"+au.src.ID, len(au.arts), 18).Margin(0, 3.3)
 				ui.Text(c, "篇")
 				if au.days >= 0 {
 					sep(c)
@@ -474,7 +474,7 @@ func (a *App) favButton(c *ui.Context, art *library.Article, size, orbit float32
 	if b.FocusVisible() {
 		b.FocusRing(true)
 	}
-	a.press(b, 0.94)
+	a.press(b, motion.SquashedDot)
 	b.Children(func() { a.orbit(c, "orbit", orbit, art.Favorite) })
 	a.tip(c, b, label+" · S", false)
 	return b
@@ -564,15 +564,20 @@ func (a *App) orbit(c *ui.Context, key string, size float32, kept bool) ui.Eleme
 	if kept {
 		target = 1
 	}
-	var k, glow float32
+	var k, glow, round, weight float32
 	if a.kbd || a.still(c) && false {
 		k, glow = box.Jump("k", target), box.Jump("glow", target)
 	} else {
 		k = box.AnimateTo("k", target, ui.Animation{Duration: motion.Orbit, Ease: motion.Ease})
 		glow = box.AnimateTo("glow", target, a.ease(motion.Glow))
 	}
-	if a.still(c) {
+	// The satellite follows the arc's end a beat behind and swings past the
+	// top; closing, the ring grows heavier than it rests and settles (弹一下).
+	if a.kbd || a.still(c) {
 		k = box.Jump("k", target) // the satellite does not travel under less motion
+		round, weight = box.Jump("round", target), box.Jump("weight", target)
+	} else {
+		round, weight = box.AnimateTo("round", target, motion.Satellite), box.AnimateTo("weight", target, motion.RiseIn)
 	}
 	color := theme.Muted
 	if kept {
@@ -588,13 +593,13 @@ func (a *App) orbit(c *ui.Context, key string, size float32, kept bool) ui.Eleme
 			pt.FillPath(&g, theme.Star.Alpha(0.16*glow))
 		}
 		arc := 0.7 + 0.3*k
-		pt.StrokePath(arcPath(cx, cy, 6.5*s, -90, 360*arc), 1.15*s, ink)
+		pt.StrokePath(arcPath(cx, cy, 6.5*s, -90, 360*arc), 1.15*s*(1+motion.Heavier*max(0, weight-1)), ink)
 		var dot ui.Path
 		dot.Circle(cx, cy, 1.7*s)
 		pt.FillPath(&dot, ink)
 		// The satellite rides the arc's end, from 108° short of the top.
 		if sat := min(1, k*4); sat > 0.001 || kept {
-			ang := (-90 - 108*(1-k)) * math.Pi / 180
+			ang := (-90 - 108*(1-round)) * math.Pi / 180
 			var sp ui.Path
 			sp.Circle(cx+6.5*s*float32(math.Cos(float64(ang))), cy+6.5*s*float32(math.Sin(float64(ang))), 1.5*s)
 			pt.FillPath(&sp, ink.Alpha(sat))

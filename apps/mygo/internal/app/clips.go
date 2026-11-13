@@ -632,7 +632,8 @@ func (a *App) personPage(c *ui.Context, p page, pp *person, hero bool, sh shape,
 	if a.crossing(c, live) {
 		page.Cache()
 	}
-	page.Transition(a.tr(c, ui.ElementTransition{Duration: motion.Fold, Ease: motion.Ease, Position: true}))
+	land := motion.Land // closing up as a page above folds away (弹一下)
+	page.Transition(a.tr(c, ui.ElementTransition{Animation: &land, Position: true}))
 	// A person's last passage takes their whole page with it.
 	if len(pp.clips) == 1 {
 		a.folded(c, page, lead.ID)
@@ -772,13 +773,16 @@ func (a *App) avatar(c *ui.Context, name string, ic *siteIcon, size float32) ui.
 	})
 }
 
-// passageMove is how a passage moves as others fold away (foldClip), and
-// comes back: put back while the page shows, it rises 8 into place (300
-// ms). Not from the keys, nor under less motion.
+// passageMove is how a passage moves as others fold away (foldClip),
+// closing the gap on Land, and comes back: put back while the page shows,
+// it rises 10 into place on RiseIn (弹一下). Not from the keys, nor under
+// less motion.
 func (a *App) passageMove(c *ui.Context, id string) ui.ElementTransition {
-	t := ui.ElementTransition{Duration: motion.Fold, Ease: motion.Ease, Position: true}
+	land := motion.Land
+	t := ui.ElementTransition{Animation: &land, Position: true}
 	if !a.clipsSt().seen[id] {
-		t.Duration, t.Enter = motion.Rise, &ui.Motion{Y: 8}
+		rise := motion.RiseIn
+		t.Animation, t.Enter = &rise, &ui.Motion{Y: 10}
 	}
 	return a.tr(c, t)
 }
@@ -885,7 +889,7 @@ func (a *App) clipRow(c *ui.Context, p page, cl *library.Clip, article string, b
 		if b.FocusVisible() {
 			b.FocusRing(true).FocusRingOffset(-2)
 		}
-		a.press(b, 0.99)
+		a.give(b, 0.99)
 		wash := a.washOf(c, cl.ID)
 		b.Children(func() {
 			ui.Column(c).MinWidth(0).FillWidth().Children(func() {
@@ -928,7 +932,7 @@ func (a *App) passageButton(c *ui.Context, p page, b ui.Element, cl *library.Cli
 // pressAt is press with the scale's origin at (x, y) of e's box.
 func (a *App) pressAt(e ui.Element, scale, x, y float32) {
 	e.TransformOrigin(x, y)
-	a.press(e, scale)
+	a.give(e, scale)
 }
 
 // noteLine is the reader's own line: a short amber stroke, then interface
@@ -1017,8 +1021,8 @@ func (a *App) toolButton(c *ui.Context, key, icon, label string, done bool) ui.E
 		color = theme.Accent
 	}
 	b.Background(b.AnimateColor("bg", ground, a.ease(motion.Hover))).TextColor(b.AnimateColor("fg", color, a.ease(motion.Hover)))
-	a.press(b, motion.Pressed)
-	b.Children(func() { a.icon(c, icon, 16, false) })
+	a.press(b, motion.Squashed)
+	b.Children(func() { a.pressIcon(c, icon, 16, false, b.Pressed()) })
 	a.tip(c, b, label, false)
 	return b
 }

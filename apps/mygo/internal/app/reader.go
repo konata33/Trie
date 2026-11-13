@@ -43,6 +43,11 @@ type readerPage struct {
 	barY         float32   // where the bar is, sent away or not
 	titleBottom  float32   // the headline's foot in the window, the frame before
 
+	// The screenshot the strip's amber line went to last, and whether it
+	// went back along the strip to it (workStrip).
+	markAt   int
+	markBack bool
+
 	measured reader.Position
 	saveAt   time.Time
 	restored bool
@@ -609,7 +614,7 @@ func (a *App) readerFoot(c *ui.Context, rp *readerPage, art *library.Article, sr
 			}
 			l.TextColor(l.AnimateColor("fg", color, a.ease(motion.SignHover))).Children(func() {
 				ui.Text(c, hostOf(art.URL)).Underline().UnderlineOffset(3).DecorationColor(l.AnimateColor("line", line, a.ease(motion.SignHover)))
-				a.icon(c, "openArrow", 12, false)
+				a.pressIcon(c, "openArrow", 12, false, l.Pressed())
 			})
 			a.tip(c, l, art.URL, false)
 		})
@@ -705,7 +710,7 @@ func (a *App) readerBar(c *ui.Context, rp *readerPage, art *library.Article, fro
 		if b.FocusVisible() {
 			b.FocusRing(true)
 		}
-		a.press(b, motion.Pressed)
+		a.press(b, motion.Squashed)
 		a.control(b)
 		b.Children(func() {
 			a.icon(c, "back", 16, false)
@@ -829,7 +834,7 @@ func (a *App) readerTools(c *ui.Context, rp *readerPage, art *library.Article) {
 		t.FocusRing(true)
 	}
 	a.control(t)
-	t.Children(func() { a.icon(c, "more", 16, false) })
+	t.Children(func() { a.pressIcon(c, "more", 16, false, open) }) // a menu opens on the press
 	a.tip(c, t, "更多", false)
 	m.Popup(func(panel ui.Element) {
 		a.menuPanel(c, panel).AttachTo(m.Trigger, ui.AnchorBottomRight, ui.AnchorTopRight).Margin(8, 0, 0, 0)
@@ -999,7 +1004,7 @@ func (a *App) clipBar(c *ui.Context, rp *readerPage, art *library.Article) {
 		if b.FocusVisible() {
 			b.FocusRing(true)
 		}
-		a.press(b, motion.Pressed)
+		a.press(b, motion.Squashed)
 		if b.Clicked() {
 			if inMark {
 				a.unclip(rp, existing)

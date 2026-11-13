@@ -628,7 +628,7 @@ func (a *App) resume(c *ui.Context, follows []*library.Article, now time.Time, l
 	if b.FocusVisible() {
 		b.FocusRing(true)
 	}
-	a.press(b, motion.Pressed)
+	a.press(b, motion.Squashed)
 	a.control(b)
 	r := b.LayoutBounds()
 	if b.Clicked() {

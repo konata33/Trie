@@ -354,11 +354,11 @@ func (a *App) card(b ui.Element, key, stop string, live bool) {
 }
 
 // listMove is how a card or an author moves as others come and go: the
-// rest close up on the shared spring,
+// rest close up on Land, past their place once and back (弹一下),
 // once what left has faded (150 ms, out of focus); one coming back rises 4
 // out of a 2 px blur. Quiet changes do none of it.
 func (a *App) listMove(c *ui.Context, quiet bool) ui.ElementTransition {
-	f := motion.Follow
+	f := motion.Land
 	if now := c.Now(); now.Sub(a.favs().leftAt) < motion.Leave+motion.State {
 		f.Delay = motion.Leave
 	}
@@ -659,14 +659,26 @@ func (a *App) moreMenu(c *ui.Context, key, label string, shown bool, build func(
 	if t.FocusVisible() {
 		t.FocusRing(true)
 	}
-	a.press(t, 0.94)
+	// A menu opens on the press, so the ··· squares up while it is open
+	// rather than while pressed: round to 10 and back on RiseIn (弹一下).
+	a.press(t, motion.SquashedDot)
+	sq := float32(0)
+	if open {
+		sq = 1
+	}
+	if a.kbd || a.still(c) {
+		sq = t.Jump("square", sq)
+	} else {
+		sq = t.AnimateTo("square", sq, motion.RiseIn)
+	}
+	t.Radius(16 - (16-motion.SquaredUp)*sq)
 	a.control(t)
 	show := float32(0)
 	if shown || open || t.FocusVisible() {
 		show = 1
 	}
 	t.Opacity(t.AnimateTo("show", show, a.ease(motion.Hover)))
-	t.Children(func() { a.icon(c, "more", 16, false) })
+	t.Children(func() { a.pressIcon(c, "more", 16, false, open) }) // a menu opens on the press
 	build(m)
 	fs.menu = keepOpen(fs.menu, key, open)
 	return t
@@ -1080,7 +1092,7 @@ func (a *App) tile(c *ui.Context, p page, art *library.Article, byline, wide boo
 		if b.FocusVisible() {
 			b.FocusRing(true).FocusRingOffset(4)
 		}
-		a.press(b, 0.99)
+		a.give(b, 0.99)
 		var paper ui.Color
 		if !pictured {
 			// A page: the paper's edge and ground brighten under the pointer.

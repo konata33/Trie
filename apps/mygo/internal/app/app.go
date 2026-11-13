@@ -95,7 +95,9 @@ type App struct {
 	focused   bool    // 专注阅读: the sidebar slides away
 
 	refresh refreshState
-	fresh   map[string]bool // authors with new articles from the last refresh
+	fresh   map[string]bool    // authors with new articles from the last refresh
+	slides  map[any]*slide     // where each list's selected ground was last (slideGround)
+	counts  map[any]*countRoll // each count's number and the one before (count)
 
 	home     *homeState  // 首页
 	fav      *favState   // 收藏

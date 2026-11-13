@@ -51,16 +51,36 @@ func (a *App) sideParts(c *ui.Context) {
 	if cur.kind == "author" {
 		authorOn = cur.id
 	}
-	ui.Row(c.Key("tabs")).Gap(4).Role(ui.RoleNavigation).Label("主导航").Children(func() {
+	// A ground that does not show forgets where it was (slideGround).
+	if authorOn == "" {
+		a.unslide(sideMatch{"authors"})
+	} else {
+		a.unslide(sideMatch{"tabs"})
+	}
+	bar := ui.Row(c.Key("tabs")).Gap(4).Role(ui.RoleNavigation).Label("主导航")
+	bar.Children(func() {
+		var at ui.Rect
 		for _, t := range tabs {
-			a.tabButton(c, t.kind, t.label, t.icon, tab == t.kind, tab == t.kind && authorOn == "")
+			if r := a.tabButton(c, t.kind, t.label, t.icon, tab == t.kind); tab == t.kind {
+				at = r
+			}
+		}
+		if authorOn == "" {
+			a.slideGround(c, bar, sideMatch{"tabs"}, tab, at, false)
 		}
 	})
 	list := ui.Scroll(c.Key("authors")).Grow(1).Shrink(1).MinHeight(0).Margin(24, 0, 0, 0).Scrollbars(false)
 	list.Children(func() {
-		ui.Column(c).Gap(2).Children(func() {
+		col := ui.Column(c).Gap(2)
+		col.Children(func() {
+			var at ui.Rect
 			for _, row := range a.sideRows(c) {
-				a.authorRow(c, row.au, authorOn == row.au.src.ID, row.parting)
+				if r := a.authorRow(c, row.au, authorOn == row.au.src.ID, row.parting); authorOn == row.au.src.ID {
+					at = r
+				}
+			}
+			if authorOn != "" {
+				a.slideGround(c, col, sideMatch{"authors"}, authorOn, at, true)
 			}
 		})
 	})
@@ -126,8 +146,9 @@ func (a *App) sideRows(c *ui.Context) []sideRow {
 }
 
 // tabButton is a sidebar tab: its icon, and its label while current; the
-// current one's ground glides between the tabs (Glide).
-func (a *App) tabButton(c *ui.Context, kind, label, icon string, on, ground bool) {
+// current one's ground glides between the tabs (slideGround). It returns where
+// the frame before laid the tab out.
+func (a *App) tabButton(c *ui.Context, kind, label, icon string, on bool) ui.Rect {
 	b := ui.ButtonBase(c.Key("tab-"+kind)).Label(label).Height(32).Padding(0, 8).Radius(6).AlignItems(ui.Center).FocusRing(false)
 	if on {
 		b.Current(ui.CurrentPage)
@@ -147,7 +168,7 @@ func (a *App) tabButton(c *ui.Context, kind, label, icon string, on, ground bool
 	if b.FocusVisible() {
 		b.FocusRing(true).FocusRingOffset(-2)
 	}
-	a.press(b, motion.PressedTab)
+	a.press(b, motion.SquashedTab)
 	if !on {
 		a.tip(c, b, label, true)
 	}
@@ -161,10 +182,7 @@ func (a *App) tabButton(c *ui.Context, kind, label, icon string, on, ground bool
 		}
 	}
 	b.Children(func() {
-		if ground {
-			a.glide(c, "tabs")
-		}
-		ic := a.icon(c, icon, 16, on)
+		ic := a.pressIcon(c, icon, 16, on, b.Pressed())
 		if turn != 0 {
 			ic.TransformOrigin(0.5, 0.5).Rotate(turn)
 		}
@@ -188,6 +206,7 @@ func (a *App) tabButton(c *ui.Context, kind, label, icon string, on, ground bool
 			})
 		}
 	})
+	return b.LayoutBounds()
 }
 
 // exploreRuns counts the times Explore became current, to replay its swing.
@@ -197,14 +216,6 @@ func (a *App) exploreRuns(on bool) int {
 	}
 	a.refresh.exploreWas = on
 	return a.refresh.exploreRun
-}
-
-// glide is the current tab's or author's ground, one shape that slides
-// between them (Glide): the shared spring, at once from the keys.
-func (a *App) glide(c *ui.Context, list string) {
-	f := motion.Follow
-	ui.Box(c.Key("glide")).Absolute().Fill().Radius(6).Background(theme.Selected).IgnoreInput(true).
-		Transition(a.tr(c, ui.ElementTransition{Animation: &f, Match: sideMatch{list}}))
 }
 
 // textWidth is how wide s is in the system face at size.
@@ -220,7 +231,7 @@ func textWidth(s string, size float32) float32 {
 // authorRow is an author in the sidebar (AuthorRow): their face and name,
 // brighter the more recently they wrote; ··· and a right click open the
 // subscription menu.
-func (a *App) authorRow(c *ui.Context, au *author, on, parting bool) {
+func (a *App) authorRow(c *ui.Context, au *author, on, parting bool) ui.Rect {
 	id := au.src.ID
 	row := ui.Row(c.Key("author:" + id)).Radius(6).AlignItems(ui.Start)
 	// A row arriving opens its own height and comes into view in 250 ms; one
@@ -238,9 +249,6 @@ func (a *App) authorRow(c *ui.Context, au *author, on, parting bool) {
 		a.layers.menu = id
 	}
 	row.Children(func() {
-		if on {
-			a.glide(c, "authors")
-		}
 		if a.layers.renaming == id {
 			a.renameField(c, au)
 			return
@@ -321,6 +329,7 @@ func (a *App) authorRow(c *ui.Context, au *author, on, parting bool) {
 		more.Opacity(more.AnimateTo("show", map[bool]float32{true: 1, false: 0}[show], a.ease(motion.Reveal))).
 			Background(mb).TextColor(mc)
 	})
+	return row.LayoutBounds()
 }
 
 // chip is an author's face in the sidebar: their site's icon, toned for the

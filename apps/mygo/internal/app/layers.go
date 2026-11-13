@@ -45,7 +45,7 @@ func (a *App) sourceMenu(c *ui.Context, key any, src *library.Source, side bool)
 	if t.FocusVisible() {
 		t.FocusRing(true).FocusRingOffset(-2)
 	}
-	t.Children(func() { a.icon(c, "more", 16, false) })
+	t.Children(func() { a.pressIcon(c, "more", 16, false, open) }) // a menu opens on the press
 	m.Popup(func(panel ui.Element) {
 		a.menuPanel(c, panel)
 		if side {

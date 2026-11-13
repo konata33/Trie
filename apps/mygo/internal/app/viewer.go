@@ -305,7 +305,7 @@ func (a *App) roundButton(c *ui.Context, key, icon, label, tip string) ui.Elemen
 	if b.FocusVisible() {
 		b.FocusRing(true)
 	}
-	a.press(b, motion.Pressed)
+	a.pressRound(b, 40)
 	b.Children(func() { a.icon(c, icon, 16, false) })
 	a.tip(c, b, tip, false)
 	return b

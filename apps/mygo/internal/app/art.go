@@ -50,6 +50,14 @@ var glyphs = sync.OnceValue(func() map[string]glyph {
 // icon builds icon name at size, its accent lit amber when lit: the accent
 // eases over 250 ms, at once after a key.
 func (a *App) icon(c *ui.Context, name string, size float32, lit bool) ui.Element {
+	return a.pressIcon(c, name, size, lit, false)
+}
+
+// pressIcon is icon in a button the pointer may be pressing: while pressed,
+// its accent moves as its nudge says, and springs back a beat behind the
+// button once let go (DESIGN.md 弹一下). Not from the keys, nor under less
+// motion.
+func (a *App) pressIcon(c *ui.Context, name string, size float32, lit, pressed bool) ui.Element {
 	g := glyphs()[name]
 	box := ui.Box(c).Size(size, size).Shrink(0)
 	target := theme.IconRest
@@ -60,12 +68,68 @@ func (a *App) icon(c *ui.Context, name string, size float32, lit bool) ui.Elemen
 	if g.accent != nil {
 		accent = box.AnimateColor("accent", target, a.ease(motion.State))
 	}
+	n, moves := nudges[name]
+	var k [2]float32
+	if moves && g.accent != nil {
+		to, in, out := float32(0), motion.NudgeIn, motion.NudgeOut
+		if pressed && !a.kbd && !a.still(c) {
+			to = 1
+		}
+		for i := range k {
+			anim := map[bool]ui.Animation{true: in, false: out}[to == 1]
+			anim.Delay += time.Duration(i) * motion.Stagger
+			if a.still(c) {
+				k[i] = box.Jump(i, 0)
+			} else {
+				k[i] = box.AnimateTo(i, to, anim)
+			}
+		}
+	}
 	return box.Children(func() {
 		if g.accent != nil {
-			ui.Icon(c, g.accent).Absolute().Left(0).Top(0).Size(size, size).TextColor(accent)
+			if !n.split {
+				n.place(ui.Icon(c, g.accent).Absolute().Left(0).Top(0).Size(size, size).TextColor(accent), size, k[0])
+			} else {
+				for i, x := range [2]float32{0, size / 2} {
+					ui.Box(c).Absolute().Left(x).Top(0).Size(size/2, size).ClipX().Children(func() {
+						n.place(ui.Icon(c, g.accent).Absolute().Left(-x).Top(0).Size(size, size).TextColor(accent), size, k[i])
+					})
+				}
+			}
 		}
 		ui.Icon(c, g.ink).Absolute().Left(0).Top(0).Size(size, size)
 	})
+}
+
+// nudge is how an icon's accent moves while its button is pressed, in
+// fractions of the icon's size: by x and y; turned by turn degrees, grown
+// by grow, or sunk along y by sink, around (ox, oy). split moves its left
+// and right halves one after the other.
+type nudge struct {
+	x, y, turn, grow, sink, ox, oy float32
+	split                          bool
+}
+
+var nudges = map[string]nudge{
+	"home":         {sink: 0.3, ox: 0.5, oy: 0.846}, // the door sinks
+	"clips":        {y: 0.08, split: true},          // the two marks drop, one after the other
+	"favorites":    {grow: 0.4, ox: 0.5, oy: 0.5},   // the centre swells
+	"more":         {grow: 0.4, ox: 0.5, oy: 0.5},   // the middle dot swells
+	"refresh":      {turn: 30, ox: 0.5, oy: 0.5},    // the arrow runs on round the ring
+	"search":       {turn: 40, ox: 0.44, oy: 0.456}, // the glint sweeps round the lens
+	"openOriginal": {x: 0.125, y: -0.125},           // the arrow leaves its box
+	"openArrow":    {x: 0.125, y: -0.125},           // and leaves
+	"trash":        {y: -0.125},                     // the lid's handle jumps
+	"copy":         {x: -0.125, y: -0.125},          // the sheet behind slips back
+	"play":         {x: 0.125},                      // the triangle pushes on
+}
+
+// place moves e, an accent of an icon size across, k of the way.
+func (n nudge) place(e ui.Element, size, k float32) {
+	if k == 0 {
+		return
+	}
+	e.TransformOrigin(n.ox, n.oy).Translate(n.x*size*k, n.y*size*k).Rotate(n.turn*k).Scale(1+n.grow*k, 1+(n.grow-n.sink)*k)
 }
 
 // The pictograms (DESIGN.md Illustration): 168 wide, grey ink and one amber

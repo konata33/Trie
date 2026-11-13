@@ -36,10 +36,86 @@ const (
 	Breathe = 1400 * time.Millisecond // a placeholder breathing while its content loads
 )
 
-// How far a press shrinks what it presses (DESIGN.md 按下就有反应).
+// How far a press shrinks a picture it presses (DESIGN.md 按下就有反应).
+const Pressed = 0.97
+
+// Squash is the shape a press gives a control (DESIGN.md 弹一下): X times
+// as wide and Y times as tall, from the middle of its bottom edge.
+type Squash struct{ X, Y float32 }
+
+var (
+	Squashed    = Squash{X: 1.05, Y: 0.88} // buttons and icon buttons
+	SquashedTab = Squash{X: 1.04, Y: 0.88} // the sidebar's tabs
+	SquashedDot = Squash{X: 1.07, Y: 0.85} // the small round ones: 收藏's orbit, ··· over a picture
+)
+
+// SquaredUp is the corner a round button squares up to while pressed.
+const SquaredUp = 10
+
+// PressIn takes a press in, a tenth past and back, settled in 200 ms;
+// Rebound lets it go, past rest by 30% of the press around 185 ms and
+// settled in about 400 ms: one rebound, the second too small to see.
+var (
+	PressIn = ui.Animation{Spring: ui.SpringOptions{Duration: 220 * time.Millisecond, Bounce: 0.4}}
+	Rebound = ui.Animation{Spring: ui.SpringOptions{Duration: 350 * time.Millisecond, Bounce: 0.65}}
+)
+
+// Lead and Trail are the two ends of a selected ground sliding to another
+// item (DESIGN.md 弹一下): the end ahead goes on Lead and the end behind
+// follows on Trail, so the ground draws out along the way, around 100 ms:
+// a 34-tall ground some 8 longer between neighbours, 50 longer over 240.
+// The end behind lands past its place by about 3% of the way and comes
+// back; both are still by about 550 ms.
+var (
+	Lead  = ui.Animation{Spring: ui.SpringOptions{Duration: 300 * time.Millisecond, Bounce: 0.15}}
+	Trail = ui.Animation{Spring: ui.SpringOptions{Duration: 450 * time.Millisecond, Bounce: 0.25}}
+)
+
+// Ends returns the springs of the two ends of something sliding along a
+// line, the start's and the end's (DESIGN.md 弹一下): going forward the end
+// leads, going back the start does.
+func Ends(back bool) (start, end ui.Animation) {
+	if back {
+		return Lead, Trail
+	}
+	return Trail, Lead
+}
+
+// RiseIn brings up what comes in from below, a notice or a passage put
+// back: past its place by a sixth of the way around 230 ms, settled in
+// about 500 ms. Land closes a gap, the rest of a list moving up into the
+// room of what left: past by 5% of the way, settled in about 400 ms.
+var (
+	RiseIn = ui.Animation{Spring: ui.SpringOptions{Duration: 400 * time.Millisecond, Bounce: 0.5}}
+	Land   = ui.Animation{Spring: ui.SpringOptions{Duration: 450 * time.Millisecond, Bounce: 0.3}}
+)
+
+// Satellite is the favourite's satellite coming round after the arc's end,
+// 60 ms behind it: past the top by a ninth of its way around 370 ms, back
+// and still by about 600 ms. Heavier is how much heavier the ring grows
+// for each part RiseIn goes past, as it closes: about half again at most.
+var Satellite = ui.Animation{Spring: ui.SpringOptions{Duration: 500 * time.Millisecond, Bounce: 0.42}, Delay: 60 * time.Millisecond}
+
+const Heavier = 3
+
+// NudgeIn and NudgeOut move an icon's accent while its button is pressed
+// and back once let go (DESIGN.md 弹一下), on softer springs than the press,
+// so that the part goes a beat behind its button: in, past by a tenth;
+// out, 40 ms after the button, past rest by over a third around 260 ms and
+// by a seventh once more, within 5% by about 700 ms. Stagger holds
+// back the second of two parts that go one after the other.
+var (
+	NudgeIn  = ui.Animation{Spring: ui.SpringOptions{Duration: 260 * time.Millisecond, Bounce: 0.4}}
+	NudgeOut = ui.Animation{Spring: ui.SpringOptions{Duration: 420 * time.Millisecond, Bounce: 0.7}, Delay: 40 * time.Millisecond}
+)
+
+const Stagger = 40 * time.Millisecond
+
+// RollPast is how far a count's digit rolls past its place, in lines,
+// before it comes back: out over the roll, back over RollBack.
 const (
-	Pressed    = 0.97
-	PressedTab = 0.96
+	RollPast = 0.18
+	RollBack = 160 * time.Millisecond
 )
 
 // Special curves, named so no one writes their own.
@@ -235,10 +311,13 @@ func Menu() ui.ElementTransition { return layer(MenuIn, MenuOut, lift, ui.Motion
 // Tip is a tooltip, as a menu on the small rung.
 func Tip() ui.ElementTransition { return layer(TipIn, TipOut, lift, ui.Motion{}) }
 
-// Toast is a notice at the foot of the window: up from 8 below, coming into
-// focus; it leaves 4 down, out of focus.
+// Toast is a notice at the foot of the window: up from 12 below on RiseIn,
+// coming into focus; it leaves 4 down, out of focus, over ToastOut.
 func Toast() ui.ElementTransition {
-	return layer(ToastIn, ToastOut, ui.Motion{Blur: 2, Y: 8}, ui.Motion{Blur: 2, Y: 4})
+	t := layer(ToastIn, ToastOut, ui.Motion{Blur: 2, Y: 12}, ui.Motion{Blur: 2, Y: 4})
+	in := RiseIn
+	t.Animation = &in
+	return t
 }
 
 // Shade is the shade behind a centred layer: a fade on exactly the layer's
@@ -475,7 +554,6 @@ const (
 	PictureIn  = 300 * time.Millisecond  // a picture coming in once read
 	Lean       = 400 * time.Millisecond  // a picture leaning in, or coming up in light, under the pointer
 	Fold       = 250 * time.Millisecond  // a deleted passage folding shut, the rest closing up
-	Rise       = 300 * time.Millisecond  // a passage put back rising 8 into place
 	Wash       = 1100 * time.Millisecond // what was copied lighting up and letting go
 	Copied     = 2 * time.Second         // 已复制 holding before the button says 复制引文 again
 	SettleWait = 150 * time.Millisecond  // a passage's card grown, its words settling in (over SwapIn)
