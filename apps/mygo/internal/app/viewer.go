@@ -302,12 +302,12 @@ func (a *App) roundButton(c *ui.Context, key, icon, label, tip string) ui.Elemen
 	if b.Hovered() {
 		ground, ink = theme.ViewerHover, theme.Text
 	}
-	b.Background(b.AnimateColor("bg", ground, a.ease(motion.Hover))).TextColor(b.AnimateColor("fg", ink, a.ease(motion.Hover)))
+	fg := b.AnimateColor("fg", ink, a.ease(motion.Hover))
+	b.Background(b.AnimateColor("bg", ground, a.ease(motion.Hover))).TextColor(fg)
 	if b.FocusVisible() {
 		b.FocusRing(true)
 	}
-	a.pressRound(b, 40)
-	b.Children(func() { a.icon(c, icon, 16, false) })
+	b.Children(func() { a.dotIcon(c, b, icon, 16, iconLook{ink: fg}) })
 	a.tip(c, b, tip, false)
 	return b
 }

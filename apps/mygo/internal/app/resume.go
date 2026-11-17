@@ -113,7 +113,7 @@ func (a *App) resumeView(c *ui.Context, arts []*library.Article, live bool) {
 					if b.FocusVisible() {
 						b.FocusRing(true).FocusRingOffset(4)
 					}
-					a.press(b, motion.Squashed)
+					a.give(b, 0.99)
 					hover := b.Hovered()
 					// The moon hangs in the margin, level with the first line of the words.
 					a.moonOf(c, art, "").Absolute().Left(-26).Top(24 + 9)

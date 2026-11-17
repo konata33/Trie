@@ -75,7 +75,7 @@ func (a *App) presses(c *ui.Context) {
 				a.toast.undo()
 			}
 		case "clip":
-			a.showClip(id, a.clipsSt().boxes[id])
+			a.showClip(id)
 		case "cite":
 			cs := a.clipsSt()
 			for _, cl := range cs.order {

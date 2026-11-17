@@ -35,7 +35,9 @@ type favState struct {
 	shelves, keeps ui.ScrollState // the authors' page; an author's, from its top on each visit
 	query          string
 	search         bool
-	place          string // the author whose page was open last: the tab goes back to it
+	kind           string    // the block of the map zoomed into, if any (favmap.go)
+	turned         time.Time // when the map last zoomed in or out
+	place          string    // the author whose page was open last: the tab goes back to it
 	lastQuery      string
 	lastCols       int
 	pics           map[string]*favPic
@@ -68,11 +70,13 @@ func (a *App) favs() *favState {
 }
 
 // favGroup is an author's keeps, or a kind's (kind set, src standing for
-// the kind), newest kept first.
+// the kind), newest kept first. A kind's and a design gallery's are
+// designs.
 type favGroup struct {
-	src  *library.Source
-	list []*library.Article
-	kind string
+	src    *library.Source
+	list   []*library.Article
+	kind   string
+	design bool
 }
 
 // kindSource is a kind as 收藏 shows it: a group named for it, with no site.
@@ -145,7 +149,7 @@ func (a *App) kept(query string) (shown []*library.Article, groups []*favGroup) 
 			for _, k := range ks {
 				g := by["kind:"+k]
 				if g == nil {
-					g = &favGroup{src: kindSource(k), kind: k}
+					g = &favGroup{src: kindSource(k), kind: k, design: true}
 					by["kind:"+k] = g
 					kinds = append(kinds, g)
 				}
@@ -159,7 +163,7 @@ func (a *App) kept(query string) (shown []*library.Article, groups []*favGroup) 
 		}
 		g := by[s.ID]
 		if g == nil {
-			g = &favGroup{src: s}
+			g = &favGroup{src: s, design: a.gallery(s)}
 			by[s.ID] = g
 			groups = append(groups, g)
 		}
@@ -181,34 +185,13 @@ type (
 	favNameMatch struct{ id string }
 )
 
-// The heights of an author's picture: the first
-// leaves the next one's top in view, one alone fills the screen, the others
-// are shorter, and the head of their page is the same picture folded.
-type sceneKind uint8
-
-const (
-	sceneFirst sceneKind = iota
-	sceneOnly
-	sceneRest
-	sceneHead
-)
-
 func clampf(v, lo, hi float32) float32 { return max(lo, min(hi, v)) }
 
-func sceneHeight(k sceneKind, vh float32) float32 {
-	switch k {
-	case sceneFirst:
-		return clampf(vh-150, 480, 860)
-	case sceneOnly:
-		return clampf(vh-96, 480, 900)
-	case sceneRest:
-		return clampf(0.64*vh, 400, 620)
-	}
-	return clampf(0.5*vh, 340, 480)
-}
+// headHeight is the height of an author's picture at the head of their page.
+func headHeight(vh float32) float32 { return clampf(0.5*vh, 340, 480) }
 
-// groundHeight is the one height every author's picture is drawn at from
-// the top, however tall the place showing it: folding only cuts it.
+// groundHeight is the one height an author's picture is drawn at from the
+// top, however tall the place showing it: it is only cut.
 func groundHeight(vh float32) float32 { return clampf(vh-96, 480, 900) }
 
 // favoritesPage builds 收藏: the authors (id ""), or an author's keeps.
@@ -260,7 +243,10 @@ func (a *App) favoritesPage(c *ui.Context, id string, live bool) {
 	if id != "" {
 		st = &fs.keeps
 	}
-	pictured := anyKept && !searching && (cur != nil || id == "" && len(groups) > 0)
+	pictured := anyKept && !searching && cur != nil
+	if fs.kind != "" && !slices.ContainsFunc(mapBlocks(groups), func(b mapBlock) bool { return b.key == fs.kind }) {
+		fs.kind = ""
+	}
 	sc := ui.Scroll(c.Key("scroll")).TrackScroll(st).Grow(1).FillWidth().Scrollbars(false)
 	view := sc.LayoutBounds()
 	var drawn []*library.Article
@@ -273,6 +259,9 @@ func (a *App) favoritesPage(c *ui.Context, id string, live bool) {
 				a.band(c, func() {
 					if id != "" {
 						a.backLink(c, locales.TabFavorites())
+					}
+					if id == "" && fs.kind != "" && a.backButton(c, locales.TabFavorites()) {
+						a.zoomTo(c, "")
 					}
 					if searching {
 						ui.Text(c, locales.FavoritesMatches(len(found))).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).
@@ -296,18 +285,19 @@ func (a *App) favoritesPage(c *ui.Context, id string, live bool) {
 					band()
 					a.emptyState(c, "favorites", locales.FavoritesEmptyTitle(), locales.FavoritesEmptyText(), nil)
 				})
-			case searching:
+			case searching && len(found) == 0:
 				frame(c).Padding(0, 32, 140, 32).Children(func() {
 					band()
-					if len(found) == 0 {
-						a.emptyState(c, "", "", locales.FavoritesNoMatches(), nil)
-						return
-					}
+					a.emptyState(c, "", "", locales.FavoritesNoMatches(), nil)
+				})
+			case searching && id != "":
+				frame(c).Padding(0, 32, 140, 32).Children(func() {
+					band()
 					drawn = found
 					a.tiles(c, p, locales.FavoritesSearchResults(), found, true, cols, quiet, stop, live)
 				})
 			case cur != nil:
-				a.scene(c, p, cur, sceneHead, quiet, stop, live)
+				a.scene(c, p, cur, live)
 				frame(c).Padding(0, 32, 140, 32).Children(func() {
 					list := slices.Clone(cur.list)
 					// Their own page reads as their archive: newest first by when they wrote it.
@@ -320,29 +310,11 @@ func (a *App) favoritesPage(c *ui.Context, id string, live bool) {
 					a.tiles(c, p, locales.FavoritesFrom(nameOf(cur.src)), list, cur.kind != "", cols, quiet, stop, live)
 				})
 			default:
-				// The designs kept, by kind, are the first screen's board; the writers kept from follow, one picture each.
-				var kinds, people []*favGroup
-				for _, g := range groups {
-					if g.kind != "" {
-						kinds = append(kinds, g)
-					} else {
-						people = append(people, g)
-					}
-				}
-				if len(kinds) > 0 {
-					a.favBoard(c, p, kinds, len(people) == 0, stop, live)
-				}
-				ui.Column(c.Key("shelves")).FillWidth().Padding(0, 0, 96, 0).Role(ui.RoleList).Label(locales.FavoritesWriters()).Children(func() {
-					for i, g := range people {
-						k := sceneRest
-						if i == 0 && len(kinds) == 0 {
-							k = sceneFirst
-							if len(people) == 1 {
-								k = sceneOnly
-							}
-						}
-						a.scene(c, p, g, k, quiet, stop, live)
-					}
+				// The map, one screen under the band (52, and 32 under it) with 32 to spare; searching narrows it
+				// where it stands.
+				frame(c).Children(func() {
+					band()
+					a.favMap(c, p, groups, max(360, view.H-52-32-32), quiet, stop, live)
 				})
 			}
 		})
@@ -397,7 +369,7 @@ func (a *App) card(b ui.Element, key, stop string, live bool) {
 }
 
 // listMove is how a card or an author moves as others come and go: the
-// rest close up on Land, past their place once and back (弹一下),
+// rest close up on Land, not past their place (DESIGN.md 出现和补位),
 // once what left has faded (150 ms, out of focus); one coming back rises 4
 // out of a 2 px blur. Quiet changes do none of it.
 func (a *App) listMove(c *ui.Context, quiet bool) ui.ElementTransition {
@@ -413,111 +385,62 @@ func (a *App) listMove(c *ui.Context, quiet bool) ui.ElementTransition {
 	return a.tr(c, t)
 }
 
-// scene is an author's picture (Shelf, ShelfHead): their own site edge to
-// edge, their name and latest keeps written into its lower-left corner; at
-// the head of their page the same picture, folded shorter.
-func (a *App) scene(c *ui.Context, p page, g *favGroup, kind sceneKind, quiet bool, stop string, live bool) {
+// scene is the head of an author's page (ShelfHead): their own site edge
+// to edge, their face, site, count and name over it.
+func (a *App) scene(c *ui.Context, p page, g *favGroup, live bool) {
 	fs := a.favs()
 	id := g.src.ID
 	key := "a:" + id
 	_, vh := c.Size()
-	h, gh, w := sceneHeight(kind, vh), groundHeight(vh), a.area.W
-	head := kind == sceneHead
-	outer := ui.Box(c.Key(key)).FillWidth().Height(h)
-	if !head {
-		outer.Transition(a.listMove(c, quiet))
-	}
-	outer.Children(func() {
+	h, gh, w := headHeight(vh), groundHeight(vh), a.area.W
+	ui.Box(c.Key(key)).FillWidth().Height(h).Children(func() {
 		sc := ui.Box(c.Key("scene")).Absolute().Fill().ClipX().ClipY()
 		a.share(c, sc, p, favPicMatch{id}, live)
-		hover := sc.Hovered()
-		near := sc.InViewMargin(600, 0)
-		pic, site, waiting := a.shelfPicture(g, near)
+		pic, site, waiting := a.shelfPicture(g, true)
 		bright := float32(1)
 		if pic != nil {
-			bright = pic.rest
-			if hover || head {
-				bright = pic.lit
-			}
+			bright = pic.lit
 		}
 		bright = sc.AnimateTo("bright", bright, a.ease(motion.Lean))
 		ctx := fs.ctx == key
 		menu := ui.ContextMenuBase(c, sc, &ctx)
 		a.shelfMenu(c, menu, g, true)
 		fs.ctx = keepOpen(fs.ctx, key, ctx)
-		// Drawn at the scene's own height and cut there, as a snapshot of it is: while the frame folds, what lies past
-		// it is the other side, fading.
+		// Drawn at the scene's own height and cut there, as a snapshot of it is.
 		sc.Children(func() {
 			own := ui.Box(c.Key("own")).Absolute().Left(0).Right(0).Top(0).Height(h).ClipX().ClipY().PassThrough()
 			if a.crossing(c, live) {
 				own.Cache()
 			}
 			own.Children(func() {
-				a.sceneLayers(c, p, g, kind, h, gh, w, pic, site, waiting, bright, hover || sc.FocusWithin(), near || head, stop, live)
+				a.sceneLayers(c, p, g, h, gh, w, pic, site, waiting, bright, live)
 			})
 		})
 	})
 }
 
-// sceneLayers are what an author's picture holds, from the bottom: the
-// picture, the shades under the band and over the foot, the pool of shade
-// behind the words, the whole picture as a way in, and the words.
-func (a *App) sceneLayers(c *ui.Context, p page, g *favGroup, kind sceneKind, h, gh, w float32, pic *favPic, site, waiting bool, bright float32, shown, near bool, stop string, live bool) {
-	id, key, head := g.src.ID, "a:"+g.src.ID, kind == sceneHead
-	if !near {
-		// Far from the view the picture is not drawn, only its words and its way in: a page drawn whole into a layer as
-		// it crosses (its blur) then paints only the pictures near the view.
-		a.sceneWay(c, p, g, h, head, key, id, shown, stop, live)
-		return
-	}
+// sceneLayers are what the head holds, from the bottom: the picture, the
+// shades under the band and over the foot, the pool of shade behind the
+// words, and the words.
+func (a *App) sceneLayers(c *ui.Context, p page, g *favGroup, h, gh, w float32, pic *favPic, site, waiting bool, bright float32, live bool) {
 	fade := a.picFade(c, pic)
-	// The pool of shade behind the words, sized from where the words sit:
-	// they reach about 560 into the frame and 330 up from the foot. Under
-	// the words the picture is softened (a backdrop's blur(18px)), wholly to
-	// 0.62 of the pool and not at all past 0.92.
-	rx, ry, inner, outer := (w-1200)*0.9+1240, float32(620), float32(0.62), float32(0.92)
-	if head {
-		rx, ry, inner, outer = (w-1200)*0.9+1000, 360, 0.46, 0.9
-	}
+	// The pool of shade behind the words, sized from where the words sit.
+	// Under the words the picture is softened (a backdrop's blur(18px)),
+	// wholly to 0.46 of the pool and not at all past 0.9.
+	rx, ry, inner, outer := (w-1200)*0.9+1000, float32(360), float32(0.46), float32(0.9)
 	var soft *ui.Bitmap
 	if pic != nil && pic.soft != nil {
 		soft = pic.pool(w, gh, posOf(site), 0, h, rx, ry, inner, outer)
 	}
 	a.groundView(c, g, pic, site, waiting, gh, bright, fade, soft)
-	if kind == sceneRest {
-		// A picture that follows another comes in out of the window's ground.
-		ui.Box(c).Absolute().Left(0).Top(0).Right(0).Height(144).IgnoreInput(true).LinearGradient(ui.LinearGradient{Angle: 180, Stops: []ui.GradientStop{
-			{Color: theme.Window, At: 0}, {Color: theme.Window.Alpha(0.55), At: 64.0 / 144}, {Color: theme.Window.Alpha(0), At: 1}}})
-	} else {
-		// Under the floating band: dark enough for its grey words on a white site.
-		ui.Box(c).Absolute().Left(0).Top(0).Right(0).Height(132).IgnoreInput(true).LinearGradient(ui.LinearGradient{Angle: 180, Stops: []ui.GradientStop{
-			{Color: theme.Window.Alpha(0.9), At: 0}, {Color: theme.Window.Alpha(0.9), At: 52.0 / 132}, {Color: theme.Window.Alpha(0), At: 1}}})
-	}
+	// Under the floating band: dark enough for its grey words on a white site.
+	ui.Box(c).Absolute().Left(0).Top(0).Right(0).Height(132).IgnoreInput(true).LinearGradient(ui.LinearGradient{Angle: 180, Stops: []ui.GradientStop{
+		{Color: theme.Window.Alpha(0.9), At: 0}, {Color: theme.Window.Alpha(0.9), At: 52.0 / 132}, {Color: theme.Window.Alpha(0), At: 1}}})
 	// Darkened from the lower-left corner: at least 0.9 under the words, gone past them.
 	a.shade(c, w, h, rx, ry, [][2]float32{{0, 0.92}, {0.58, 0.9}, {0.8, 0.6}, {1, 0}}).Absolute().Left(0).Top(0).Width(w).Height(h)
-	// Everything in the picture keeps its place from the top, at the scene's own height, so that while
-	// its frame folds into the other side's the picture and its words hold still and are only cut.
 	ui.Box(c).Absolute().Left(0).Right(0).Top(0).Height(h).IgnoreInput(true).LinearGradient(ui.LinearGradient{Angle: 180, Stops: []ui.GradientStop{
 		{Color: theme.Window.Alpha(0), At: (h - 144) / h}, {Color: theme.Window.Alpha(0.55), At: (h - 64) / h}, {Color: theme.Window, At: 1}}})
-	a.sceneWay(c, p, g, h, head, key, id, shown, stop, live)
-}
-
-// sceneWay is the way into an author, the whole picture, and their words over it.
-func (a *App) sceneWay(c *ui.Context, p page, g *favGroup, h float32, head bool, key, id string, shown bool, stop string, live bool) {
-	fs := a.favs()
-	ring := false
-	if !head {
-		// The whole picture opens the author.
-		enter := ui.ButtonBase(c.Key("enter")).Label(locales.FavoritesWriterCount(nameOf(g.src), len(g.list))).Absolute().Fill().FocusRing(false).
-			KeyShortcuts(0, ui.KeyEnter).KeyShortcuts(ui.Cmd, ui.KeyBackspace)
-		a.card(enter, key, stop, live)
-		if enter.Clicked() && live {
-			fs.cursor = key
-			a.enterShelf(c, id)
-		}
-		ring = enter.FocusVisible()
-	}
-	a.sceneWords(c, p, g, h, head, ring, shown, live)
+	a.sceneWords(c, p, g, h, live)
 }
 
 // share gives e, shown on page p, the identity match has on the other page
@@ -567,22 +490,13 @@ func keepOpen(cur, key string, open bool) string {
 	return cur
 }
 
-// sceneWords are an author's words in their picture: face, site and count,
-// their name with the menu, and on the shelf the latest three keeps. The
-// keyboard's ring goes round them rather than the picture.
-func (a *App) sceneWords(c *ui.Context, p page, g *favGroup, h float32, head, ring, shown, live bool) {
+// sceneWords are an author's words over the head of their page: face,
+// site and count, then their name with the menu.
+func (a *App) sceneWords(c *ui.Context, p page, g *favGroup, h float32, live bool) {
 	id := g.src.ID
-	bottom := float32(64)
-	if head {
-		bottom = 48
-	}
-	ui.Column(c.Key("words")).Absolute().Left(0).Right(0).Top(0).Height(h - bottom).Justify(ui.End).AlignItems(ui.Center).PassThrough().Children(func() {
+	ui.Column(c.Key("words")).Absolute().Left(0).Right(0).Top(0).Height(h - 48).Justify(ui.End).AlignItems(ui.Center).PassThrough().Children(func() {
 		frame(c).AlignItems(ui.Start).PassThrough().Children(func() {
-			mark := ui.Column(c.Key("mark")).Gap(8).AlignItems(ui.Start).MaxWidthPercent(100).Radius(8).PassThrough()
-			if ring {
-				mark.FocusRing(true).FocusRingOffset(12)
-			}
-			mark.Children(func() {
+			ui.Column(c.Key("mark")).Gap(8).AlignItems(ui.Start).MaxWidthPercent(100).PassThrough().Children(func() {
 				by := ui.Row(c.Key("by")).Gap(8).AlignItems(ui.Center).FontSize(theme.Body).LineHeight(20.0 / 13).TextColor(theme.Text2).FontFeatures(theme.Numbers)
 				a.share(c, by, p, favByMatch{id}, live)
 				by.Children(func() {
@@ -596,7 +510,7 @@ func (a *App) sceneWords(c *ui.Context, p page, g *favGroup, h float32, head, ri
 						}
 					}
 					if host := g.src.Host; host != "" {
-						if head && g.src.HomeURL != "" {
+						if g.src.HomeURL != "" {
 							site := ui.ButtonBase(c.Key("site")).Label(host).Margin(0, -4).Padding(0, 4).Radius(6).FocusRing(false)
 							color := theme.Text2
 							if site.Hovered() {
@@ -621,61 +535,21 @@ func (a *App) sceneWords(c *ui.Context, p page, g *favGroup, h float32, head, ri
 						}
 						ui.Text(c, "·").AccessHidden(true)
 					}
-					ui.Text(c, locales.FavoritesCount(len(g.list)))
+					if g.design {
+						ui.Text(c, locales.FavoritesWorksCount(len(g.list)))
+					} else {
+						ui.Text(c, locales.FavoritesCount(len(g.list)))
+					}
 				})
 				ui.Row(c.Key("name-row")).Gap(8).AlignItems(ui.Center).MaxWidthPercent(100).Children(func() {
-					level := 2
-					if head {
-						level = 1
-					}
 					name := ui.Text(c.Key("name"), nameOf(g.src)).FontSize(40).LineHeight(1.15).FontWeight(650).LetterSpacing(-0.015 * 40).
-						TextColor(theme.Text).Balance().Shrink(1).MinWidth(0).Role(ui.RoleHeading).Level(level)
+						TextColor(theme.Text).Balance().Shrink(1).MinWidth(0).Role(ui.RoleHeading).Level(1)
 					a.share(c, name, p, favNameMatch{id}, live)
-					a.moreMenu(c, "shelf:"+id, locales.FavoritesWriterActions(nameOf(g.src)), head || shown, func(m ui.MenuParts) { a.shelfMenu(c, m, g, false) }).Margin(0, 0, 0, 0)
-				})
-				if head {
-					return
-				}
-				ui.Column(c.Key("titles")).Width(480).MaxWidthPercent(100).Margin(8, 0, 0, 0).Role(ui.RoleList).Label(locales.FavoritesRecentFrom(nameOf(g.src))).Children(func() {
-					for i, art := range g.list[:min(3, len(g.list))] {
-						a.shelfTitle(c, p, art, i == 0, live)
-					}
+					a.moreMenu(c, "shelf:"+id, locales.FavoritesWriterActions(nameOf(g.src)), true, func(m ui.MenuParts) { a.shelfMenu(c, m, g, false) })
 				})
 			})
 		})
 	})
-}
-
-// shelfTitle is one of an author's latest keeps written into their picture:
-// the newest brightest; it opens its article.
-func (a *App) shelfTitle(c *ui.Context, p page, art *library.Article, first, live bool) {
-	ui.Box(c.Key(art.ID)).FillWidth().BorderWidth(1, 0, 0, 0).BorderColor(theme.TitleRule).Children(func() {
-		b := ui.ButtonBase(c.Key("open")).Label(titleOf(art.Title)).FillWidth().Padding(8, 0).Gap(8).Radius(6).AlignItems(ui.Center).
-			FocusRing(false).TabStop(false)
-		r := b.LayoutBounds()
-		if b.Clicked() && live {
-			a.favs().cursor = "k:" + art.ID
-			a.openAs(c, art.ID, r, shelfTitleText, theme.Item)
-		}
-		a.layInto(p, art.ID, r)
-		color := theme.Text2
-		if first || b.Hovered() {
-			color = theme.Text
-		}
-		if b.FocusVisible() {
-			b.FocusRing(true)
-		}
-		b.Children(func() {
-			t := shelfTitleText(c, titleOf(art.Title)).TextColor(b.AnimateColor("fg", color, a.ease(motion.Hover))).Grow(1).Shrink(1).MinWidth(0)
-			a.end(t, p, "title:"+art.ID)
-			a.looks[art.ID] = titleLook{shelfTitleText, theme.Item}
-			a.progress(c, art)
-		})
-	})
-}
-
-func shelfTitleText(c *ui.Context, s string) ui.Element {
-	return ui.Text(c, s).Font(reader.TitleFont(s)).FontSize(theme.Item).LineHeight(22.0 / 15).FontWeight(500).TextColor(theme.Text).SingleLine().Ellipsis("…")
 }
 
 // progress is the moon, only while an article is part-read.
@@ -699,31 +573,19 @@ func (a *App) moreMenu(c *ui.Context, key, label string, shown bool, build func(
 	if t.Hovered() {
 		color, ground = theme.Text, theme.MoreGroundHover
 	}
-	t.Background(t.AnimateColor("bg", ground, a.ease(motion.Hover))).TextColor(t.AnimateColor("fg", color, a.ease(motion.Hover))).
-		InsetShadow(0, 0, 0, 1, theme.Line)
+	fg := t.AnimateColor("fg", color, a.ease(motion.Hover))
+	t.Background(t.AnimateColor("bg", ground, a.ease(motion.Hover))).TextColor(fg).InsetShadow(0, 0, 0, 1, theme.Line)
 	if t.FocusVisible() {
 		t.FocusRing(true)
 	}
-	// A menu opens on the press, so the ··· squares up while it is open
-	// rather than while pressed: round to 10 and back on RiseIn (弹一下).
-	a.press(t, motion.SquashedDot)
-	sq := float32(0)
-	if open {
-		sq = 1
-	}
-	if a.kbd || a.still(c) {
-		sq = t.Jump("square", sq)
-	} else {
-		sq = t.AnimateTo("square", sq, motion.RiseIn)
-	}
-	t.Radius(16 - (16-motion.SquaredUp)*sq)
 	a.control(t)
 	show := float32(0)
 	if shown || open || t.FocusVisible() {
 		show = 1
 	}
 	t.Opacity(t.AnimateTo("show", show, a.ease(motion.Hover)))
-	t.Children(func() { a.pressIcon(c, "more", 16, false, open) }) // a menu opens on the press
+	// The menu opens on the press; while it is open, the middle dot is amber.
+	t.Children(func() { a.dotIcon(c, t, "more", 16, iconLook{lit: open, ink: fg}) })
 	build(m)
 	fs.menu = keepOpen(fs.menu, key, open)
 	return t
@@ -744,7 +606,10 @@ func (a *App) shelfMenu(c *ui.Context, m ui.MenuParts, g *favGroup, pointer bool
 			ui.Box(c).Height(1).Margin(4, 8).Background(theme.Line).AccessHidden(true)
 		}
 		label := locales.CommonRemoveFavorite()
-		if len(g.list) > 1 {
+		switch {
+		case len(g.list) > 1 && g.design:
+			label = locales.FavoritesRemoveAllWorks(len(g.list))
+		case len(g.list) > 1:
 			label = locales.FavoritesRemoveAll(len(g.list))
 		}
 		// No confirmation: the notice that follows offers 撤销.
@@ -1463,7 +1328,7 @@ func (a *App) letGoShelf(c *ui.Context, g *favGroup) {
 	if a.kbd {
 		fs.handOn("a:" + g.src.ID)
 	}
-	a.unkeep(c, g.list, g.src)
+	a.unkeep(c, g.list, g)
 }
 
 // letGoPending lets go of the author asked for once the page has folded
@@ -1484,7 +1349,7 @@ func (a *App) letGoPending(c *ui.Context, groups []*favGroup) {
 			if fs.pendingKbd {
 				fs.handOn("a:" + id)
 			}
-			a.unkeep(c, g.list, g.src)
+			a.unkeep(c, g.list, g)
 		}
 	}
 }
@@ -1504,10 +1369,10 @@ func (fs *favState) handOn(key string) {
 
 // unkeep lets go of keeps at once (letGo); the notice that follows
 // offers 撤销, which puts each back with the time it was kept, so in its old
-// place. Letting go of a shelf (whose), the author's face lifts off the page
+// place. Letting go of a shelf (g), the author's face lifts off the page
 // onto the notice and goes back on 撤销; from the keyboard, or under less
 // motion, nothing flies.
-func (a *App) unkeep(c *ui.Context, list []*library.Article, whose *library.Source) {
+func (a *App) unkeep(c *ui.Context, list []*library.Article, g *favGroup) {
 	if len(list) == 0 {
 		return
 	}
@@ -1515,6 +1380,16 @@ func (a *App) unkeep(c *ui.Context, list []*library.Article, whose *library.Sour
 	src := a.keeperOf(list[0])
 	ic := a.iconOf(src)
 	text := locales.FavoritesRemovedFrom(nameOf(src), len(list))
+	var whose *library.Source
+	if g != nil {
+		whose = g.src
+		if g.design {
+			text = locales.FavoritesRemovedWorksFrom(nameOf(g.src), len(list))
+		}
+		if g.kind != "" {
+			ic = nil // a kind has no face
+		}
+	}
 	if len(list) == 1 {
 		t := []rune(titleOf(list[0].Title))
 		if len(t) > 18 {
@@ -1568,6 +1443,8 @@ func (a *App) favKeys(c *ui.Context) {
 		switch {
 		case fs.query != "":
 			fs.query, fs.search = "", false
+		case fs.kind != "" && a.page.id == "":
+			a.zoomTo(c, "")
 		case a.page.id != "":
 			// Back on the shelves, the focus goes to the author left.
 			fs.focus, fs.cursor = "a:"+a.page.id, "a:"+a.page.id

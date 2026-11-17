@@ -568,16 +568,6 @@
       }
     }
   },
-  "favoritesRecentFrom": "Recent favorites from {name}",
-  "@favoritesRecentFrom": {
-    "description": "Favorites: accessible name of the few latest favorites under a writer's name.",
-    "placeholders": {
-      "name": {
-        "type": "String",
-        "example": "Rauno Freiberg"
-      }
-    }
-  },
   "favoritesRemoveAll": "Remove All {count} from Favorites",
   "@favoritesRemoveAll": {
     "description": "Menu item that removes all of a writer's favorites (always more than one).",
@@ -1650,8 +1640,66 @@
   "@exploreKinds": {
     "description": "Accessible name of the row of kinds under Explore's design front page; no visible heading."
   },
-  "favoritesKinds": "Kept Designs",
-  "@favoritesKinds": {
-    "description": "Accessible name of the board of kept designs, by kind, on the first screen of Favorites; no visible heading."
+  "favoritesWorkCount": "{name}, {count, plural, one {# work} other {# works}}",
+  "@favoritesWorkCount": {
+    "description": "Favorites: accessible name of a block of the map holding a kind's or a gallery's kept designs (and, with the articles' name, the block of articles), which zooms into it.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Typography"
+      },
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "favoritesWorksCount": "{count, plural, one {# work kept} other {# works kept}}",
+  "@favoritesWorksCount": {
+    "description": "Favorites: how many designs of a kind or a gallery are kept, at the head of their page.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "favoritesRemoveAllWorks": "Remove All {count} from Favorites",
+  "@favoritesRemoveAllWorks": {
+    "description": "Menu item that removes all the kept designs of a kind or a gallery (always more than one).",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "favoritesRemovedWorksFrom": "{count, plural, one {Removed # work from {name}} other {Removed # works from {name}}}",
+  "@favoritesRemovedWorksFrom": {
+    "description": "Notice after several kept designs of a kind or a gallery were removed; offers Undo.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Typography"
+      },
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "favoritesAllFrom": "All {count}",
+  "@favoritesAllFrom": {
+    "description": "Favorites: under a writer's latest kept titles, the link to all of them on their page.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "favoritesArticles": "Articles",
+  "@favoritesArticles": {
+    "description": "Favorites: the name of the map's block of kept articles, shown when it is pointed at, and the accessible name of the writers' sheets inside it."
   }
 }

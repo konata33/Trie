@@ -39,83 +39,30 @@ const (
 // How far a press shrinks a picture it presses (DESIGN.md 按下就有反应).
 const Pressed = 0.97
 
-// Squash is the shape a press gives a control (DESIGN.md 弹一下): X times
-// as wide and Y times as tall, from the middle of its bottom edge.
-type Squash struct{ X, Y float32 }
-
-var (
-	Squashed    = Squash{X: 1.05, Y: 0.88} // buttons and icon buttons
-	SquashedTab = Squash{X: 1.04, Y: 0.88} // the sidebar's tabs
-	SquashedDot = Squash{X: 1.07, Y: 0.85} // the small round ones: 收藏's orbit, ··· over a picture
-)
-
-// SquaredUp is the corner a round button squares up to while pressed.
-const SquaredUp = 10
-
-// PressIn takes a press in, a tenth past and back, settled in 200 ms;
-// Rebound lets it go, past rest by 30% of the press around 185 ms and
-// settled in about 400 ms: one rebound, the second too small to see.
-var (
-	PressIn = ui.Animation{Spring: ui.SpringOptions{Duration: 220 * time.Millisecond, Bounce: 0.4}}
-	Rebound = ui.Animation{Spring: ui.SpringOptions{Duration: 350 * time.Millisecond, Bounce: 0.65}}
-)
-
-// Lead and Trail are the two ends of a selected ground sliding to another
-// item (DESIGN.md 弹一下): the end ahead goes on Lead and the end behind
-// follows on Trail, so the ground draws out along the way, around 100 ms:
-// a 34-tall ground some 8 longer between neighbours, 50 longer over 240.
-// The end behind lands past its place by about 3% of the way and comes
-// back; both are still by about 550 ms.
-var (
-	Lead  = ui.Animation{Spring: ui.SpringOptions{Duration: 300 * time.Millisecond, Bounce: 0.15}}
-	Trail = ui.Animation{Spring: ui.SpringOptions{Duration: 450 * time.Millisecond, Bounce: 0.25}}
-)
-
-// Ends returns the springs of the two ends of something sliding along a
-// line, the start's and the end's (DESIGN.md 弹一下): going forward the end
-// leads, going back the start does.
-func Ends(back bool) (start, end ui.Animation) {
-	if back {
-		return Lead, Trail
-	}
-	return Trail, Lead
-}
-
 // RiseIn brings up what comes in from below, a notice or a passage put
-// back: past its place by a sixth of the way around 230 ms, settled in
-// about 500 ms. Land closes a gap, the rest of a list moving up into the
-// room of what left: past by 5% of the way, settled in about 400 ms.
+// back; Land closes a gap, the rest of a list moving up into the room of
+// what left. Neither goes past its place (DESIGN.md 出现和补位).
 var (
-	RiseIn = ui.Animation{Spring: ui.SpringOptions{Duration: 400 * time.Millisecond, Bounce: 0.5}}
-	Land   = ui.Animation{Spring: ui.SpringOptions{Duration: 450 * time.Millisecond, Bounce: 0.3}}
+	RiseIn = ui.Animation{Spring: ui.SpringOptions{Duration: 400 * time.Millisecond}}
+	Land   = ui.Animation{Spring: ui.SpringOptions{Duration: 450 * time.Millisecond}}
 )
 
-// Satellite is the favourite's satellite coming round after the arc's end,
-// 60 ms behind it: past the top by a ninth of its way around 370 ms, back
-// and still by about 600 ms. Heavier is how much heavier the ring grows
-// for each part RiseIn goes past, as it closes: about half again at most.
-var Satellite = ui.Animation{Spring: ui.SpringOptions{Duration: 500 * time.Millisecond, Bounce: 0.42}, Delay: 60 * time.Millisecond}
+// Satellite is the favourite's satellite coming round to the top, 60 ms
+// behind the arc's end, without going past it (DESIGN.md 收藏轨道).
+var Satellite = ui.Animation{Spring: ui.SpringOptions{Duration: 500 * time.Millisecond}, Delay: 60 * time.Millisecond}
 
-const Heavier = 3
+// Carry is the light that is one thing going from item to item: a sidebar
+// tab's ground, words and amber dots, a list's selected ground, the amber
+// line under a work's shot (DESIGN.md 带着走的弹簧: duration 0.5, bounce 0).
+var Carry = Travel(500 * time.Millisecond)
 
-// NudgeIn and NudgeOut move an icon's accent while its button is pressed
-// and back once let go (DESIGN.md 弹一下), on softer springs than the press,
-// so that the part goes a beat behind its button: in, past by a tenth;
-// out, 40 ms after the button, past rest by over a third around 260 ms and
-// by a seventh once more, within 5% by about 700 ms. Stagger holds
-// back the second of two parts that go one after the other.
-var (
-	NudgeIn  = ui.Animation{Spring: ui.SpringOptions{Duration: 260 * time.Millisecond, Bounce: 0.4}}
-	NudgeOut = ui.Animation{Spring: ui.SpringOptions{Duration: 420 * time.Millisecond, Bounce: 0.7}, Delay: 40 * time.Millisecond}
-)
-
-const Stagger = 40 * time.Millisecond
-
-// RollPast is how far a count's digit rolls past its place, in lines,
-// before it comes back: out over the roll, back over RollBack.
+// A press on an icon button sends a ring of light out from where it went
+// down, RingSpeed px a second, gone over Ring (DESIGN.md 按下).
+// RingFade is how its light falls off as it goes, e^(−t/RingFade).
 const (
-	RollPast = 0.18
-	RollBack = 160 * time.Millisecond
+	Ring      = 900 * time.Millisecond
+	RingFade  = 320 * time.Millisecond
+	RingSpeed = 70
 )
 
 // Special curves, named so no one writes their own.
@@ -123,9 +70,6 @@ var (
 	// Flight is a long flight across the window, as an avatar into its
 	// new sidebar row: it leaves gently, carries through, long damped tail.
 	Flight = ui.CubicBezier(0.45, 0, 0.15, 1)
-	// Swing settles back with damping, as the compass when Explore
-	// becomes current.
-	Swing = ui.CubicBezier(0.45, 0, 0.2, 1)
 	// Brake is an exact quadratic ease-out: it starts at the speed
 	// something already has and stops at zero, as a spinning icon.
 	Brake = ui.CubicBezier(0.333, 0.667, 0.667, 1)
@@ -160,6 +104,35 @@ func TravelEase(t float32) float32 {
 	n := float32(len(travelStops) - 1)
 	i := int(t * n)
 	return travelStops[i] + (travelStops[i+1]-travelStops[i])*(t*n-float32(i))
+}
+
+// StageLand is how far a passage's words have travelled onto the stage
+// when what only the stage has begins to come in (DESIGN.md 引文上台).
+const StageLand = 0.92
+
+// StageCross is how a passage's words as the list sets them and as the
+// stage does cross while they lift off, q of the way, and as they land
+// going back: the stage's come in over the first 15% of the way, the
+// list's go under them from 10% to 25%, so that the two never thin out
+// where they coincide.
+func StageCross(q float32) (list, stage float32) {
+	in := func(v float32) float32 { return Ease(min(1, max(0, v))) }
+	return 1 - in((q-0.1)/0.15), in(q / 0.15)
+}
+
+// TravelReach is TravelEase turned round: how far along the travel's
+// length it has come v of the way.
+func TravelReach(v float32) float32 {
+	if v <= 0 {
+		return 0
+	}
+	n := len(travelStops) - 1
+	for i := range n {
+		if v < travelStops[i+1] {
+			return (float32(i) + (v-travelStops[i])/(travelStops[i+1]-travelStops[i])) / float32(n)
+		}
+	}
+	return 1
 }
 
 // settleRate is how a spring of a duration without bounce
@@ -329,6 +302,76 @@ func Shade(in, out time.Duration) ui.ElementTransition {
 // Behind is how far the page behind a dialog goes out of focus while it
 // shows (DESIGN.md 移焦的分寸: a mask).
 const Behind = 2
+
+// Grow is how a centred layer opened by the pointer, the subscription
+// dialog or the settings, comes out of what opened it and
+// goes back into it as one thing (DESIGN.md 弹层), as a container
+// transform: its surface, solid almost at once, goes from the opener's box
+// to the layer's on a spring without bounce that settles over In, its
+// corners going from 6 to 12, and the layer's words ride on it from the
+// start, scaled whole to fit it, never stretched, coming into focus as it
+// grows. Going back, surface and words go together over Out (Away).
+type Grow struct{ In, Out time.Duration }
+
+var (
+	DialogGrow = Grow{In: DialogIn, Out: DialogOut}
+	SheetGrow  = Grow{In: PopIn, Out: PopOut}
+)
+
+// Surface is how the surface goes: out to the layer, or back into the
+// opener when the layer closes before it has come.
+func (g Grow) Surface(back bool) ui.Animation {
+	if back {
+		return spring(g.Out, settleRate)
+	}
+	return spring(g.In, settleRate)
+}
+
+// Rise is how the surface goes up or down on its way out, a little ahead
+// of how it goes across (Surface), so that its way bends into a shallow
+// arc, some 40 off the straight line over 500, as a thing lifted and set
+// down rather than slid.
+func (g Grow) Rise() ui.Animation { return spring(g.In*4/5, settleRate) }
+
+// Landed is how long an opener stays lit once the layer it opened begins
+// to go back into it: from halfway through Out, as the layer reaches it,
+// until LandHold past Out, then it dims on its usual timing.
+func (g Grow) Landed(since time.Duration) bool { return since >= g.Out/2 && since <= g.Out+LandHold }
+
+const LandHold = 150 * time.Millisecond
+
+// WordsIn is the words' opacity as the layer opens, as Keyframes: in from
+// 12% of In, once the surface is solid, to 50%, when it is some 95% grown.
+func (g Grow) WordsIn() []ui.Keyframe {
+	return []ui.Keyframe{{Value: 0}, {At: g.In * 3 / 25, Value: 0}, {At: g.In / 2, Value: 1, Ease: Ease}}
+}
+
+// Fit is the scale that sets a box of size w×h whole inside one of fw×fh,
+// at most 1.
+func Fit(w, h, fw, fh float32) float32 {
+	if w <= 0 || h <= 0 {
+		return 1
+	}
+	return min(1, fw/w, fh/h)
+}
+
+// Away is the Transition of a layer that grew, give in every frame that
+// shows it with its TransformOrigin at its centre: going, it goes back into
+// from as one piece, surface and words together, its centre to from's and
+// shrinking to fit it, fading as it goes, over Out along Flight: a flight
+// across the window, which sets off gently and settles into from slowly,
+// faint by then. Of its changes only colours, which it has none of, would
+// animate.
+func (g Grow) Away(from, layer ui.Rect) ui.ElementTransition {
+	m := ui.Motion{X: from.X + from.W/2 - layer.X - layer.W/2, Y: from.Y + from.H/2 - layer.Y - layer.H/2,
+		Scale: max(0.01, min(0.9, Fit(layer.W, layer.H, from.W, from.H)))}
+	return ui.ElementTransition{Duration: g.Out, Ease: Flight, Colors: true, Exit: &m}
+}
+
+// Glide is the pointer's ground in a menu going from item to item: a
+// spring without bounce settled in 200 ms, quick enough to stay with the
+// pointer (DESIGN.md 连续，不跳变).
+var Glide = spring(200*time.Millisecond, settleRate)
 
 // Origin returns the TransformOrigin, in fractions of box, at the centre of
 // from: a layer grows out of the button that opened it and shrinks back
@@ -523,15 +566,14 @@ const (
 	SignHover          = 150 * time.Millisecond                         // the sign-off's link
 	ErrorOpen          = 180 * time.Millisecond                         // a field's error line opening its height
 
-	TabGround          = 180 * time.Millisecond                         // a sidebar tab's hover ground
-	TabOpen, TabWords  = 220 * time.Millisecond, 160 * time.Millisecond // a current tab's label opening, its words fading in
-	NameLight          = 160 * time.Millisecond                         // an author's name brightening
-	RowDim             = 220 * time.Millisecond                         // an author's row dimming while its feed is read; its face clearing
-	SwingRise, SwingIn = 140 * time.Millisecond, 540 * time.Millisecond // the compass swinging out, and settled (26% of 540)
-	Turn               = 900 * time.Millisecond                         // a turn of the refresh icon
-	Flare              = 480 * time.Millisecond                         // a refreshed author's face flaring
-	Glow               = 200 * time.Millisecond                         // the favourite's glow
-	Orbit              = 460 * time.Millisecond                         // the favourite's arc closing, its satellite coming round
+	TabGround      = 180 * time.Millisecond                         // a sidebar tab's hover ground
+	NameLight      = 160 * time.Millisecond                         // an author's name brightening
+	RowDim         = 220 * time.Millisecond                         // an author's row dimming while its feed is read; its face clearing
+	Turn           = 900 * time.Millisecond                         // a turn of the refresh icon
+	Flare          = 480 * time.Millisecond                         // a refreshed author's face flaring
+	Light          = 200 * time.Millisecond                         // an icon's accent lighting to amber and back; the favourite's orbit turning amber
+	Orbit          = 460 * time.Millisecond                         // the favourite's arc closing, its satellite coming round
+	Flow, FlowBack = 750 * time.Millisecond, 380 * time.Millisecond // copy's dots flowing into a check, and back
 
 	BarAway, BarFade         = 260 * time.Millisecond, 200 * time.Millisecond // the reader's bar sent away
 	SelectionSettle          = 250 * time.Millisecond                         // a selection settling before its bar shows
@@ -547,18 +589,22 @@ const (
 	NoticeFor, UndoFor = 4 * time.Second, 8 * time.Second // a notice, and one offering 撤销
 
 	// 收藏 and 摘录.
-	Leave      = 150 * time.Millisecond  // a card leaving fades out of focus before the rest close up
-	PictureIn  = 300 * time.Millisecond  // a picture coming in once read
-	Lean       = 400 * time.Millisecond  // a picture leaning in, or coming up in light, under the pointer
-	Fold       = 250 * time.Millisecond  // a deleted passage folding shut, the rest closing up
-	Wash       = 1100 * time.Millisecond // what was copied lighting up and letting go
-	Copied     = 2 * time.Second         // 已复制 holding before the button says 复制引文 again
-	SettleWait = 150 * time.Millisecond  // a passage's card grown, its words settling in (over SwapIn)
-	MarkWait   = 350 * time.Millisecond  // and its quote mark lighting (over SwapIn)
+	Leave     = 150 * time.Millisecond  // a card leaving fades out of focus before the rest close up
+	PictureIn = 300 * time.Millisecond  // a picture coming in once read
+	Lean      = 400 * time.Millisecond  // a picture leaning in, or coming up in light, under the pointer
+	Fold      = 250 * time.Millisecond  // a deleted passage folding shut, the rest closing up
+	Wash      = 1100 * time.Millisecond // what was copied lighting up and letting go
+	Copied    = 2 * time.Second         // 已复制 holding before the button says 复制引文 again
+
+	// 引文上台: a passage's words travelling onto the stage on the travel
+	// spring, and back in 0.6 of the time; what only the stage has coming in
+	// where it stands once they are StageLand of the way there, and going.
+	StageIn, StageOut           = 600 * time.Millisecond, 360 * time.Millisecond
+	StagePartsIn, StagePartsOut = 180 * time.Millisecond, 160 * time.Millisecond
 
 	RulerNap, RulerOut, RulerSpread = 900 * time.Millisecond, 400 * time.Millisecond, 140 * time.Millisecond // the scrollbar: asleep after, going, its light spreading
 
-	Boil                       = time.Second / 12                                 // the pictograms' line boil, 12 fps
+	Pictogram                  = time.Second / 30                                 // a moving pictogram's frame, 30 fps
 	LoadingTurn, LoadingBreath = 1100 * time.Millisecond, 1600 * time.Millisecond // the loading mark's turn; its breath under less motion
 
 	// The reader.
@@ -578,4 +624,40 @@ func Reflow(instant bool) ui.ElementTransition {
 		in, out = time.Millisecond, time.Millisecond
 	}
 	return ui.ElementTransition{Duration: in, Ease: Ease, ExitDuration: out, Colors: true, Enter: &ui.Motion{}, Exit: &ui.Motion{}}
+}
+
+// Dissolve times a row that turns into dots reeled into its face, as a
+// writer's sidebar row let go from its menu (DESIGN.md 取消订阅): the face
+// draws into its point over Face; from the face's side the name turns into
+// dots a strip at a time, each Stagger after the one before, drawing in
+// over Grow as its dot grows; Grow after that, the dot is reeled into the
+// point over Reel. Once the last dot is in, the point goes out over Out,
+// and Wait later the rows below close up on Close, a spring without bounce
+// (Closed). Under less motion the row fades over Fade instead and the rows
+// close up at once.
+type Dissolve struct{ Face, Stagger, Grow, Reel, Out, Wait, Fade, Close time.Duration }
+
+// LetGo is a writer's row let go.
+var LetGo = Dissolve{Face: 300 * time.Millisecond, Stagger: 12 * time.Millisecond, Grow: 180 * time.Millisecond,
+	Reel: 320 * time.Millisecond, Out: 250 * time.Millisecond, Wait: 100 * time.Millisecond, Fade: 150 * time.Millisecond,
+	Close: 500 * time.Millisecond}
+
+// Closed returns how far the rows below have closed up, t after they set
+// off: MyGo's spring of Duration Close without bounce, from rest,
+// 1 − (1 + ωt)·e^(−ωt) with ω = 2π/Close (走远路的弹簧).
+func (d Dissolve) Closed(t time.Duration) float32 {
+	if t <= 0 {
+		return 0
+	}
+	x := 2 * math.Pi * t.Seconds() / d.Close.Seconds()
+	if x >= settleRate {
+		return 1
+	}
+	return float32(1 - (1+x)*math.Exp(-x))
+}
+
+// Closing is how long the rows below take to close up, settled within
+// 0.001 of the way.
+func (d Dissolve) Closing() time.Duration {
+	return time.Duration(settleRate / (2 * math.Pi) * float64(d.Close))
 }

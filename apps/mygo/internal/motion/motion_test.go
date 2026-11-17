@@ -67,6 +67,28 @@ func TestFollowSettlesAs300msMotionSpring(t *testing.T) {
 	}
 }
 
+// No spring goes past its place and comes back (DESIGN.md 所有弹簧都不弹跳):
+// each rises to its target and stays there.
+func TestSpringsDoNotBounce(t *testing.T) {
+	at := make([]time.Duration, 60)
+	for i := range at {
+		at[i] = time.Duration(i+1) * 20 * time.Millisecond
+	}
+	for name, a := range map[string]ui.Animation{"Carry": Carry, "RiseIn": RiseIn, "Land": Land, "Satellite": Satellite,
+		"Follow": Follow, "Glide": Glide, "Travel": Travel(600 * time.Millisecond)} {
+		got := sprung(t, a, at)
+		for i, v := range got {
+			if v > 1.0005 || i > 0 && v < got[i-1]-1e-4 {
+				t.Errorf("%s at %v: %.4f after %.4f", name, at[i], v, got[max(0, i-1)])
+				break
+			}
+		}
+		if got[len(got)-1] < 0.999 {
+			t.Errorf("%s has not arrived after %v: %.4f", name, at[len(at)-1], got[len(got)-1])
+		}
+	}
+}
+
 // Under less motion nothing moves or flies, and fades and blurs keep
 // their time; after a key everything shows at once.
 func TestStillAndInstant(t *testing.T) {

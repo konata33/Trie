@@ -44,8 +44,6 @@ type readerPage struct {
 
 	// The screenshot the strip's amber line went to last, and whether it
 	// went back along the strip to it (workStrip).
-	markAt   int
-	markBack bool
 
 	measured reader.Position
 	saveAt   time.Time
@@ -600,11 +598,13 @@ func (a *App) readerBar(c *ui.Context, rp *readerPage, art *library.Article, fro
 		if b.Hovered() {
 			color, bg = theme.Text, theme.Hover
 		}
+		if a.pressing(b) {
+			bg = theme.Selected // pressed, a step up
+		}
 		b.Background(b.AnimateColor("bg", bg, a.ease(motion.Hover))).TextColor(b.AnimateColor("fg", color, a.ease(motion.Hover)))
 		if b.FocusVisible() {
 			b.FocusRing(true)
 		}
-		a.press(b, motion.Squashed)
 		a.control(b)
 		b.Children(func() {
 			a.icon(c, "back", 16, false)
@@ -862,7 +862,6 @@ func (a *App) clipBar(c *ui.Context, rp *readerPage, art *library.Article) {
 		if b.FocusVisible() {
 			b.FocusRing(true)
 		}
-		a.press(b, motion.Squashed)
 		if b.Clicked() {
 			if inMark {
 				a.unclip(rp, existing)

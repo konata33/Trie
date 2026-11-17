@@ -67,36 +67,31 @@ func (a *App) kindShelf(c *ui.Context, g exGeometry) {
 	}
 	n := float32(len(kinds))
 	w := (g.cw - 32 - (n-1)*16) / n
-	// A work shelved under several kinds stands on one door only: each door leads with the newest work no door before it shows.
-	used := map[string]bool{}
 	ui.Row(c.Key("kinds")).Gap(16).Margin(0, 0, 56, 0).Role(ui.RoleNavigation).Label(locales.ExploreKinds()).Children(func() {
 		for _, k := range kinds {
-			works := a.ex.kinds[k]
-			lead := max(0, slices.IndexFunc(works, func(x exWork) bool { return !used[x.url] }))
-			picks := append([]exWork{works[lead]}, slices.Delete(slices.Clone(works), lead, lead+1)...)
-			picks = picks[:min(5, len(picks))]
-			used[picks[0].url] = true
-			a.kindDoor(c, k, picks, w, w*5/4)
+			a.kindDoor(c, k, w, w*5/4)
 		}
 	})
 }
 
-// kindDoor is one kind's door: a poster of its newest work, the next ones
-// turning over it while pointed at; at its foot, on the band, the kind's
-// name and the faces of the galleries behind it.
-func (a *App) kindDoor(c *ui.Context, k string, picks []exWork, w, h float32) {
+// kindDoor is one kind's door: a poster of our own, the same on every
+// visit whatever the galleries showed last: the kind's subject drawn large
+// in the icons' hand and cut by the door's edges, the guide line its makers
+// watch running across it; its lower part sinks into the plate, its name
+// over it. Pointed at, the plate comes up, the lines brighten and the fill
+// lights.
+func (a *App) kindDoor(c *ui.Context, k string, w, h float32) {
 	ex := a.ex
 	door := ui.Box(c.Key(k)).Size(w, h).Radius(10)
 	a.intoView(door, 0)
-	hover := door.Hovered()
-	turn := a.turning(c, "kind:"+k, picks, hover)
 	door.Children(func() {
-		b := ui.ButtonBase(c.Key("open")).Label(kindName(k)).Absolute().Fill().Radius(10).FocusRing(false)
+		b := ui.ButtonBase(c.Key("open")).Label(kindName(k)).Absolute().Fill().Radius(10).ClipX().ClipY().FocusRing(false)
 		if ex.focus == "kind:"+k {
 			ex.focus = ""
 			b.Focus()
 		}
-		if b.FocusVisible() {
+		focus := b.FocusVisible()
+		if focus {
 			b.FocusRing(true)
 		}
 		if !a.still(c) {
@@ -107,34 +102,27 @@ func (a *App) kindDoor(c *ui.Context, k string, picks []exWork, w, h float32) {
 			p := door.AnimateTo("press", s, ui.Animation{Duration: motion.Press, Ease: motion.Ease})
 			door.TransformOrigin(0.5, 0.5).Scale(p, p)
 		}
-		zoom := a.zoom(c, door, hover)
-		var shown *exPic
-		b.Children(func() { shown = a.turned(c, picks[0].entry, turn, zoom, w, h) })
+		lit := b.Hovered() || focus
+		ground, edge, ink, fill := theme.Surface, theme.LineSoft, theme.Muted, theme.IconFill
+		if lit {
+			ground, edge, ink, fill = theme.Elevated, theme.Line, theme.Text2, theme.Accent
+		}
+		ease := a.ease(motion.Hover)
+		ground = b.AnimateColor("bg", ground, ease)
+		b.Background(ground).InsetShadow(0, 0, 0, 1, b.AnimateColor("edge", edge, ease))
 		if b.Clicked() {
 			a.openKind(c, k)
 		}
-		ui.Box(c.Key("cap")).Absolute().Fill().IgnoreInput(true).Children(func() {
-			band(c, h-120, 120, 72, shown, 0, w, h, 10)
-			ui.Row(c).Absolute().Left(16).Right(14).Bottom(14).Gap(8).AlignItems(ui.End).Children(func() {
-				ui.Text(c, kindName(k)).FontSize(24).LineHeight(1.2).FontWeight(650).LetterSpacing(-0.01 * 24).TextColor(theme.Text).
-					SingleLine().Grow(1).Shrink(1).MinWidth(0)
-				a.kindFaces(c, kindSources(ex.kinds[k]), 18)
-			})
+		art := doorArt()[k]
+		b.Children(func() {
+			ui.Icon(c, art.accent).Absolute().Fill().AccessHidden(true).TextColor(b.AnimateColor("fill", fill, a.ease(motion.State)))
+			ui.Icon(c, art.ink).Absolute().Fill().AccessHidden(true).TextColor(b.AnimateColor("ink", ink, ease))
+			// Whatever runs under the name sinks into the plate first.
+			ui.Box(c.Key("sink")).Absolute().Left(0).Right(0).Bottom(0).Height(h * 0.5).IgnoreInput(true).LinearGradient(ui.LinearGradient{Angle: 180,
+				Stops: []ui.GradientStop{{Color: ground.Alpha(0), At: 0}, {Color: ground.Alpha(0.94), At: 0.45}, {Color: ground, At: 1}}})
+			ui.Text(c, kindName(k)).FontSize(theme.Title).LineHeight(1.2).FontWeight(650).LetterSpacing(-0.01 * theme.Title).TextColor(theme.Text).
+				MaxLines(2).Absolute().Left(18).Right(16).Bottom(18)
 		})
-	})
-}
-
-// kindFaces are the galleries behind a kind, their faces overlapping, four
-// at most, each ringed in the window's ground.
-func (a *App) kindFaces(c *ui.Context, from []*explore.Entry, size float32) {
-	ui.Row(c.Key("faces")).AccessHidden(true).Padding(0, 0, 3, 0).Children(func() {
-		for i, e := range from[:min(4, len(from))] {
-			ring := ui.Box(c.Key(e.ID)).Radius(size/2 + 2).Background(theme.Window).Padding(2).Shrink(0)
-			if i > 0 {
-				ring.Margin(0, 0, 0, -size/3)
-			}
-			ring.Children(func() { a.exFace(c, e, size, false, 9) })
-		}
 	})
 }
 
@@ -231,7 +219,7 @@ func (a *App) kindsOf(art *library.Article) []string {
 	}
 	var out []string
 	for _, e := range a.ex.sites {
-		if len(e.Shelves) == 0 || !(src.FeedURL != nil && e.FeedURL != nil && *src.FeedURL == *e.FeedURL || exHost(src.HomeURL) == exHost(e.HomeURL)) {
+		if len(e.Shelves) == 0 || !sameSite(src, e) {
 			continue
 		}
 		for _, sh := range e.Shelves {
@@ -243,141 +231,14 @@ func (a *App) kindsOf(art *library.Article) []string {
 	return out
 }
 
-// favBoard is 收藏's first screen when designs are kept: one board of the
-// kinds kept, edge to edge from the window's top, the kind kept most taking
-// the left and the others sharing the right, a hairline of the window's
-// ground between them; each block stands on its newest keep's picture, how
-// many and its name in its lower-left corner. Its foot sinks into the
-// window's ground, where the first writer kept from rises; alone, it fills
-// the screen.
-func (a *App) favBoard(c *ui.Context, p page, kinds []*favGroup, alone bool, stop string, live bool) {
-	_, vh := c.Size()
-	k := sceneFirst
-	if alone {
-		k = sceneOnly
-	}
-	h, w := sceneHeight(k, vh), a.area.W
-	sorted := slices.Clone(kinds)
-	slices.SortStableFunc(sorted, func(x, y *favGroup) int { return len(y.list) - len(x.list) })
-	rects := boardRects(len(sorted), w, h, 4)
-	// A keep shelved under several kinds stands on one block only, as far as there are keeps enough: the kinds with the
-	// fewest pictured keeps choose first, each its newest keep no block has chosen.
-	pictured := func(art *library.Article) bool { return art.Preview != nil && art.Preview.HasImage }
-	order := slices.Clone(sorted)
-	slices.SortStableFunc(order, func(x, y *favGroup) int {
-		return len(slices.DeleteFunc(slices.Clone(x.list), func(a *library.Article) bool { return !pictured(a) })) -
-			len(slices.DeleteFunc(slices.Clone(y.list), func(a *library.Article) bool { return !pictured(a) }))
-	})
-	used, cover := map[string]bool{}, map[*favGroup]*favGroup{}
-	for _, g := range order {
-		cover[g] = g
-		if lead := slices.IndexFunc(g.list, func(art *library.Article) bool { return !used[art.ID] && pictured(art) }); lead >= 0 {
-			used[g.list[lead].ID] = true
-			cover[g] = &favGroup{src: g.src, kind: g.kind, list: append([]*library.Article{g.list[lead]}, slices.Delete(slices.Clone(g.list), lead, lead+1)...)}
-		}
-	}
-	ui.Box(c.Key("board")).FillWidth().Height(h).Role(ui.RoleList).Label(locales.FavoritesKinds()).Children(func() {
-		for i, g := range sorted {
-			a.boardBlock(c, p, cover[g], rects[i], i == 0, rects[i].Y+rects[i].H >= h-0.5, stop, live)
-		}
-		// Under the floating band.
-		ui.Box(c).Absolute().Left(0).Right(0).Top(0).Height(132).IgnoreInput(true).AccessHidden(true).LinearGradient(ui.LinearGradient{Angle: 180,
-			Stops: []ui.GradientStop{{Color: theme.Window.Alpha(0.9), At: 0}, {Color: theme.Window.Alpha(0.9), At: 52.0 / 132}, {Color: theme.Window.Alpha(0), At: 1}}})
-	})
+// gallery reports whether src is a design gallery's, whose keeps are designs
+// even where it shelves none of them by kind.
+func (a *App) gallery(src *library.Source) bool {
+	return slices.ContainsFunc(a.ex.sites, func(e *explore.Entry) bool { return len(e.Works) > 0 && sameSite(src, e) })
 }
 
-// boardRects lays n blocks over a board w×h, gap apart: one fills it; two
-// share it, the first wider; more give the first the left 56% and share
-// the right, two stacked, a wide one over two, or two by two.
-func boardRects(n int, w, h, gap float32) []ui.Rect {
-	switch n {
-	case 0:
-		return nil
-	case 1:
-		return []ui.Rect{{W: w, H: h}}
-	case 2:
-		l := float32(int(w * 0.58))
-		return []ui.Rect{{W: l, H: h}, {X: l + gap, W: w - l - gap, H: h}}
-	}
-	l := float32(int(w * 0.56))
-	x, rw := l+gap, w-l-gap
-	hh, hw := (h-gap)/2, (rw-gap)/2
-	out := []ui.Rect{{W: l, H: h}}
-	switch n {
-	case 3:
-		out = append(out, ui.Rect{X: x, W: rw, H: hh}, ui.Rect{X: x, Y: hh + gap, W: rw, H: hh})
-	case 4:
-		out = append(out, ui.Rect{X: x, W: rw, H: hh}, ui.Rect{X: x, Y: hh + gap, W: hw, H: hh}, ui.Rect{X: x + hw + gap, Y: hh + gap, W: hw, H: hh})
-	default:
-		out = append(out, ui.Rect{X: x, W: hw, H: hh}, ui.Rect{X: x + hw + gap, W: hw, H: hh},
-			ui.Rect{X: x, Y: hh + gap, W: hw, H: hh}, ui.Rect{X: x + hw + gap, Y: hh + gap, W: hw, H: hh})
-	}
-	return out[:min(n, len(out))]
-}
-
-// boardBlock is one kind on the board: its newest keep's picture, as bright
-// as the picture is and brighter when pointed at, drifting closer; how many
-// and its name over a shade in the lower-left corner. It opens the kind's
-// keeps, its picture folding into their page's head; ⌘⌫ and its menu let
-// go of them all.
-func (a *App) boardBlock(c *ui.Context, p page, g *favGroup, r ui.Rect, lead, foot bool, stop string, live bool) {
-	fs := a.favs()
-	key := "a:" + g.src.ID
-	box := ui.Box(c.Key(key)).Absolute().Left(r.X).Top(r.Y).Size(r.W, r.H).ClipX().ClipY()
-	a.share(c, box, p, favPicMatch{g.src.ID}, live)
-	hover := box.Hovered()
-	ctx := fs.ctx == key
-	menu := ui.ContextMenuBase(c, box, &ctx)
-	a.shelfMenu(c, menu, g, true)
-	fs.ctx = keepOpen(fs.ctx, key, ctx)
-	pic, _, waiting := a.shelfPicture(g, true)
-	box.Children(func() {
-		b := ui.ButtonBase(c.Key("enter")).Label(locales.FavoritesWriterCount(nameOf(g.src), len(g.list))).Absolute().Fill().FocusRing(false).
-			KeyShortcuts(0, ui.KeyEnter).KeyShortcuts(ui.Cmd, ui.KeyBackspace)
-		a.card(b, key, stop, live)
-		if b.Clicked() && live {
-			fs.cursor = key
-			a.enterShelf(c, g.src.ID)
-		}
-		if b.FocusVisible() {
-			b.FocusRing(true).FocusRingOffset(-3)
-		}
-		zoom := a.zoom(c, box, hover)
-		b.Children(func() {
-			ui.Box(c).Absolute().Fill().Background(theme.Surface)
-			switch {
-			case pic != nil && pic.bmp != nil:
-				img := ui.Image(c, pic.bmp).Fit(ui.Cover).ObjectPosition(0.5, posOf(false)).Absolute()
-				if fade := a.picFade(c, pic); fade < 1 {
-					img.Opacity(fade)
-				}
-				grown(img, r.W, r.H, zoom)
-				bright := pic.rest
-				if hover || b.FocusVisible() {
-					bright = pic.lit
-				}
-				if v := 1 - box.AnimateTo("bright", bright, a.ease(motion.Lean)); v > 0.001 {
-					ui.Box(c).Absolute().Fill().Background(theme.Darken).Opacity(v)
-				}
-			case waiting && !a.still(c):
-				a.breathing(c, theme.Hover)
-			}
-		})
-		size := float32(24)
-		if lead {
-			size = 40
-		}
-		// The shade under the words; a block on the board's foot sinks there into the window's ground.
-		end := theme.Window.Alpha(0.85)
-		if foot {
-			end = theme.Window
-		}
-		ui.Box(c.Key("shade")).Absolute().Left(0).Right(0).Bottom(0).Height(min(r.H, 200)).IgnoreInput(true).AccessHidden(true).
-			LinearGradient(ui.LinearGradient{Angle: 180, Stops: []ui.GradientStop{{Color: theme.Window.Alpha(0), At: 0}, {Color: end, At: 1}}})
-		ui.Column(c.Key("words")).Absolute().Left(32).Right(24).Bottom(28).Gap(6).IgnoreInput(true).Children(func() {
-			ui.Text(c, locales.FavoritesCount(len(g.list))).FontSize(theme.Body).LineHeight(20.0 / 13).TextColor(theme.Text2).FontFeatures(theme.Numbers)
-			ui.Text(c, nameOf(g.src)).FontSize(size).LineHeight(1.15).FontWeight(650).LetterSpacing(-0.015 * size).TextColor(theme.Text).
-				MaxLines(2).Balance().Role(ui.RoleHeading).Level(2)
-		})
-	})
+// sameSite reports whether a library source is the site an Explore entry is:
+// the same feed, or the same host.
+func sameSite(src *library.Source, e *explore.Entry) bool {
+	return src.FeedURL != nil && e.FeedURL != nil && *src.FeedURL == *e.FeedURL || src.HomeURL != "" && exHost(src.HomeURL) == exHost(e.HomeURL)
 }

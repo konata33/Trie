@@ -101,9 +101,8 @@ type App struct {
 	wide      bool    // 宽松
 
 	refresh refreshState
-	fresh   map[string]bool    // authors with new articles from the last refresh
-	slides  map[any]*slide     // where each list's selected ground was last (slideGround)
-	counts  map[any]*countRoll // each count's number and the one before (count)
+	fresh   map[string]bool // authors with new articles from the last refresh
+	slides  map[any]*slide  // where each list's selected ground was last (slideGround)
 
 	home     *homeState  // 首页
 	fav      *favState   // 收藏
@@ -284,6 +283,11 @@ func (a *App) View(c *ui.Context) {
 		behind = root.Jump("behind", target)
 	} else {
 		behind = root.AnimateTo("behind", target, motion.Fade(d))
+	}
+	// Behind a passage on the stage the whole window, sidebar too, goes out
+	// of focus as it goes dark; the stage itself is a layer above it.
+	if s := a.clipsSt().stage; s != nil && a.page.kind == "clips" {
+		behind = max(behind, motion.Defocus*s.dark(s.values(c.Now())))
 	}
 	if behind > 0.01 {
 		root.Blur(behind)

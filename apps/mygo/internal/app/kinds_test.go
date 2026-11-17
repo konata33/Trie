@@ -1,6 +1,8 @@
 package app
 
 import (
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -63,11 +65,12 @@ func TestExploreKinds(t *testing.T) {
 	}
 }
 
-// 收藏 with designs kept: the kinds they are shelved under make the first
-// screen's board, the kind kept most taking the left; a block opens the
-// kind's keeps, each with its author; what is not a design stays with its
-// writer.
-func TestFavoritesBoard(t *testing.T) {
+// 收藏's first page is a map, one screen tall: a block for each kind kept
+// under, a design under two in both, and the articles; the more a block
+// holds, the larger. Choosing one zooms into it: its keeps are the cards,
+// the rest of the map a strip, from which another is chosen or the map
+// opened again; Esc opens it too.
+func TestFavoritesMap(t *testing.T) {
 	a, store := newExploreApp(t, nil)
 	tt := exploreTester(a)
 	toExplore(t, a, tt)
@@ -91,42 +94,106 @@ func TestFavoritesBoard(t *testing.T) {
 	if lib, err := store.Mutate(library.ToggleFavorite{ID: writer.ID}); err == nil {
 		a.accept(lib)
 	}
+	paper := nameOf(a.keeperOf(&writer)) + "，收藏 1 篇"
 	must(t, tt.Click("收藏"))
 	settle(tt)
-	if _, ok := tt.AccessByRole(ui.RoleList, "收藏的设计"); !ok {
-		t.Fatal("the designs kept make a board")
+	blocks := map[string]ui.Rect{}
+	for _, name := range []string{"落地页，收藏 2 件", "动效，收藏 1 件", "品牌，收藏 1 件", "文章，收藏 1 篇"} {
+		r, ok := tt.Find(name)
+		if !ok {
+			t.Fatalf("the map has no %q", name)
+		}
+		if r.Y+r.H > 850 {
+			t.Errorf("%q runs past the screen: %v", name, r)
+		}
+		blocks[name] = r
 	}
-	land, ok := tt.Find("落地页，收藏 2 篇")
-	brand, ok2 := tt.Find("品牌，收藏 1 篇")
-	if !ok || !ok2 || land.W <= brand.W || land.X > brand.X {
-		t.Fatalf("the kind kept most takes the left: %v %v", land, brand)
+	if l, m := blocks["落地页，收藏 2 件"], blocks["动效，收藏 1 件"]; l.W*l.H <= m.W*m.H {
+		t.Errorf("落地页 holds two and is no larger than 动效 with one: %v %v", l, m)
 	}
-	if _, ok := tt.Find(nameOf(a.keeperOf(&writer)) + "，收藏 1 篇"); !ok {
-		t.Fatal("a writer's keep stays with its writer")
+	for _, c := range a.favs().cards {
+		if !strings.HasPrefix(c.key, "m:") {
+			t.Errorf("the keys reach %q inside a block on the map", c.key)
+		}
 	}
-	must(t, tt.Click("落地页，收藏 2 篇"))
+	must(t, tt.Click("落地页，收藏 2 件"))
 	settle(tt)
-	if a.page != (page{"favorites", "kind:landing"}) || !tt.HasText("Alpha") || !tt.HasText("Beta") || tt.HasText("Gamma") {
-		t.Fatalf("the block opens the kind's keeps: %+v", a.page)
+	cards := func() []string {
+		var keys []string
+		for _, c := range a.favs().cards {
+			keys = append(keys, c.key)
+		}
+		return keys
+	}
+	if a.favs().kind != "kind:landing" || !slices.Equal(cards(), []string{"k:https://gallery.example/b", "k:https://gallery.example/a"}) {
+		t.Fatalf("into 落地页: %q, cards %q", a.favs().kind, cards())
+	}
+	if _, ok := tt.Find("品牌，收藏 1 件"); !ok {
+		t.Fatal("zoomed in, the rest of the map is gone")
+	}
+	must(t, tt.Click("品牌，收藏 1 件"))
+	settle(tt)
+	if a.favs().kind != "kind:brand" {
+		t.Fatalf("the strip does not go to 品牌: %q", a.favs().kind)
+	}
+	must(t, tt.Click("品牌，收藏 1 件"))
+	settle(tt)
+	if a.favs().kind != "" {
+		t.Fatal("the block zoomed into, chosen in the strip, does not open the map again")
+	}
+	must(t, tt.Click("文章，收藏 1 篇"))
+	settle(tt)
+	if _, ok := tt.Find(paper); !ok {
+		t.Fatalf("the articles hold no %q", paper)
+	}
+	tt.Key(0, ui.KeyEscape)
+	settle(tt)
+	if a.favs().kind != "" {
+		t.Fatal("Esc does not open the map again")
 	}
 }
 
-// The board's blocks cover it without overlapping, the first the largest.
-func TestBoardRects(t *testing.T) {
-	for n := 1; n <= 5; n++ {
-		rs := boardRects(n, 1000, 600, 4)
-		if len(rs) != n {
-			t.Fatalf("%d blocks: %v", n, rs)
+// The map's arithmetic: the blocks share the screen by what they hold, gap
+// apart, none under half an even share; tiles cover a block; rows fill the
+// width.
+func TestMapLayout(t *testing.T) {
+	r := ui.Rect{W: 1000, H: 600}
+	blocks := []mapBlock{{n: 12}, {n: 6}, {n: 1}, {n: 3}}
+	rects := mapRects(blocks, r, 4)
+	var area float32
+	for i, b := range rects {
+		if b.X < 0 || b.Y < 0 || b.X+b.W > r.W+0.01 || b.Y+b.H > r.H+0.01 {
+			t.Fatalf("block %d out of the map: %v", i, b)
 		}
-		for i, r := range rs {
-			if r.X < 0 || r.Y < 0 || r.X+r.W > 1000.5 || r.Y+r.H > 600.5 || r.W*r.H > rs[0].W*rs[0].H {
-				t.Errorf("%d blocks, #%d: %v", n, i, r)
-			}
-			for _, q := range rs[:i] {
-				if r.X < q.X+q.W && q.X < r.X+r.W && r.Y < q.Y+q.H && q.Y < r.Y+r.H {
-					t.Errorf("%d blocks overlap: %v %v", n, q, r)
-				}
+		for j := range i {
+			o := rects[j]
+			if b.X < o.X+o.W-0.01 && o.X < b.X+b.W-0.01 && b.Y < o.Y+o.H-0.01 && o.Y < b.Y+b.H-0.01 {
+				t.Fatalf("blocks %d and %d overlap: %v %v", j, i, o, b)
 			}
 		}
+		area += b.W * b.H
+	}
+	if share := rects[2].W * rects[2].H / area; share < 0.1 {
+		t.Errorf("the block of one has %.2f of the map, not about half an even share", share)
+	}
+	if rects[0].W*rects[0].H <= rects[1].W*rects[1].H {
+		t.Error("twelve is no larger than six")
+	}
+	for _, n := range []int{1, 2, 5, 9, 13} {
+		tiles := mosaic(n, 400, 300, 2)
+		if len(tiles) != n {
+			t.Fatalf("%d tiles for %d", len(tiles), n)
+		}
+		var covered float32
+		for _, c := range tiles {
+			covered += (c.W + 2) * (c.H + 2)
+		}
+		if covered < 402*302*0.99 {
+			t.Errorf("%d tiles leave the block uncovered: %.0f of %d", n, covered, 402*302)
+		}
+	}
+	rows := mapRows([]float32{1.5, 1.5, 1.5, 1.5, 1.5}, 1000, 280, 8)
+	if last := rows[2]; last.Y != rows[0].Y || last.X+last.W < 999 {
+		t.Errorf("the first row does not fill the width: %v", rows[:3])
 	}
 }

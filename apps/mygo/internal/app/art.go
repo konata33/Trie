@@ -4,17 +4,13 @@ import (
 	"embed"
 	"fmt"
 	"math"
-	"regexp"
-	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 
 	"trie/internal/locales"
 	"trie/internal/motion"
-	"trie/internal/theme"
 )
 
 // The app's drawings in art/, recorded from the previous implementation by
@@ -31,174 +27,26 @@ func artSVG(name string) *ui.SVG {
 	return ui.MustParseSVG(data)
 }
 
-// glyph is one of the app's icons (DESIGN.md Icons): an ink layer in the
-// text's colour and at most one accent shape, faint at rest and amber lit.
+// glyph is a drawing in an ink and one fill, each in the colour its
+// element's text is given.
 type glyph struct{ ink, accent *ui.SVG }
 
-var glyphs = sync.OnceValue(func() map[string]glyph {
+// doorArt are Explore's doors, a poster for each kind
+// (art/door-<kind>.svg, 1024 by 1280): an ink and one fill, as an icon's.
+var doorArt = sync.OnceValue(func() map[string]glyph {
 	m := map[string]glyph{}
-	for _, name := range []string{"home", "explore", "clips", "favorites", "add", "minus", "refresh", "search", "close", "back", "forward",
-		"openOriginal", "openArrow", "more", "check", "brokenImage", "play", "trash", "copy", "textSize", "time", "settings"} {
-		g := glyph{ink: artSVG("icon-" + name)}
-		if _, err := artFiles.Open("art/icon-" + name + "-accent.svg"); err == nil {
-			g.accent = artSVG("icon-" + name + "-accent")
-		}
-		m[name] = g
+	for _, k := range kindOrder {
+		m[k] = glyph{ink: artSVG("door-" + k), accent: artSVG("door-" + k + "-accent")}
 	}
 	return m
 })
 
-// icon builds icon name at size, its accent lit amber when lit: the accent
-// eases over 250 ms, at once after a key.
-func (a *App) icon(c *ui.Context, name string, size float32, lit bool) ui.Element {
-	return a.pressIcon(c, name, size, lit, false)
-}
-
-// pressIcon is icon in a button the pointer may be pressing: while pressed,
-// its accent moves as its nudge says, and springs back a beat behind the
-// button once let go (DESIGN.md 弹一下). Not from the keys, nor under less
-// motion.
-func (a *App) pressIcon(c *ui.Context, name string, size float32, lit, pressed bool) ui.Element {
-	g := glyphs()[name]
-	box := ui.Box(c).Size(size, size).Shrink(0)
-	target := theme.IconRest
-	if lit {
-		target = theme.Accent
-	}
-	accent := target
-	if g.accent != nil {
-		accent = box.AnimateColor("accent", target, a.ease(motion.State))
-	}
-	n, moves := nudges[name]
-	var k [2]float32
-	if moves && g.accent != nil {
-		to, in, out := float32(0), motion.NudgeIn, motion.NudgeOut
-		if pressed && !a.kbd && !a.still(c) {
-			to = 1
-		}
-		for i := range k {
-			anim := map[bool]ui.Animation{true: in, false: out}[to == 1]
-			anim.Delay += time.Duration(i) * motion.Stagger
-			if a.still(c) {
-				k[i] = box.Jump(i, 0)
-			} else {
-				k[i] = box.AnimateTo(i, to, anim)
-			}
-		}
-	}
-	return box.Children(func() {
-		if g.accent != nil {
-			if !n.split {
-				n.place(ui.Icon(c, g.accent).Absolute().Left(0).Top(0).Size(size, size).TextColor(accent), size, k[0])
-			} else {
-				for i, x := range [2]float32{0, size / 2} {
-					ui.Box(c).Absolute().Left(x).Top(0).Size(size/2, size).ClipX().Children(func() {
-						n.place(ui.Icon(c, g.accent).Absolute().Left(-x).Top(0).Size(size, size).TextColor(accent), size, k[i])
-					})
-				}
-			}
-		}
-		ui.Icon(c, g.ink).Absolute().Left(0).Top(0).Size(size, size)
-	})
-}
-
-// nudge is how an icon's accent moves while its button is pressed, in
-// fractions of the icon's size: by x and y; turned by turn degrees, grown
-// by grow, or sunk along y by sink, around (ox, oy). split moves its left
-// and right halves one after the other.
-type nudge struct {
-	x, y, turn, grow, sink, ox, oy float32
-	split                          bool
-}
-
-var nudges = map[string]nudge{
-	"home":         {sink: 0.3, ox: 0.5, oy: 0.846}, // the door sinks
-	"clips":        {y: 0.08, split: true},          // the two marks drop, one after the other
-	"favorites":    {grow: 0.4, ox: 0.5, oy: 0.5},   // the centre swells
-	"more":         {grow: 0.4, ox: 0.5, oy: 0.5},   // the middle dot swells
-	"refresh":      {turn: 30, ox: 0.5, oy: 0.5},    // the arrow runs on round the ring
-	"settings":     {x: 0.125},                      // the upper knob slides along its line
-	"search":       {turn: 40, ox: 0.44, oy: 0.456}, // the glint sweeps round the lens
-	"openOriginal": {x: 0.125, y: -0.125},           // the arrow leaves its box
-	"openArrow":    {x: 0.125, y: -0.125},           // and leaves
-	"trash":        {y: -0.125},                     // the lid's handle jumps
-	"copy":         {x: -0.125, y: -0.125},          // the sheet behind slips back
-	"play":         {x: 0.125},                      // the triangle pushes on
-}
-
-// place moves e, an accent of an icon size across, k of the way.
-func (n nudge) place(e ui.Element, size, k float32) {
-	if k == 0 {
-		return
-	}
-	e.TransformOrigin(n.ox, n.oy).Translate(n.x*size*k, n.y*size*k).Rotate(n.turn*k).Scale(1+n.grow*k, 1+(n.grow-n.sink)*k)
-}
-
-// The pictograms (DESIGN.md Illustration): 168 wide, grey ink and one amber
-// part, boiling at 12 fps through three outlines, each the drawing displaced
-// by the noise of an SVG filter (feTurbulence fractalNoise,
-// baseFrequency 0.035, seeds 11, 29 and 47; feDisplacementMap scale 2.8),
-// applied to the outline's points rather than its pixels. Loading plays its
-// four drawings over a second. Less motion shows the first drawing still.
-type pictogram struct {
-	still []*ui.SVG    // the drawings as drawn
-	boil  [][3]*ui.SVG // each drawing in the three outlines
-}
-
-var pictograms = sync.OnceValue(func() map[string]*pictogram {
-	m := map[string]*pictogram{}
-	for _, name := range []string{"favorites", "clips", "mailbox", "unreachable", "broken", "picture", "loading"} {
-		p := &pictogram{}
-		files := []string{"pictogram-" + name}
-		if name == "loading" {
-			files = []string{"pictogram-loading-1", "pictogram-loading-2", "pictogram-loading-3", "pictogram-loading-4"}
-		}
-		for _, f := range files {
-			data, err := artFiles.ReadFile("art/" + f + ".svg")
-			if err != nil {
-				panic(err)
-			}
-			p.still = append(p.still, ui.MustParseSVG(data))
-			var frames [3]*ui.SVG
-			for i, seed := range [3]int{11, 29, 47} {
-				frames[i] = ui.MustParseSVG([]byte(boiled(string(data), seed)))
-			}
-			p.boil = append(p.boil, frames)
-		}
-		m[name] = p
-	}
-	return m
-})
-
-// boilTick is the line boil's frame, 12 fps.
-const boilTick = motion.Boil
-
-// pictogram builds pictogram name, 168 wide, boiling while it shows.
-func (a *App) pictogram(c *ui.Context, name string) ui.Element {
-	p := pictograms()[name]
-	box := ui.Box(c).Width(168).AspectRatio(200.0 / 160).Shrink(0).AccessHidden(true)
-	if a.still(c) {
-		return box.Children(func() { ui.Image(c, p.still[0]).Fill() })
-	}
-	now := c.Now()
-	tick := int(now.UnixNano() / int64(boilTick))
-	drawing := 0
-	if len(p.boil) > 1 {
-		drawing = (tick / 3) % len(p.boil)
-	}
-	svg := p.boil[drawing][tick%3]
-	if box.InView() {
-		c.After(boilTick - time.Duration(now.UnixNano()%int64(boilTick)))
-	}
-	return box.Children(func() { ui.Image(c, svg).Fill() })
-}
-
-// The loading mark: one stroke going round, 1.1 s a
-// turn; under less motion it holds still and breathes.
-var loadingMark = sync.OnceValue(func() *ui.SVG { return artSVG("loading-mark") })
-
+// loading is the loading mark (DESIGN.md 读取记号): refresh's trail without
+// its arrowhead, in the colour of the text around it, turning clockwise
+// 1.1 s a turn; under less motion it holds still and breathes.
 func (a *App) loading(c *ui.Context, size float32) ui.Element {
-	ic := ui.Icon(c, loadingMark()).Size(size, size).Shrink(0).Role(ui.RoleProgress).Label(locales.CommonLoading())
+	cut, _ := dotCut("loading", size)
+	ic := ui.Icon(c, dotArt()[dotKey{"loading", cut}].ink).Size(size, size).Shrink(0).Role(ui.RoleProgress).Label(locales.CommonLoading())
 	if a.still(c) {
 		return ic.Opacity(0.35 + 0.65*breathe(ic.Loop("breathe", 2*motion.LoadingBreath, ui.Linear)))
 	}
@@ -221,219 +69,3 @@ var inkLoops = sync.OnceValue(func() [3]*ui.SVG {
 	}
 	return out
 })
-
-// boiled is svg, a pictogram of potrace paths under two transforms each,
-// with every point moved by the displacement noise of seed, in the
-// viewBox's units.
-func boiled(svg string, seed int) string {
-	t := newTurbulence(seed)
-	var out strings.Builder
-	out.WriteString(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 160" width="168" height="134.4">`)
-	for _, g := range groupPattern.FindAllStringSubmatch(svg, -1) {
-		at, fill, flip, body := parseMatrix(g[1]), g[2], parseFlip(g[3]), g[4]
-		place := func(x, y float64) (float64, float64) {
-			x, y = flip[0]+flip[2]*x, flip[1]+flip[3]*y
-			x, y = at[0]*x+at[2]*y+at[4], at[1]*x+at[3]*y+at[5]
-			dx, dy := t.at(x, y)
-			// feDisplacementMap shows each pixel from where the map points:
-			// the outline moves the other way, by scale·(channel − ½).
-			return x - 2.8*(dx-0.5), y - 2.8*(dy-0.5)
-		}
-		fmt.Fprintf(&out, `<g fill="%s">`, fill)
-		for _, d := range pathPattern.FindAllStringSubmatch(body, -1) {
-			out.WriteString(`<path d="`)
-			out.WriteString(placePath(d[1], place))
-			out.WriteString(`"/>`)
-		}
-		out.WriteString(`</g>`)
-	}
-	out.WriteString(`</svg>`)
-	return out.String()
-}
-
-var (
-	groupPattern = regexp.MustCompile(`<g transform="([^"]*)" fill="([^"]*)"><g transform="([^"]*)">(.*?)</g></g>`)
-	pathPattern  = regexp.MustCompile(`<path d="([^"]*)"/>`)
-	numPattern   = regexp.MustCompile(`-?[\d.]+(?:e-?\d+)?`)
-	tokPattern   = regexp.MustCompile(`[MmCcLlZz]|-?[\d.]+(?:e-?\d+)?`)
-)
-
-func parseMatrix(s string) [6]float64 {
-	var m [6]float64
-	for i, n := range numPattern.FindAllString(s, 6) {
-		m[i], _ = strconv.ParseFloat(n, 64)
-	}
-	return m
-}
-
-// parseFlip reads potrace's "translate(tx,ty) scale(sx,sy)" as tx, ty, sx, sy.
-func parseFlip(s string) [4]float64 {
-	var f [4]float64
-	for i, n := range numPattern.FindAllString(s, 4) {
-		f[i], _ = strconv.ParseFloat(n, 64)
-	}
-	return f
-}
-
-// placePath rewrites path data of M, C, L and Z, absolute or relative, as
-// absolute M, C and L through place.
-func placePath(d string, place func(x, y float64) (float64, float64)) string {
-	toks := tokPattern.FindAllString(d, -1)
-	var b strings.Builder
-	var cmd byte
-	var x, y, sx, sy float64
-	num := func(i *int) float64 {
-		v, _ := strconv.ParseFloat(toks[*i], 64)
-		*i++
-		return v
-	}
-	put := func(px, py float64) {
-		qx, qy := place(px, py)
-		fmt.Fprintf(&b, " %.2f %.2f", qx, qy)
-	}
-	for i := 0; i < len(toks); {
-		if c := toks[i][0]; strings.IndexByte("MmCcLlZz", c) >= 0 && len(toks[i]) == 1 {
-			cmd = c
-			i++
-			if cmd == 'Z' || cmd == 'z' {
-				b.WriteString(" Z")
-				x, y = sx, sy
-				continue
-			}
-		}
-		switch cmd {
-		case 'M', 'm':
-			nx, ny := num(&i), num(&i)
-			if cmd == 'm' {
-				nx, ny = x+nx, y+ny
-			}
-			x, y, sx, sy = nx, ny, nx, ny
-			b.WriteString(" M")
-			put(x, y)
-			cmd = map[byte]byte{'M': 'L', 'm': 'l'}[cmd] // pairs after a move are lines
-		case 'C', 'c':
-			var p [6]float64
-			for k := range p {
-				p[k] = num(&i)
-			}
-			if cmd == 'c' {
-				for k := 0; k < 6; k += 2 {
-					p[k], p[k+1] = x+p[k], y+p[k+1]
-				}
-			}
-			b.WriteString(" C")
-			put(p[0], p[1])
-			put(p[2], p[3])
-			put(p[4], p[5])
-			x, y = p[4], p[5]
-		case 'L', 'l':
-			nx, ny := num(&i), num(&i)
-			if cmd == 'l' {
-				nx, ny = x+nx, y+ny
-			}
-			x, y = nx, ny
-			b.WriteString(" L")
-			put(x, y)
-		default:
-			i++ // not a path this writes
-		}
-	}
-	return strings.TrimSpace(b.String())
-}
-
-// turbulence is SVG's feTurbulence fractalNoise with one octave, as the
-// filter spec's reference code computes it, for the red and green channels.
-type turbulence struct {
-	lattice [bSize + bSize + 2]int
-	grad    [4][bSize + bSize + 2][2]float64
-}
-
-const (
-	bSize   = 0x100
-	bMask   = 0xff
-	perlinN = 0x1000
-	freq    = 0.035
-)
-
-func newTurbulence(seed int) *turbulence {
-	t := &turbulence{}
-	const (
-		ra = 16807
-		rm = 2147483647
-		rq = 127773
-		rr = 2836
-	)
-	s := int64(seed)
-	if s <= 0 {
-		s = -(s % (rm - 1)) + 1
-	}
-	if s > rm-1 {
-		s = rm - 1
-	}
-	random := func() int64 {
-		s = ra*(s%rq) - rr*(s/rq)
-		if s <= 0 {
-			s += rm
-		}
-		return s
-	}
-	for k := 0; k < 4; k++ {
-		for i := 0; i < bSize; i++ {
-			t.lattice[i] = i
-			for j := 0; j < 2; j++ {
-				t.grad[k][i][j] = float64((random()%(bSize+bSize))-bSize) / bSize
-			}
-			g := &t.grad[k][i]
-			n := math.Sqrt(g[0]*g[0] + g[1]*g[1])
-			if n != 0 {
-				g[0], g[1] = g[0]/n, g[1]/n
-			}
-		}
-	}
-	for i := bSize - 1; i > 0; i-- {
-		k := t.lattice[i]
-		j := int(random() % bSize)
-		t.lattice[i], t.lattice[j] = t.lattice[j], k
-	}
-	for i := 0; i < bSize+2; i++ {
-		t.lattice[bSize+i] = t.lattice[i]
-		for k := 0; k < 4; k++ {
-			t.grad[k][bSize+i] = t.grad[k][i]
-		}
-	}
-	return t
-}
-
-func sCurve(t float64) float64     { return t * t * (3 - 2*t) }
-func lerp(t, a, b float64) float64 { return a + t*(b-a) }
-func (t *turbulence) noise(k int, x, y float64) float64 {
-	tx := x + perlinN
-	bx0 := int(tx) & bMask
-	bx1 := (bx0 + 1) & bMask
-	rx0 := tx - float64(int(tx))
-	rx1 := rx0 - 1
-	ty := y + perlinN
-	by0 := int(ty) & bMask
-	by1 := (by0 + 1) & bMask
-	ry0 := ty - float64(int(ty))
-	ry1 := ry0 - 1
-	i, j := t.lattice[bx0], t.lattice[bx1]
-	b00, b10, b01, b11 := t.lattice[i+by0], t.lattice[j+by0], t.lattice[i+by1], t.lattice[j+by1]
-	sx, sy := sCurve(rx0), sCurve(ry0)
-	q := t.grad[k][b00]
-	u := rx0*q[0] + ry0*q[1]
-	q = t.grad[k][b10]
-	v := rx1*q[0] + ry0*q[1]
-	a := lerp(sx, u, v)
-	q = t.grad[k][b01]
-	u = rx0*q[0] + ry1*q[1]
-	q = t.grad[k][b11]
-	v = rx1*q[0] + ry1*q[1]
-	return lerp(sy, a, lerp(sx, u, v))
-}
-
-// at returns the red and green channels of the noise at (x, y), 0 to 1.
-func (t *turbulence) at(x, y float64) (r, g float64) {
-	ch := func(k int) float64 { return (t.noise(k, x*freq, y*freq)*255 + 255) / 2 / 255 }
-	return ch(0), ch(1)
-}

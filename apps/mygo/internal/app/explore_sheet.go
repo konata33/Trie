@@ -130,9 +130,6 @@ func (a *App) follow(c *ui.Context, e *explore.Entry, where string) ui.Element {
 	if b.FocusVisible() {
 		b.FocusRing(true)
 	}
-	if !busy {
-		a.press(b, motion.Squashed)
-	}
 	b.Children(func() {
 		words := ui.Row(c.Key(map[bool]string{true: "on", false: "off"}[on])).Gap(8).AlignItems(ui.Center).Shrink(0)
 		if !a.kbd {

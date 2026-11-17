@@ -191,7 +191,7 @@ func TestAuthorPage(t *testing.T) {
 	// The rail: a press on a tick further down goes to its entry.
 	l := a.list("innei")
 	// It waits 8 under the head: the banner, half the window high, and the portrait's foot under it.
-	x, y := a.area.X+a.area.W-railRight-4, sceneHeight(sceneHead, 850)+profileFoot+8+24
+	x, y := a.area.X+a.area.W-railRight-4, headHeight(850)+profileFoot+8+24
 	tt.Press(x, y)
 	tt.Frame()
 	tt.Release(x, y)

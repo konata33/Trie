@@ -22,8 +22,9 @@ import (
 // each person, set like a magazine's pull quotes. Whoever was quoted last
 // opens the page on a spread of their own; everyone else follows in
 // columns. On each page their latest passage stands large, sized by its
-// length, the others as opening lines. A passage opens in a card that grows
-// out of it, whose article title opens the article at the passage.
+// length, the others as opening lines. A passage clicked takes the stage:
+// its words travel to the middle of the window as the page goes dark
+// behind them, and its article's title opens the article at the passage.
 
 // clipsState is what 摘录 keeps between frames.
 type clipsState struct {
@@ -36,18 +37,17 @@ type clipsState struct {
 	arrived uint64             // the crossing the page came by
 	copied  map[string]time.Time
 	washes  map[string]washRun // what was copied lighting up, by passage ("card" for the card's)
-	open    string             // the passage the card shows
-	keyed   bool               // the card was opened, turned or closed from the keys
-	opens   uint64             // the card's openings, to play its words settling in
-	turns   uint64             // and its turns, to cross them over
+	open    string             // the passage on the stage (引文上台)
+	stage   *clipStage         // the stage while it shows: coming, there or going back
+	turns   uint64             // its turns to another passage, to cross them over
 	turned  bool
-	who     string // the person the card showed, to cross them over when it changes
+	who     string // the person the stage showed, to cross them over when it changes
 	whoRun  uint64
-	cardBox ui.Rect            // the card as last laid out, whose ground becomes an article's page
+	cardBox ui.Rect            // the stage's words as last laid out
 	boxes   map[string]ui.Rect // the passages as last laid out (App.Press)
+	steps   map[string]step    // the leads' type as the page last set them
 	folding map[string]*fold   // passages deleted, folding shut before they go
-	leaving bool               // the card goes with its page (an article opening)
-	doomed  string             // a passage deleted from the card, which folds once the card has closed
+	doomed  string             // a passage deleted on the stage, which folds once it is back
 	closed  time.Time
 	note    clipNote
 	copy    time.Time // 复制引文 said 已复制 then
@@ -85,7 +85,7 @@ type washRun struct {
 func (a *App) clipsSt() *clipsState {
 	if a.clips == nil {
 		a.clips = &clipsState{heights: map[string]float32{}, seen: map[string]bool{}, copied: map[string]time.Time{}, washes: map[string]washRun{},
-			boxes: map[string]ui.Rect{}, folding: map[string]*fold{}}
+			boxes: map[string]ui.Rect{}, steps: map[string]step{}, folding: map[string]*fold{}}
 	}
 	return a.clips
 }
@@ -457,6 +457,14 @@ func (a *App) clipsPage(c *ui.Context, live bool) {
 	p := page{kind: "clips"}
 	sc := ui.Scroll(c.Key("scroll")).TrackScroll(&cs.scroll).Grow(1).FillWidth().Scrollbars(false)
 	view := sc.LayoutBounds()
+	if live {
+		cs.syncStage(c.Now(), a.still(c))
+		clear(cs.steps)
+		if s := cs.stage; s != nil && s.cut {
+			s.cut = false
+			c.DisableAnimations() // turned from the keys: what it turned from goes at once
+		}
+	}
 	clips := make([]*library.Clip, len(a.lib.Clips))
 	for i := range a.lib.Clips {
 		clips[i] = &a.lib.Clips[i]
@@ -471,11 +479,11 @@ func (a *App) clipsPage(c *ui.Context, live bool) {
 			}
 		}
 		a.scrolling = &cs.scroll
-		if cs.doomed != "" && (a.kbd || c.Now().Sub(cs.closed) >= motion.DialogOut) {
+		if cs.doomed != "" && (a.kbd || c.Now().Sub(cs.closed) >= motion.StageOut) {
 			a.foldClip(c, cs.doomed)
 			cs.doomed = ""
 		} else if cs.doomed != "" {
-			c.After(motion.DialogOut - c.Now().Sub(cs.closed))
+			c.After(motion.StageOut - c.Now().Sub(cs.closed))
 		}
 		// Folded shut, a passage goes (the notice offers 撤销), staying shut
 		// until the library has let it go; if it does not, it opens again.
@@ -591,7 +599,7 @@ func (a *App) clipsPage(c *ui.Context, live bool) {
 		})
 	})
 	if live {
-		a.clipCard(c, p)
+		a.clipsStage(c, p)
 	}
 }
 
@@ -630,7 +638,18 @@ func (a *App) personPage(c *ui.Context, p page, pp *person, hero bool, sh shape,
 	if a.crossing(c, live) {
 		page.Cache()
 	}
-	land := motion.Land // closing up as a page above folds away (弹一下)
+	// While one of their passages is on the stage, the stage takes their face and name from here.
+	cs := a.clipsSt()
+	var s *clipStage
+	for _, cl := range pp.clips {
+		if s = cs.onStage(cl.ID, live); s != nil {
+			break
+		}
+	}
+	if s != nil {
+		s.from.card = page.LayoutBounds()
+	}
+	land := motion.Land // closing up, without going past its place, as a page above folds away
 	page.Transition(a.tr(c, ui.ElementTransition{Animation: &land, Position: true}))
 	// A person's last passage takes their whole page with it.
 	if len(pp.clips) == 1 {
@@ -663,7 +682,14 @@ func (a *App) personPage(c *ui.Context, p page, pp *person, hero bool, sh shape,
 			if hero {
 				gap, mb, size = 12, 32, 32
 			}
-			ui.Row(c.Key("head")).Gap(gap).AlignItems(ui.Center).MinWidth(0).Margin(0, 0, mb, 0).Children(func() {
+			head := ui.Row(c.Key("head")).Gap(gap).AlignItems(ui.Center).MinWidth(0).Margin(0, 0, mb, 0)
+			if s != nil {
+				s.from.head, s.from.face, s.from.gap = head.LayoutBounds(), size, gap
+				if s.hides() {
+					head.Opacity(0) // on the stage
+				}
+			}
+			head.Children(func() {
 				a.avatar(c, pp.name, pp.icon, size)
 				ui.Text(c, pp.name).FontSize(theme.Item).LineHeight(20.0 / 15).FontWeight(600).TextColor(theme.Text).SingleLine().Ellipsis("…").
 					Shrink(1).MinWidth(0).Role(ui.RoleHeading).Level(2)
@@ -772,8 +798,8 @@ func (a *App) avatar(c *ui.Context, name string, ic *siteIcon, size float32) ui.
 
 // passageMove is how a passage moves as others fold away (foldClip),
 // closing the gap on Land, and comes back: put back while the page shows,
-// it rises 10 into place on RiseIn (弹一下). Not from the keys, nor under
-// less motion.
+// it rises 10 into place on RiseIn, neither going past its place. Not from
+// the keys, nor under less motion.
 func (a *App) passageMove(c *ui.Context, id string) ui.ElementTransition {
 	land := motion.Land
 	t := ui.ElementTransition{Animation: &land, Position: true}
@@ -803,17 +829,17 @@ func (a *App) clipLead(c *ui.Context, p page, cl *library.Clip, hero, alone bool
 		}
 		a.pressAt(b, 0.99, 0, 0.5)
 		wash := a.washOf(c, cl.ID)
+		s := a.clipsSt().onStage(cl.ID, live)
+		if live {
+			a.clipsSt().steps[cl.ID] = st
+		}
 		b.Children(func() {
 			size := stepMark[st]
-			left := 24 - size
-			if st == stepXL {
-				left = 20 - size
-			}
 			ink, lit := theme.Muted, false
 			if hover {
 				ink, lit = theme.Text2, true
 			}
-			a.icon(c, "clips", size, lit).Absolute().Top(8).Left(left).TextColor(b.AnimateColor("mark", ink, a.ease(motion.Hover)))
+			mark := a.icon(c, "clips", size, lit).Absolute().Top(8).Left(32 + markLeft(st)).TextColor(b.AnimateColor("mark", ink, a.ease(motion.Hover)))
 			body := func() {
 				ui.Column(c.Key("words")).MinWidth(0).Children(func() {
 					lines := 6
@@ -823,21 +849,27 @@ func (a *App) clipLead(c *ui.Context, p page, cl *library.Clip, hero, alone bool
 					sz := stepSize[st]
 					fam, k := reader.PassageFace(cl.Text)
 					q := washed(c, "quote", wash, func() ui.Element {
-						t := ui.RichText(c, hits(excerpt(cl.Text, terms), terms, ui.Span{})...).Font(fam).FontSize(sz[0] * k).LineHeight(sz[1] / (sz[0] * k)).TextColor(theme.Text).
-							MaxLines(lines).Ellipsis("…").Pretty()
-						switch st {
-						case stepXL:
-							t.LetterSpacing(-0.01 * 32)
-						case stepL:
-							t.LetterSpacing(-0.005 * 24)
-						}
-						return t
+						return ui.RichText(c, hits(excerpt(cl.Text, terms), terms, ui.Span{})...).Font(fam).FontSize(sz[0] * k).LineHeight(sz[1] / (sz[0] * k)).TextColor(theme.Text).
+							LetterSpacing(track(st)).MaxLines(lines).Ellipsis("…").Pretty()
 					})
 					q.FillWidth()
-					washed(c, "cite", wash, func() ui.Element {
+					cite := washed(c, "cite", wash, func() ui.Element {
 						return ui.RichText(c, hits(book(clipTitle(cl)), terms, ui.Span{})...).FontSize(theme.Body).LineHeight(20.0 / 13).TextColor(theme.Text2).
 							SingleLine().Ellipsis("…")
 					}).Margin(16, 0, 0, 0)
+					if s != nil {
+						s.from.quote, s.from.cite = q.LayoutBounds(), cite.LayoutBounds()
+						s.from.look = quoteLook{text: excerpt(cl.Text, terms), fam: fam, size: sz[0] * k, line: sz[1], track: track(st), lines: lines,
+							mark: size, markX: markLeft(st), markY: 8}
+						if !s.built {
+							s.lit = lit // as it was clicked: the stage soon covers the pointer
+						}
+						if s.hides() {
+							q.Opacity(0) // on the stage
+							mark.Opacity(0)
+							cite.Opacity(0)
+						}
+					}
 					if note != "" && !poster {
 						a.noteLine(c, note, terms, wash, 2).Margin(12, 0, 0, 0)
 					}
@@ -895,11 +927,19 @@ func (a *App) clipRow(c *ui.Context, p page, cl *library.Clip, article string, b
 					ui.RichText(c, hits(article, terms, ui.Span{})...).FontSize(theme.Label).LineHeight(16.0/12).TextColor(theme.Muted).
 						SingleLine().Ellipsis("…").Margin(0, 0, 4, 0)
 				}
-				washed(c, "excerpt", wash, func() ui.Element {
-					fam, k := reader.PassageFace(cl.Text)
+				fam, k := reader.PassageFace(cl.Text)
+				ex := washed(c, "excerpt", wash, func() ui.Element {
 					return ui.RichText(c, hits(excerpt(cl.Text, terms), terms, ui.Span{})...).Font(fam).FontSize(theme.Item * k).LineHeight(24 / (theme.Item * k)).TextColor(theme.Text).
 						MaxLines(2).Ellipsis("…").Pretty()
 				}).FillWidth()
+				if s := a.clipsSt().onStage(cl.ID, live); s != nil {
+					// The article named above a run stays: on the stage the passage's own comes with its words.
+					s.from.quote, s.from.cite = ex.LayoutBounds(), ui.Rect{}
+					s.from.look = quoteLook{text: excerpt(cl.Text, terms), fam: fam, size: theme.Item * k, line: 24, lines: 2}
+					if s.hides() {
+						ex.Opacity(0) // on the stage
+					}
+				}
 				if note != "" {
 					a.noteLine(c, note, terms, wash, 1).Margin(8, 0, 0, 0)
 				}
@@ -909,8 +949,8 @@ func (a *App) clipRow(c *ui.Context, p page, cl *library.Clip, article string, b
 	})
 }
 
-// passageButton opens the card from a passage, and takes the focus or the
-// ground back from an article it opened.
+// passageButton puts a passage on the stage, and takes the focus or the
+// ground back from the stage or an article it opened.
 func (a *App) passageButton(c *ui.Context, p page, b ui.Element, cl *library.Clip, live bool) {
 	cs := a.clipsSt()
 	b.TabStop(true)
@@ -924,7 +964,7 @@ func (a *App) passageButton(c *ui.Context, p page, b ui.Element, cl *library.Cli
 		}
 	}
 	if b.Clicked() && live {
-		a.showClip(cl.ID, r)
+		a.showClip(cl.ID)
 	}
 }
 
@@ -957,7 +997,7 @@ func (a *App) noteLine(c *ui.Context, note string, terms []string, wash float32,
 // clipTools is the reader's own clip bar at a passage's corner while it is
 // pointed at, and while it says 已复制: copy it with its source (复制引文),
 // or delete it (the notice brings it back). Pointer only: from the keys,
-// both are in the card.
+// both are on the stage.
 func (a *App) clipTools(c *ui.Context, cl *library.Clip, hover, lead bool) {
 	cs := a.clipsSt()
 	now := c.Now()
@@ -988,11 +1028,11 @@ func (a *App) clipTools(c *ui.Context, cl *library.Clip, hover, lead bool) {
 		bar.IgnoreInput(true)
 	}
 	bar.Children(func() {
-		icon, label := "copy", locales.ClipsCopyQuote()
+		label := locales.ClipsCopyQuote()
 		if held {
-			icon, label = "check", locales.CommonCopied()
+			label = locales.CommonCopied()
 		}
-		cp := a.toolButton(c, "copy", icon, label, held)
+		cp := a.toolButton(c, "copy", "copy", label, held)
 		if cp.Clicked() {
 			c.Services().WriteClipboard(clipMarkdown(cl))
 			cs.copied[cl.ID] = now
@@ -1006,7 +1046,8 @@ func (a *App) clipTools(c *ui.Context, cl *library.Clip, hover, lead bool) {
 }
 
 // toolButton is a small IconButton of the clip bar: text-2, the hover
-// ground; delete goes danger under the pointer, a done copy amber.
+// ground; delete goes danger under the pointer; done, copy's dots flow
+// into an amber check (DESIGN.md 点会走).
 func (a *App) toolButton(c *ui.Context, key, icon, label string, done bool) ui.Element {
 	b := ui.ButtonBase(c.Key(key)).Label(label).Size(24, 24).Radius(6).Center().Shrink(0).FocusRing(false).TabStop(false)
 	color, ground := theme.Text2, ui.Transparent
@@ -1016,12 +1057,9 @@ func (a *App) toolButton(c *ui.Context, key, icon, label string, done bool) ui.E
 			color = theme.Danger
 		}
 	}
-	if done {
-		color = theme.Accent
-	}
-	b.Background(b.AnimateColor("bg", ground, a.ease(motion.Hover))).TextColor(b.AnimateColor("fg", color, a.ease(motion.Hover)))
-	a.press(b, motion.Squashed)
-	b.Children(func() { a.pressIcon(c, icon, 16, false, b.Pressed()) })
+	fg := b.AnimateColor("fg", color, a.ease(motion.Hover))
+	b.Background(b.AnimateColor("bg", ground, a.ease(motion.Hover))).TextColor(fg)
+	b.Children(func() { a.dotIcon(c, b, icon, 16, iconLook{ink: fg, copied: done}) })
 	a.tip(c, b, label, false)
 	return b
 }
@@ -1137,200 +1175,457 @@ func (a *App) deleteClip(id string) {
 	a.mutate(library.DeleteClip{ID: id}, func() { a.notify(locales.ClipsDeleted(), nil, restore) })
 }
 
-// --- The card.
+// --- The stage (引文上台).
 
-// showClip opens the card on passage id, grown out of r.
-func (a *App) showClip(id string, r ui.Rect) {
-	cs := a.clipsSt()
-	if cs.open == "" {
-		cs.opens++
-		cs.turned = false
-		a.layers.opener, a.layers.in, a.layers.out = r, motion.DialogIn, motion.DialogOut
-		if a.kbd {
-			a.layers.opener = ui.Rect{}
+// The stage sets a passage stageScale times as large as the opening spread
+// would. The page behind it goes dark, black at stageDark over it (a
+// quarter of its brightness left), and the card the words came from gets
+// stageLift of that back (to 0.38) while the pointer rests in the dark: the
+// way back. What only the stage has rises ownRise into place out of
+// ownSoft of blur. Around its words the stage keeps stageHit of its own,
+// where a click is not one in the dark.
+const (
+	stageScale       = 1.25
+	stageDark        = 0.75
+	stageLift        = 0.13
+	ownRise, ownSoft = 4, 2
+	stageHit         = 24
+)
+
+// clipFrom is where a passage's shared parts stand in the list, in the
+// window, as the page last laid them out: the person's page, the row of
+// their face and name (the face's size, the gap after it), the words, and
+// the article (none under a lead, where the article is named above a run).
+type clipFrom struct {
+	card, head, quote, cite ui.Rect
+	face, gap               float32
+	look                    quoteLook
+}
+
+// quoteLook is how the list sets a passage's words: the text it shows and
+// its face, size, line height, tracking and lines, and the mark hanging
+// beside them, its size (0 for none) and its corner from theirs.
+type quoteLook struct {
+	text, fam          string
+	size, line, track  float32
+	lines              int
+	mark, markX, markY float32
+}
+
+// clipStage is the passage on the stage, or on its way there or back: one
+// value takes its shared parts from the list (0) to the stage (1) along the
+// travel spring, and another brings in the stage's own parts (own).
+type clipStage struct {
+	id     string
+	from   clipFrom
+	at     time.Time // when it last set off, either way
+	q0, s0 float32   // the two values as it did
+	open   bool      // coming or there; else going back
+	keyed  bool      // opened from the keys: it comes and goes at once
+	still  bool      // less motion: it fades in and out where it stands
+	built  bool      // laid out: the page hides what it took
+	gone   bool      // back: the page shows its passage again
+	leave  bool      // its article's title is pressed: it goes with its page
+	lit    bool      // the pointer had lit its mark in the list as it was clicked
+	focus  string    // the passage that takes the focus once it is back, if not its own
+	cut    bool      // turned from the keys: the next frame shows the turn at once
+	hit    ui.Rect   // the stage with its own room around the words, as last laid out
+	cite   ui.Rect   // the article's line, whose ground becomes the article's page
+}
+
+// onStage is the stage while it shows passage id, for the live page.
+func (cs *clipsState) onStage(id string, live bool) *clipStage {
+	if s := cs.stage; live && s != nil && s.id == id {
+		return s
+	}
+	return nil
+}
+
+// syncStage settles the stage as a frame begins: gone once back, and
+// turned round from where it is when it is wanted the other way.
+func (cs *clipsState) syncStage(now time.Time, still bool) {
+	s := cs.stage
+	switch {
+	case s == nil:
+	case s.gone || s.keyed && cs.open != s.id:
+		// Back (from the keys, at once): the page shows the passage again, which takes the focus back, or
+		// a neighbour does if it is about to fold away.
+		cs.stage, cs.focus = nil, s.id
+		if s.focus != "" {
+			cs.focus = s.focus
 		}
-	} else {
+	case s.at.IsZero():
+		s.at, s.still = now, still
+	case s.open != (cs.open == s.id):
+		s.q0, s.s0 = s.values(now)
+		s.at, s.open = now, !s.open
+	}
+}
+
+// hides reports whether the page hides the parts the stage took: once the
+// stage has them, and until they are back; under less motion, only while
+// it stands, the passage showing again under it as it fades.
+func (s *clipStage) hides() bool { return s.built && (s.open || !s.still) }
+
+// values are, at now, how far the shared parts have come (q) and how far
+// in the stage's own parts are (own): those come in once the shared parts
+// are StageLand of the way there, and go as they set off back.
+func (s *clipStage) values(now time.Time) (q, own float32) {
+	var t time.Duration
+	if !s.at.IsZero() {
+		t = now.Sub(s.at)
+	}
+	part := func(t, d time.Duration) float32 { return min(1, max(0, float32(t)/float32(d))) }
+	switch {
+	case s.keyed && s.open:
+		return 1, 1
+	case s.keyed:
+		return 0, 0
+	case s.still && s.open:
+		return 1, s.s0 + (1-s.s0)*motion.Ease(part(t, motion.StagePartsIn))
+	case s.still:
+		return 1, s.s0 * (1 - motion.Ease(part(t, motion.StagePartsOut)))
+	case s.open:
+		var land time.Duration
+		if s.q0 < motion.StageLand {
+			land = time.Duration(float32(motion.StageIn) * motion.TravelReach((motion.StageLand-s.q0)/(1-s.q0)))
+		}
+		return s.q0 + (1-s.q0)*motion.TravelEase(part(t, motion.StageIn)), s.s0 + (1-s.s0)*motion.Ease(part(t-land, motion.StagePartsIn))
+	}
+	return s.q0 * (1 - motion.TravelEase(part(t, motion.StageOut))), s.s0 * (1 - motion.Ease(part(t, motion.StagePartsOut)))
+}
+
+// dark is how far into the dark the page has gone: ahead of the shared
+// parts as they lift off; under less motion at once as the stage comes,
+// and with it as it goes.
+func (s *clipStage) dark(q, own float32) float32 {
+	if s.still && !s.keyed {
+		if s.open {
+			return 1
+		}
+		return own
+	}
+	return 1 - (1-q)*(1-q)
+}
+
+// home reports whether the stage is back at now.
+func (s *clipStage) home(now time.Time) bool {
+	switch {
+	case s.open:
+		return false
+	case s.keyed:
+		return true
+	case s.still:
+		return now.Sub(s.at) >= motion.StagePartsOut
+	}
+	return now.Sub(s.at) >= motion.StageOut
+}
+
+// showClip puts passage id on the stage; with the stage up, it turns to it.
+func (a *App) showClip(id string) {
+	cs := a.clipsSt()
+	switch s := cs.stage; {
+	case s != nil && s.open && s.id != id:
+		s.id, s.from, s.cut = id, clipFrom{}, a.kbd
 		cs.turns++
 		cs.turned = true
+	case s == nil || s.id != id:
+		cs.stage = &clipStage{id: id, open: true, keyed: a.kbd}
+		cs.turned = false
 	}
-	cs.open, cs.keyed, cs.leaving = id, a.kbd, false
+	cs.open = id
 	cs.note = clipNote{}
 }
 
-// closeClip closes the card; leaving, it goes with its page.
+// closeClip sends the passage on the stage back into the page, which takes
+// the focus back once it is there (syncStage); leaving, the stage goes with
+// its page instead (an article opening), as its last build said.
 func (a *App) closeClip(c *ui.Context, leaving bool) {
 	cs := a.clipsSt()
-	cs.open, cs.keyed, cs.leaving, cs.closed = "", a.kbd, leaving, c.Now()
+	if leaving {
+		cs.stage = nil
+	}
+	cs.open, cs.closed = "", c.Now()
+	c.Invalidate()
 }
 
-// clipCard is the whole passage, grown out of the line it was opened
-// from: who said it heads it, the words set as a quotation with the
-// article under them, the reader's note and the day it was kept in the
-// margin beside them. ← → turn to the neighbours; Esc or a click outside
-// closes.
-func (a *App) clipCard(c *ui.Context, p page) {
+// clipsStage builds the stage over the window while a passage is on it or
+// on its way: the dark over the page, the card the words came from a way
+// back in it, and the passage standing in the middle of the window. A
+// click in the dark, or Esc, sends it back; ← → turn to the neighbours.
+func (a *App) clipsStage(c *ui.Context, p page) {
 	cs := a.clipsSt()
-	at := slices.IndexFunc(cs.order, func(cl *library.Clip) bool { return cl.ID == cs.open })
-	if cs.open != "" && at < 0 {
-		cs.open = "" // its passage is gone
+	now := c.Now()
+	cs.syncStage(now, a.still(c))
+	s := cs.stage
+	if s == nil {
+		return
 	}
-	open := cs.open != ""
-	was := open
-	t := ui.ElementTransition{Duration: motion.DialogIn, Ease: motion.Ease, ExitDuration: motion.DialogOut, ExitEase: motion.Ease,
-		Enter: &ui.Motion{Scale: 0.96}, Exit: &ui.Motion{Scale: 0.96}}
-	if cs.leaving {
-		// Opening its article, the card lets go with the page it sits on.
-		x := motion.Deep.Crossing()
-		t.ExitDuration, t.Exit = x.Out, &ui.Motion{Blur: motion.Defocus, Scale: x.To}
+	at := slices.IndexFunc(cs.order, func(cl *library.Clip) bool { return cl.ID == s.id })
+	if at < 0 {
+		cs.stage, cs.open = nil, "" // its passage is gone
+		return
 	}
-	if cs.keyed {
-		t = motion.Instant(t)
+	q, own := s.values(now)
+	if s.home(now) {
+		s.gone = true // it stands where the page has it in this frame; from the next on, the page shows it
+		c.Invalidate()
+	} else if !s.open || q < 1 || own < 1 {
+		c.AnimationFrame()
 	}
+	e := s.dark(q, own)
 	w, h := c.Size()
-	a.centred(c, "clip-card", &open, t, func(panel ui.Element) {
-		cs.cardBox = panel.LayoutBounds()
-		// Kept as one bitmap (Cache): it grows out of its line and shrinks back scaled, which would cut what it holds
-		// at its rounded corners with a mask drawn on the CPU every frame.
-		panel.ClipX().ClipY().Width(min(800, w-96)).MaxHeight(h-96).Padding(24, 48, 32, 48).InsetShadow(0, 0, 0, 1, theme.Line).Shadow(0, 24, 64, 0, theme.ShadowDialog).
-			FontSize(theme.Body).LineHeight(1.5).Label(locales.ClipsCard()).Cache()
-	}, func() {
-		if at < 0 {
-			return
+	wq := min(600, w-2*48-48-176)
+	editing := cs.note.editing
+	ui.Overlay(c, func() {
+		// Modal until it is back: the page takes no clicks while the words go home.
+		back := ui.Box(c.Key("clip-stage")).Absolute().Left(0).Top(0).Right(0).Bottom(0).Center().ObserveInput(a.observe).Modal()
+		px, py, in := back.PointerPosition()
+		r := s.hit
+		over := s.open && in && !(px >= r.X && px < r.X+r.W && py >= r.Y && py < r.Y+r.H)
+		lift := back.AnimateTo("lift", map[bool]float32{true: 1, false: 0}[over], a.ease(motion.Hover))
+		back.Children(func() {
+			dark := ui.Box(c.Key("dark")).Absolute().IgnoreInput(true).AccessHidden(true)
+			if r := s.from.card; r.W > 0 {
+				// The card is a window in the dark, which lifts while the pointer rests outside the stage.
+				dark.Left(r.X).Top(r.Y).Size(r.W, r.H).Radius(10).Background(theme.Darken.Alpha(e*(stageDark-stageLift*lift))).
+					Shadow(0, 0, 0, w+h, theme.Darken.Alpha(e*stageDark))
+			} else {
+				dark.Left(0).Top(0).Right(0).Bottom(0).Background(theme.Darken.Alpha(e * stageDark))
+			}
+			col := ui.Column(c.Key("stage")).Width(wq + 48 + 176 + 2*stageHit).Padding(stageHit).ZIndex(1).Role(ui.RoleDialog).Label(locales.ClipsCard()).
+				FontSize(theme.Body).LineHeight(1.5).TextColor(theme.Text) // over the dark
+			col.Clicked() // a click on the stage is not one in the dark
+			b := col.LayoutBounds()
+			s.hit, cs.cardBox = b, ui.Rect{X: b.X + stageHit, Y: b.Y + stageHit, W: b.W - 2*stageHit, H: b.H - 2*stageHit}
+			switch {
+			case s.still && !s.keyed:
+				// Less motion: all of it comes into focus where it stands.
+				col.Opacity(own)
+				if bl := ownSoft * (1 - own); s.open && bl > 0.05 {
+					col.Blur(bl)
+				}
+			case !s.built && !s.keyed:
+				col.Opacity(0) // laid out first, so that its parts know where they go
+			}
+			col.Children(func() { a.stageWords(c, p, s, cs.order[at], at, len(cs.order), q, own, wq) })
+		})
+		if s.open && !editing && (back.Clicked() || back.OverlayShortcut(0, ui.KeyEscape)) {
+			a.closeClip(c, false)
 		}
-		a.cardContent(c, p, cs.order[at], at, len(cs.order))
+		// Its article opening, it lets go with the page it stands on; back, it goes at once. (Given every
+		// frame: one with an Exit that a frame leaves out counts as gone.)
+		x := motion.Deep.Crossing()
+		t := ui.ElementTransition{Colors: true, ExitDuration: -1, ExitEase: motion.Ease, Exit: &ui.Motion{Blur: motion.Defocus, Scale: x.To}}
+		if s.leave || cs.stage != s {
+			t.ExitDuration = x.Out
+		}
+		back.Transition(a.tr(c, t))
 	})
-	if was && !open {
-		a.closeClip(c, false)
-	}
+	s.built = true
 }
 
-// cardContent is the card's head, passage and margin, and foot.
-func (a *App) cardContent(c *ui.Context, p page, cl *library.Clip, at, total int) {
+// stageWords are what stands on the stage: who said it, the day it was
+// written beside them and the turning at the other end; the words with
+// their mark and the article under them, the note in the margin; the
+// foot. Who said it, the words and the article come from the list on the
+// shared value; the rest is the stage's own.
+func (a *App) stageWords(c *ui.Context, p page, s *clipStage, cl *library.Clip, at, total int, q, own, wq float32) {
 	cs := a.clipsSt()
-	ic := a.iconOfClip(cl)
-	who := personOf(cl)
-	swap := func(e ui.Element, run uint64) {
-		if cs.keyed || !cs.turned || a.kbd {
-			return
+	f := s.from
+	travelling := !s.keyed && !s.still && q < 1 && f.quote.W > 0
+	if s.still && !s.keyed {
+		own = 1 // the stage fades as one (clipsStage)
+	}
+	// The stage's own parts come in where they stand, rising out of a little blur; going, they only fade.
+	mine := func(e ui.Element, k float32) {
+		if o := own * k; o < 1 {
+			e.Opacity(o)
 		}
-		if k := e.Keyframes("swap", ramp(0, motion.SwapIn), ui.KeyframeOptions{Run: run, NonMotion: true}); k < 1 {
-			e.Opacity(k)
+		if own < 1 && s.open {
+			e.Translate(0, ownRise*(1-own))
+			if bl := ownSoft * (1 - own); bl > 0.05 {
+				e.Blur(bl)
+			}
 		}
+	}
+	// Turned to another passage, what changes crosses over where it stands: the one coming fades in over
+	// SwapIn as the one going fades over SwapOut. At once from the keys. (Its clock runs from the opening on,
+	// so that what does not change, the person turning to their own next passage, stays.)
+	swap := func(e ui.Element, run uint64) float32 {
+		k := e.Keyframes("swap", ramp(0, motion.SwapIn), ui.KeyframeOptions{Run: run, NonMotion: true})
+		if !cs.turned || a.kbd {
+			return 1
+		}
+		return k
+	}
+	crossOut := func(e ui.Element) {
+		// Given every frame: one with an Exit that a frame leaves out counts as gone, and leaves a copy.
+		t := ui.ElementTransition{Colors: true, ExitDuration: motion.SwapOut, ExitEase: motion.Ease, Exit: &ui.Motion{}}
+		if !s.open {
+			t.ExitDuration = -1 // going back, nothing turns
+		}
+		e.Transition(a.tr(c, t))
 	}
 	// ← → turn to the neighbours, outside the note being written (which keeps its arrows).
-	if at > 0 {
+	if s.open && at > 0 {
 		prev := cs.order[at-1].ID
-		c.OnShortcut(0, ui.KeyLeft, func() { a.kbd = true; a.showClip(prev, ui.Rect{}) })
+		c.OnShortcut(0, ui.KeyLeft, func() { a.kbd = true; a.showClip(prev) })
 	}
-	if at+1 < total {
+	if s.open && at+1 < total {
 		next := cs.order[at+1].ID
-		c.OnShortcut(0, ui.KeyRight, func() { a.kbd = true; a.showClip(next, ui.Rect{}) })
+		c.OnShortcut(0, ui.KeyRight, func() { a.kbd = true; a.showClip(next) })
 	}
-	a.aura(c, false)
-	// The person crosses over with the words only when the card turns to someone else.
+	// The person crosses over with the words only when the stage turns to someone else.
+	ic, who := a.iconOfClip(cl), personOf(cl)
 	if cs.who != who {
 		cs.who = who
 		cs.whoRun++
 	}
-	ui.Row(c.Key("head")).Gap(8).Height(32).Margin(0, 0, 32, 0).AlignItems(ui.Center).Children(func() {
-		whoRow := ui.Row(c.Key("who:" + who)).Gap(8).AlignItems(ui.Center).MinWidth(0).Shrink(1).Role(ui.RoleHeading).Level(2).Label(who)
-		swap(whoRow, cs.whoRun)
-		whoRow.Children(func() {
-			a.avatar(c, who, ic, 24)
-			ui.Text(c, who).FontSize(theme.Item).LineHeight(20.0 / 15).FontWeight(600).TextColor(theme.Text).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
-		})
-		if d := dateText(cl.Citation.PublishedAt); d != "" {
-			// When it was written sits by who wrote it, small and quiet.
-			t := ui.Text(c.Key("date:"+cl.ID), d).Margin(0, 0, 0, 4).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).
-				FontFeatures(theme.Numbers).NoWrap().Shrink(0)
-			swap(t, cs.turns)
+	head := ui.Row(c.Key("head")).Height(32).Gap(8).AlignItems(ui.Center)
+	hb := head.LayoutBounds()
+	head.Children(func() {
+		face, gap := float32(32), float32(12)
+		if travelling && f.face > 0 {
+			face, gap = f.face+(32-f.face)*q, f.gap+(12-f.gap)*q
 		}
+		wr := ui.Row(c.Key("who:" + who)).Gap(gap).AlignItems(ui.Center).MinWidth(0).Shrink(1).Role(ui.RoleHeading).Level(2).Label(who)
+		if k := swap(wr, cs.whoRun); k < 1 {
+			wr.Opacity(k)
+		}
+		crossOut(wr)
+		if travelling && f.head.W > 0 && hb.W > 0 {
+			travel(wr, f.head, ui.Rect{X: hb.X, Y: hb.Y + (32-face)/2}, 1, q)
+		}
+		wr.Children(func() {
+			a.avatar(c, who, ic, face)
+			ui.Text(c, who).FontSize(theme.Item).LineHeight(20.0 / 15).FontWeight(600).TextColor(theme.Text).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
+			if d := dateText(cl.Citation.PublishedAt); d != "" {
+				// When it was written sits by who wrote it, small and quiet.
+				t := ui.Text(c.Key("date:"+cl.ID), d).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).
+					FontFeatures(theme.Numbers).NoWrap().Shrink(0)
+				mine(t, swap(t, cs.turns))
+				crossOut(t)
+			}
+		})
 		ui.Box(c).Grow(1)
 		if total > 1 {
-			prev := a.iconBtn(c, "prev", iconOpt{icon: "back", label: locales.ClipsPrevious(), tip: locales.ClipsPreviousTip()}).Size(28, 28)
-			if at == 0 {
-				prev.Opacity(0.4)
-			}
-			if prev.Clicked() && at > 0 {
-				a.showClip(cs.order[at-1].ID, ui.Rect{})
-			}
-			ui.Text(c, fmt.Sprintf("%d / %d", at+1, total)).MinWidth(40).TextAlign(ui.Center).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).
-				FontFeatures(theme.Numbers)
-			next := a.iconBtn(c, "next", iconOpt{icon: "forward", label: locales.ClipsNext(), tip: locales.ClipsNextTip()}).Size(28, 28)
-			if at == total-1 {
-				next.Opacity(0.4)
-			}
-			if next.Clicked() && at < total-1 {
-				a.showClip(cs.order[at+1].ID, ui.Rect{})
-			}
-		}
-		if a.iconBtn(c, "close", iconOpt{icon: "close", label: locales.CommonClose(), tip: locales.CommonCloseTip()}).Size(28, 28).Clicked() {
-			a.closeClip(c, false)
+			turn := ui.Row(c.Key("turn")).AlignItems(ui.Center)
+			mine(turn, 1)
+			turn.Children(func() {
+				prev := a.iconBtn(c, "prev", iconOpt{icon: "back", label: locales.ClipsPrevious(), tip: locales.ClipsPreviousTip()}).Size(28, 28)
+				if at == 0 {
+					prev.Opacity(0.4)
+				}
+				if prev.Clicked() && at > 0 {
+					a.showClip(cs.order[at-1].ID)
+				}
+				ui.Text(c, fmt.Sprintf("%d / %d", at+1, total)).MinWidth(40).TextAlign(ui.Center).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).
+					FontFeatures(theme.Numbers)
+				next := a.iconBtn(c, "next", iconOpt{icon: "forward", label: locales.ClipsNext(), tip: locales.ClipsNextTip()}).Size(28, 28)
+				if at == total-1 {
+					next.Opacity(0.4)
+				}
+				if next.Clicked() && at < total-1 {
+					a.showClip(cs.order[at+1].ID)
+				}
+			})
 		}
 	})
 	wash := a.washOf(c, "card")
-	body := ui.Grid(c.Key("body:"+cl.ID)).ColumnTracks(ui.Fr(1), ui.Fixed(176)).GapX(48).AlignItems(ui.Start)
-	swap(body, cs.turns)
-	if !cs.turned && !cs.keyed && !a.still(c) {
-		// Once the card has grown out of the line, the words and the note settle in, then the mark lights: kept.
-		if k := body.Keyframes("in", ramp(motion.SettleWait, motion.SwapIn), ui.KeyframeOptions{Run: cs.opens}); k < 1 {
-			body.Opacity(k).Translate(0, 4*(1-k))
-			if b := 2 * (1 - k); b > 0.05 {
-				body.Blur(b)
-			}
-		}
+	st := a.stageStep(cl)
+	sz := stepSize[st]
+	fam, k := reader.PassageFace(cl.Text)
+	size, line := sz[0]*k*stageScale, sz[1]*stageScale
+	// The mark lights as the words land, or stays lit if the pointer had lit it in the list; going back, it
+	// dims as the list's will be.
+	lit := s.open && (q >= motion.StageLand || s.lit)
+	listIn, stageIn := motion.StageCross(q)
+	body := ui.Grid(c.Key("body:"+cl.ID)).ColumnTracks(ui.Fixed(wq), ui.Fixed(176)).GapX(48).AlignItems(ui.Start).Margin(40, 0, 0, 0)
+	if k := swap(body, cs.turns); k < 1 {
+		body.Opacity(k)
 	}
-	lit := cs.keyed || cs.turned || a.still(c) || body.Keyframes("lit", ramp(motion.MarkWait, motion.SwapIn), ui.KeyframeOptions{Run: cs.opens}) >= 0.5
+	crossOut(body)
 	body.Children(func() {
 		ui.Column(c.Key("quote")).MinWidth(0).Children(func() {
-			st := cardStep(cl.Text)
-			sz := stepSize[st]
-			fam, k := reader.PassageFace(cl.Text)
-			size := sz[0] * k
-			var paras []string
-			for _, line := range paragraphBreaks.Split(cl.Text, -1) {
-				if line = strings.TrimSpace(line); line != "" {
-					paras = append(paras, line)
+			words := ui.Column(c.Key("words")).MinWidth(0)
+			if to := words.LayoutBounds(); travelling && to.W > 0 {
+				travel(words, f.quote, to, f.look.size/size, q)
+			}
+			words.Children(func() {
+				if travelling && listIn > 0 {
+					// The list's words cross into the stage's under them as they lift off, while the two nearly coincide.
+					a.listWords(c, f.look, size/f.look.size, f.quote.W, s.open && s.lit).Opacity(listIn)
 				}
-			}
-			for i, line := range paras {
-				ui.Box(c.Key(i)).Margin(map[bool]float32{true: 16, false: 0}[i > 0], 0, 0, 0).Children(func() {
-					if i == 0 {
-						a.icon(c, "clips", stepMark[st], lit).Absolute().Top(8).Left(-12 - stepMark[st]).TextColor(theme.Text2)
+				stand := ui.Column(c.Key("stand")).MinWidth(0)
+				if travelling && stageIn < 1 {
+					stand.Opacity(stageIn)
+				}
+				stand.Children(func() {
+					var paras []string
+					for _, l := range paragraphBreaks.Split(cl.Text, -1) {
+						if l = strings.TrimSpace(l); l != "" {
+							paras = append(paras, l)
+						}
 					}
-					// Later paragraphs hang a Western opening quote the same way.
-					first, _ := utf8.DecodeRuneInString(line)
-					if i > 0 && strings.ContainsRune("“‘\"'", first) {
-						ui.Text(c, string(first)).Absolute().Top(0).Left(-textWidthIn(string(first), fam, size)).Font(fam).FontSize(size).LineHeight(sz[1] / size).TextColor(theme.Text)
-						line = line[utf8.RuneLen(first):]
+					for i, l := range paras {
+						ui.Box(c.Key(i)).Margin(map[bool]float32{true: 16 * stageScale, false: 0}[i > 0], 0, 0, 0).Children(func() {
+							if i == 0 {
+								a.icon(c, "clips", stepMark[st]*stageScale, lit).Absolute().Top(8 * stageScale).Left(markLeft(st) * stageScale).TextColor(theme.Text2)
+							}
+							// Later paragraphs hang a Western opening quote the same way.
+							first, _ := utf8.DecodeRuneInString(l)
+							if i > 0 && strings.ContainsRune("“‘\"'", first) {
+								ui.Text(c, string(first)).Absolute().Top(0).Left(-textWidthIn(string(first), fam, size)).Font(fam).FontSize(size).LineHeight(line / size).TextColor(theme.Text)
+								l = l[utf8.RuneLen(first):]
+							}
+							washed(c, "p", wash, func() ui.Element {
+								return ui.Text(c, l).Font(fam).FontSize(size).LineHeight(line / size).LetterSpacing(track(st) * stageScale).TextColor(theme.Text).Pretty()
+							}).FillWidth()
+						})
 					}
-					washed(c, "p", wash, func() ui.Element {
-						return ui.Text(c, line).Font(fam).FontSize(size).LineHeight(sz[1] / size).TextColor(theme.Text).Pretty()
-					}).FillWidth()
 				})
-			}
-			// The article, as a reference reads: 《title》. The title is the way back to it: it opens the article at this passage.
+			})
+			// The article, as a reference reads: 《title》. The title is the way back to it: it opens the article at this
+			// passage. Its underline is the stage's own.
 			title := clipTitle(cl)
-			ui.Row(c.Key("cite")).Margin(16, 0, 0, 0).AlignItems(ui.Start).FontSize(theme.Body).LineHeight(20.0 / 13).TextColor(theme.Text2).Children(func() {
+			cite := ui.Row(c.Key("cite")).Margin(16, 0, 0, 0).AlignItems(ui.Start).FontSize(theme.Body).LineHeight(20.0 / 13).TextColor(theme.Text2)
+			cb := cite.LayoutBounds()
+			s.cite = cb
+			if travelling && cb.W > 0 {
+				from := f.cite
+				if from.W <= 0 {
+					// Under a lead the list names the article above a run: here it rides in under the words, coming with them.
+					from = ui.Rect{X: f.quote.X, Y: f.quote.Y + f.quote.H + 16}
+					cite.Opacity(stageIn)
+				}
+				travel(cite, from, cb, 1, q)
+			}
+			cite.Children(func() {
 				hanTitle := han.MatchString(title)
 				if hanTitle {
 					ui.Text(c, "《")
 				}
 				link := ui.ButtonBase(c.Key("title")).Label(title).Radius(2).FocusRing(false).Shrink(1).MinWidth(0)
+				s.leave = link.Pressed() // about to open the article: the stage will let go with its page
 				if link.Clicked() {
 					a.openClip(c, cl)
 				}
-				color, line := theme.Text2, theme.Faint
+				color, under := theme.Text2, theme.Faint
 				if link.Hovered() {
-					color, line = theme.Text, theme.Text2
+					color, under = theme.Text, theme.Text2
 				}
 				if link.FocusVisible() {
 					link.FocusRing(true)
 				}
 				link.Children(func() {
+					fg, line := link.AnimateColor("fg", color, a.ease(motion.Hover)), link.AnimateColor("line", under, a.ease(motion.Hover))
 					t := washed(c, "cite", wash, func() ui.Element {
-						return citeTitle(c, title).TextColor(link.AnimateColor("fg", color, a.ease(motion.Hover))).
-							DecorationColor(link.AnimateColor("line", line, a.ease(motion.Hover)))
+						if own < 0.01 {
+							// Not underlined yet: an underline gone clear is drawn in the text's colour.
+							return ui.Text(c, title).FontSize(theme.Body).LineHeight(20.0 / 13).TextColor(fg).Pretty()
+						}
+						return citeTitle(c, title).TextColor(fg).DecorationColor(line.Alpha(own))
 					})
 					a.end(t, p, "title:"+cl.ArticleID)
 				})
@@ -1340,45 +1635,109 @@ func (a *App) cardContent(c *ui.Context, p page, cl *library.Clip, at, total int
 				}
 			})
 		})
-		a.cardMargin(c, cl, wash)
+		mine(a.cardMargin(c, cl, wash, (line-20)/2), 1)
 	})
-	ui.Row(c.Key("foot")).Gap(12).Margin(32, 0, 0, 0).AlignItems(ui.Center).Children(func() {
+	foot := ui.Row(c.Key("foot")).Gap(12).Margin(32, 0, 0, 0).AlignItems(ui.Center)
+	mine(foot, 1)
+	foot.Children(func() {
 		ui.Text(c, locales.ClipsClippedOn(dateText(&cl.CreatedAt))).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).FontFeatures(theme.Numbers)
 		ui.Box(c).Grow(1)
 		del := a.toolButton(c, "delete", "trash", locales.CommonDelete(), false).Size(32, 32).TabStop(true)
 		if del.Clicked() && !a.busy {
-			// Focus goes back to a neighbouring passage, since this one is about to fold away.
-			cs := a.clipsSt()
+			a.closeClip(c, false)
+			// Focus goes to a neighbouring passage once it is back, since this one folds away then.
 			if at+1 < total {
-				cs.focus = cs.order[at+1].ID
+				s.focus = cs.order[at+1].ID
 			} else if at > 0 {
-				cs.focus = cs.order[at-1].ID
+				s.focus = cs.order[at-1].ID
 			}
 			cs.doomed = cl.ID
-			a.closeClip(c, false)
 		}
 		a.handOff(c, cl)
 	})
 }
 
-// citeTitle is the title in the card's citation: ui/controls LinkButton's
+// travel takes e, laid out at to on the stage, to where the list has it,
+// from, by 1 − q: its corner on that corner, and its size scale of its own
+// at q 0.
+func travel(e ui.Element, from, to ui.Rect, scale, q float32) {
+	k := 1 - q
+	e.TransformOrigin(0, 0)
+	if scale != 1 {
+		s := scale + (1-scale)*q
+		e.Scale(s, s) // first: a scale after the move would scale the move too
+	}
+	e.Translate((from.X-to.X)*k, (from.Y-to.Y)*k)
+}
+
+// listWords draws a passage's words as the list sets them, width wide,
+// scale times as large from their corner, the mark lit as the pointer
+// lights it: what the stage's words cross over from as they lift off, and
+// into as they land.
+func (a *App) listWords(c *ui.Context, l quoteLook, scale, width float32, lit bool) ui.Element {
+	return ui.Box(c.Key("list")).Absolute().Left(0).Top(0).Width(width).TransformOrigin(0, 0).Scale(scale, scale).IgnoreInput(true).AccessHidden(true).
+		Children(func() {
+			if l.mark > 0 {
+				ink := theme.Muted
+				if lit {
+					ink = theme.Text2
+				}
+				a.icon(c, "clips", l.mark, lit).Absolute().Top(l.markY).Left(l.markX).TextColor(ink)
+			}
+			ui.Text(c, l.text).Font(l.fam).FontSize(l.size).LineHeight(l.line / l.size).LetterSpacing(l.track).TextColor(theme.Text).
+				MaxLines(l.lines).Ellipsis("…").Pretty().FillWidth()
+		})
+}
+
+// stageStep is the type the stage sets a passage in, stageScale times as
+// large: the opening spread's for its length, or the page's if it sets it
+// larger (a lone passage across the page).
+func (a *App) stageStep(cl *library.Clip) step {
+	st := leadStep(cl.Text, true)
+	if s, ok := a.clipsSt().steps[cl.ID]; ok && s < st {
+		st = s
+	}
+	return st
+}
+
+// track is the tracking of the larger steps.
+func track(st step) float32 {
+	switch st {
+	case stepXL:
+		return -0.01 * 32
+	case stepL:
+		return -0.005 * 24
+	}
+	return 0
+}
+
+// markLeft is where a lead's hanging mark stands, from the words' left edge.
+func markLeft(st step) float32 {
+	if st == stepXL {
+		return -12 - stepMark[st]
+	}
+	return -8 - stepMark[st]
+}
+
+// citeTitle is the title in the stage's citation: ui/controls LinkButton's
 // look, underlined.
 func citeTitle(c *ui.Context, s string) ui.Element {
 	return ui.Text(c, s).FontSize(theme.Body).LineHeight(20.0 / 13).TextColor(theme.Text2).Underline().UnderlineOffset(3).Pretty()
 }
 
-// cardMargin is the reader's own line in the margin beside the words: edited
-// in place, saved on leaving; Esc puts the old words back. With no note yet,
-// no stroke, only the quiet way to write one.
-func (a *App) cardMargin(c *ui.Context, cl *library.Clip, wash float32) {
+// cardMargin is the reader's own line in the margin beside the words, its
+// first line top down, on theirs: edited in place, saved on leaving; Esc
+// puts the old words back. With no note yet, no stroke, only the quiet way
+// to write one.
+func (a *App) cardMargin(c *ui.Context, cl *library.Clip, wash, top float32) ui.Element {
 	cs := a.clipsSt()
 	n := &cs.note
 	note := strings.TrimSpace(cl.Note)
 	editing := n.editing && n.id == cl.ID
-	m := ui.Column(c.Key("margin")).Gap(12).MinWidth(0).AlignItems(ui.Start).Padding(8, 0, 0, 20).Role(ui.RoleRegion).Label(locales.ClipsNote())
-	m.Children(func() {
+	m := ui.Column(c.Key("margin")).Gap(12).MinWidth(0).AlignItems(ui.Start).Padding(top, 0, 0, 20).Role(ui.RoleRegion).Label(locales.ClipsNote())
+	return m.Children(func() {
 		if note != "" || editing {
-			ui.Box(c).Absolute().Top(18).Left(0).Size(12, 1).Background(theme.Accent).IgnoreInput(true)
+			ui.Box(c).Absolute().Top(top+10).Left(0).Size(12, 1).Background(theme.Accent).IgnoreInput(true)
 		}
 		switch {
 		case editing:
@@ -1426,7 +1785,7 @@ func (a *App) cardMargin(c *ui.Context, cl *library.Clip, wash float32) {
 	})
 }
 
-// handOff is 复制引文, the card's one amber button: the passage with its
+// handOff is 复制引文, the stage's one amber button: the passage with its
 // source, link and note as Markdown, for Claude Code, Codex or a note. It
 // says 已复制 in place for two seconds, the tick drawn left to right.
 func (a *App) handOff(c *ui.Context, cl *library.Clip) {
@@ -1488,30 +1847,36 @@ func (a *App) handOff(c *ui.Context, cl *library.Clip) {
 	}
 }
 
-// openClip opens a passage's article from the card:
-// the same crossing as from a list, the card's ground becoming the
-// reader's page while the title in its citation travels to the headline;
-// the card and its shade let go with the page. Back, the page shrinks into
-// the passage, at the scroll it had, which takes the focus.
+// openClip opens a passage's article from the stage: the same crossing as
+// from a list, the article's line lighting up and spreading into the
+// reader's page while its title travels to the headline; the stage and the
+// dark let go with the page. Back, the page shrinks into the passage, at
+// the scroll it had, which takes the focus.
 func (a *App) openClip(c *ui.Context, cl *library.Clip) {
 	if a.article(cl.ArticleID) == nil {
 		a.fail(locales.ClipsArticleGone())
 		return
 	}
 	cs := a.clipsSt()
-	card := cs.cardBox
+	var line ui.Rect
+	if s := cs.stage; s != nil {
+		line = s.cite
+	}
 	a.closeClip(c, true)
 	cs.back = cl.ID
-	a.openAs(c, cl.ArticleID, card, citeTitle, theme.Body)
+	a.openAs(c, cl.ArticleID, line, citeTitle, theme.Body)
 }
 
 // ramp goes from 0 to 1 over d, after delay, along the one curve.
 func ramp(delay, d time.Duration) []ui.Keyframe {
+	if delay <= 0 {
+		return []ui.Keyframe{{Value: 0}, {At: d, Value: 1, Ease: motion.Ease}} // keyframe times must increase
+	}
 	return []ui.Keyframe{{Value: 0}, {At: delay, Value: 0}, {At: delay + d, Value: 1, Ease: motion.Ease}}
 }
 
-// clipsKeys are 摘录's: Esc clears the search. (The card's ← and → are its
-// own: cardContent.)
+// clipsKeys are 摘录's: Esc clears the search. (The stage's Esc, ← and →
+// are its own: clipsStage, stageWords.)
 func (a *App) clipsKeys(c *ui.Context) {
 	cs := a.clipsSt()
 	if cs.open == "" && c.Shortcut(0, ui.KeyEscape) && cs.query != "" {

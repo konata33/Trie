@@ -48,10 +48,14 @@ var (
 	ShadowShot   = ui.RGBA(0, 0, 0, 0.8)  // 0 16px 32px -16px: other people's pages
 )
 
-// Controls' own: an icon's accent shape at rest, a switch's track off and
-// pointed at.
+// Controls' own: an icon's dots at rest (icon, a step above text-2, since
+// dots thinner than a stroke read lighter in the same grey), its fill at
+// rest (icon-fill, the accent dimmed), a dot at its brightest under a
+// press's ring (icon-lit), a switch's track off and pointed at.
 var (
-	IconRest    = ui.RGBA(255, 255, 255, 0.16)
+	Icon        = ui.Hex("#B2B2B2")
+	IconFill    = ui.RGBA(227, 176, 97, 0.42)
+	IconLit     = ui.Hex("#F6F6F6")
 	SwitchTrack = ui.RGBA(255, 255, 255, 0.14)
 	SwitchHover = ui.RGBA(255, 255, 255, 0.2)
 )

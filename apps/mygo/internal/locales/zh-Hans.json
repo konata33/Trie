@@ -105,7 +105,6 @@
   "favoritesWriterCount": "{name}，收藏 {count} 篇",
   "favoritesCount": "收藏 {count} 篇",
   "favoritesWriterActions": "{name} 的收藏操作",
-  "favoritesRecentFrom": "{name} 最近收藏的文章",
   "favoritesRemoveAll": "取消收藏全部 {count} 篇",
   "favoritesArticleActions": "「{title}」的收藏操作",
   "favoritesRemovedFrom": "已取消收藏 {name} 的 {count} 篇",
@@ -308,5 +307,10 @@
   "kindType": "字体",
   "kindBrand": "品牌",
   "exploreKinds": "按要做的东西找",
-  "favoritesKinds": "收藏的设计"
+  "favoritesWorkCount": "{name}，收藏 {count} 件",
+  "favoritesWorksCount": "收藏 {count} 件",
+  "favoritesRemoveAllWorks": "取消收藏全部 {count} 件",
+  "favoritesRemovedWorksFrom": "已取消收藏「{name}」里的 {count} 件",
+  "favoritesAllFrom": "全部 {count} 篇",
+  "favoritesArticles": "文章"
 }

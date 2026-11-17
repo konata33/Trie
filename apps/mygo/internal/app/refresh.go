@@ -29,9 +29,6 @@ type refreshState struct {
 	// The refresh icon's turn.
 	spinAt, stopAt time.Time
 	from, rest     float64
-
-	exploreRun int
-	exploreWas bool
 }
 
 func (r *refreshState) ask(id string) {

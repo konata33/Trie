@@ -1,8 +1,12 @@
 package app
 
 import (
+	"math"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/egoist/mygo/ui"
 
@@ -32,46 +36,67 @@ func (a *App) sideParts(c *ui.Context) {
 	// A ground that does not show forgets where it was (slideGround).
 	if authorOn == "" {
 		a.unslide(sideMatch{"authors"})
-	} else {
-		a.unslide(sideMatch{"tabs"})
 	}
 	bar := ui.Row(c.Key("tabs")).Gap(4).Role(ui.RoleNavigation).Label(locales.SidebarTabs())
 	bar.Children(func() {
-		var at ui.Rect
+		cr := a.carry(c, bar, tab, authorOn == "")
+		tabAt, iconAt := map[string]ui.Rect{}, map[string]ui.Rect{}
 		for _, t := range tabs {
-			if r := a.tabButton(c, t.kind, t.label(), t.icon, tab == t.kind); tab == t.kind {
-				at = r
-			}
+			tabAt[t.kind], iconAt[t.kind] = a.tabButton(c, t.kind, t.label(), t.icon, tab == t.kind, cr)
 		}
-		if authorOn == "" {
-			a.slideGround(c, bar, sideMatch{"tabs"}, tab, at, false)
+		// The current tab's ground: from the tab the light left to the one it goes to, on its value.
+		if authorOn != "" {
+			return
+		}
+		box, to := bar.LayoutBounds(), tabAt[cr.to]
+		if to.W <= 0 || box.W <= 0 {
+			return // not laid out yet
+		}
+		r := to
+		if from, ok := tabAt[cr.from]; ok && cr.grounded {
+			r = ui.Rect{X: from.X + (to.X-from.X)*cr.p, Y: to.Y, W: from.W + (to.W-from.W)*cr.p, H: to.H}
+		}
+		ui.Box(c.Key("ground")).Absolute().ZIndex(-1).Radius(6).Background(theme.Selected).IgnoreInput(true).
+			Left(r.X-box.X).Top(r.Y-box.Y).Size(r.W, r.H)
+		// The amber itself on its way, over both tabs.
+		if from, ok := iconAt[cr.from]; ok {
+			fromDots, toDots := accentDots(tabIcon(cr.from), from), accentDots(tabIcon(cr.to), iconAt[cr.to])
+			ui.Box(c.Key("flight")).Absolute().Left(0).Top(0).Right(0).Bottom(0).ZIndex(1).IgnoreInput(true).AccessHidden(true).
+				Draw(func(p *ui.Painter, _ ui.Rect) { paintFlight(p, fromDots, toDots, cr.p) })
 		}
 	})
 	list := ui.Scroll(c.Key("authors")).Grow(1).Shrink(1).MinHeight(0).Margin(24, 0, 0, 0).Scrollbars(false)
 	list.Children(func() {
-		col := ui.Column(c).Gap(2)
+		col := ui.Column(c).Gap(rowGap)
 		col.Children(func() {
-			var at ui.Rect
+			var at, over ui.Rect
 			for _, row := range a.sideRows(c) {
-				if r := a.authorRow(c, row.au, authorOn == row.au.src.ID, row.parting); authorOn == row.au.src.ID {
+				r, hovered := a.authorRow(c, row.au, authorOn == row.au.src.ID, row.p)
+				if authorOn == row.au.src.ID {
 					at = r
+				} else if hovered {
+					over = r
 				}
 			}
+			// The pointer's ground glides between the rows; the current one has its own.
+			a.pointerGround(c, col, over, &a.layers.side)
 			if authorOn != "" {
-				a.slideGround(c, col, sideMatch{"authors"}, authorOn, at, true)
+				a.slideGround(c, col, sideMatch{"authors"}, at, true)
 			}
 		})
 	})
 	ui.Row(c.Key("foot")).AlignItems(ui.Center).Gap(4).Padding(12, 4, 0, 10).Children(func() {
-		// Settings: the interface's language (the sheet), lit while open.
-		open := a.layers.sheet
+		// Settings: the interface's language (the sheet), lit while open and until the sheet is back in it.
+		going, _ := a.landing(c, "sheet")
+		open := a.layers.sheet || going
 		set := a.iconBtn(c, "settings", iconOpt{icon: "settings", label: locales.Settings(), tip: locales.Settings(), small: true, beside: true, active: open, lit: open}).
 			KeyShortcuts(ui.Cmd, ui.KeyComma)
 		if set.Clicked() {
 			a.toggleSheet(set.Bounds())
 		}
 		ui.Box(c).Grow(1)
-		add := a.iconBtn(c, "add-subscription", iconOpt{icon: "add", label: locales.SidebarFollowBlog(), tip: locales.SidebarFollowBlog(), small: true, beside: true})
+		add := a.iconBtn(c, "add-subscription", iconOpt{icon: "add", label: locales.SidebarFollowBlog(), tip: locales.SidebarFollowBlog(), small: true, beside: true,
+			glow: a.landed(c, "dialog")})
 		if add.Clicked() {
 			a.openSubscribe(add.Bounds())
 		}
@@ -80,46 +105,106 @@ func (a *App) sideParts(c *ui.Context) {
 }
 
 // partingRow is the row of an author just let go, kept a beat (120 ms) so
-// their face can lift off it before it folds away.
+// their face can lift off it before it folds away; or, let go from its menu
+// (dots), while it turns into dots reeled into its face (letGoRow) and then,
+// closed up, while the notice offers 撤销, to come back in.
 type partingRow struct {
-	au    *author
-	index int
-	until time.Time
+	au           *author
+	index        int
+	start, until time.Time
+	dots         bool
+
+	h      float32       // the row's height as it set off
+	strips []nameStrip   // its name in strips, once laid out
+	name   ui.Rect       // where the name is
+	last   time.Duration // when the last dot is in the face's point
 }
 
 type sideRow struct {
-	au      *author
-	parting bool
+	au *author
+	p  *partingRow // the author was just let go
 }
 
 // sideRows are the authors' rows: the authors, and those just let go where
-// they were, for a beat; from the keys, or under less motion, they go at once.
+// they were, for a beat, or as long as 撤销 is offered when they turn into
+// dots; from the keys, or under less motion but for the dots' fade, they go
+// at once.
 func (a *App) sideRows(c *ui.Context) []sideRow {
 	rows := make([]sideRow, 0, len(a.authors)+len(a.parting))
 	for _, au := range a.authors {
 		rows = append(rows, sideRow{au: au})
 	}
 	now := c.Now()
+	var going []*partingRow
 	for id, p := range a.parting {
-		if p.until.IsZero() {
-			p.until = now.Add(120 * time.Millisecond)
+		if p.start.IsZero() {
+			p.start, p.dots, p.until = now, p.dots && !a.kbd, now.Add(120*time.Millisecond)
+			if p.dots {
+				p.until = now.Add(motion.UndoFor)
+			}
 		}
-		if a.kbd || a.still(c) || !now.Before(p.until) || a.writer(id) != nil {
+		if !p.dots && (a.kbd || a.still(c)) || !now.Before(p.until) || a.writer(id) != nil {
 			delete(a.parting, id)
 			delete(a.faceLeft, id)
 			continue
 		}
 		c.After(p.until.Sub(now))
-		at := min(p.index, len(rows))
-		rows = append(rows[:at], append([]sideRow{{au: p.au, parting: true}}, rows[at:]...)...)
+		going = append(going, p)
+	}
+	// Each was let go from the rows left after those let go before it: they
+	// go back in the other way round.
+	slices.SortFunc(going, func(x, y *partingRow) int { return y.start.Compare(x.start) })
+	for _, p := range going {
+		rows = slices.Insert(rows, min(p.index, len(rows)), sideRow{au: p.au, p: p})
 	}
 	return rows
 }
 
-// tabButton is a sidebar tab: its icon, and its label while current; the
-// current one's ground glides between the tabs (slideGround). It returns where
-// the frame before laid the tab out.
-func (a *App) tabButton(c *ui.Context, kind, label, icon string, on bool) ui.Rect {
+// tabCarry is the light that is one thing going from tab to tab (DESIGN.md
+// 选中的光是一份): the tab it left, the one it goes to, and p, how far it
+// is, which the ground, the two labels and the amber dots all go by;
+// grounded, whether the ground showed as it set off.
+type tabCarry struct {
+	from, to string
+	p        float32
+	grounded bool
+}
+
+// carry is the light's way to tab on Carry, set off as tab changes; at once
+// from the keys or under less motion. grounded says whether the ground shows.
+func (a *App) carry(c *ui.Context, bar ui.Element, tab string, grounded bool) tabCarry {
+	s := ui.Local(bar, "carry", func() tabCarry { return tabCarry{to: tab} })
+	if s.to != tab {
+		s.from, s.to, s.grounded = s.to, tab, grounded
+		bar.Jump("carry", 0)
+	}
+	if a.kbd || a.still(c) {
+		s.p = bar.Jump("carry", 1)
+	} else {
+		s.p = bar.AnimateTo("carry", 1, motion.Carry)
+	}
+	if s.p >= 0.999 {
+		s.from = ""
+	}
+	return *s
+}
+
+// tabIcon is the icon of tab kind.
+func tabIcon(kind string) string {
+	for _, t := range tabs {
+		if t.kind == kind {
+			return t.icon
+		}
+	}
+	return ""
+}
+
+// tabButton is a sidebar tab: its icon, and its label while current. The
+// label opens and comes into focus out of 1.6px of blur, inside its own
+// tab, as the light comes (cr), and closes as it leaves; the icons' amber
+// stays icon-fill while the light is on its way. It returns where the frame
+// before laid the tab and its icon out.
+func (a *App) tabButton(c *ui.Context, kind, label, icon string, on bool, cr tabCarry) (tab, at ui.Rect) {
 	b := ui.ButtonBase(c.Key("tab-"+kind)).Label(label).Height(32).Padding(0, 8).Radius(6).AlignItems(ui.Center).FocusRing(false)
 	if on {
 		b.Current(ui.CurrentPage)
@@ -128,65 +213,43 @@ func (a *App) tabButton(c *ui.Context, kind, label, icon string, on bool) ui.Rec
 		a.tab(c, kind)
 	}
 	hover := b.Hovered() && !on
-	color, bg := theme.Text2, ui.Transparent
+	color, bg := theme.Icon, ui.Transparent
 	switch {
 	case on:
 		color = theme.Text
 	case hover:
 		color, bg = theme.Text, theme.Hover
 	}
-	b.Background(b.AnimateColor("bg", bg, a.ease(motion.TabGround))).TextColor(b.AnimateColor("fg", color, a.ease(motion.Hover)))
+	fg := b.AnimateColor("fg", color, a.ease(motion.Hover))
+	b.Background(b.AnimateColor("bg", bg, a.ease(motion.TabGround))).TextColor(fg)
 	if b.FocusVisible() {
 		b.FocusRing(true).FocusRingOffset(-2)
 	}
-	a.press(b, motion.SquashedTab)
 	if !on {
 		a.tip(c, b, label, true)
 	}
-	// Explore becoming current: the compass swings out a little and settles
-	// back upright, damped, not from the keys, nor under less motion.
-	var turn float32
-	if kind == "explore" {
-		if on && !a.kbd && !a.still(c) {
-			turn = b.Keyframes("swing", []ui.Keyframe{{Value: 0}, {At: motion.SwingRise, Value: 12, Ease: motion.Ease},
-				{At: motion.SwingIn, Value: 0, Ease: motion.Swing}}, ui.KeyframeOptions{Run: uint64(a.exploreRuns(on))})
-		}
+	open := float32(0)
+	switch {
+	case cr.from != "" && kind == cr.to:
+		open = cr.p
+	case cr.from != "" && kind == cr.from:
+		open = 1 - cr.p
+	case on:
+		open = 1
 	}
 	b.Children(func() {
-		ic := a.pressIcon(c, icon, 16, on, b.Pressed())
-		if turn != 0 {
-			ic.TransformOrigin(0.5, 0.5).Rotate(turn)
-		}
-		// The label opens as the tab becomes current: 220 ms, its words
-		// fading in over 160.
-		open := float32(0)
-		if on {
-			open = 1
-		}
-		var k float32
-		if a.kbd {
-			k = b.Jump("open", open)
-		} else {
-			k = b.AnimateTo("open", open, ui.Animation{Duration: motion.TabOpen, Ease: motion.Ease})
-		}
-		fade := b.AnimateTo("labelFade", open, a.ease(motion.TabWords))
-		if k > 0.001 {
+		at = a.dotIcon(c, b, icon, 16, iconLook{lit: on && cr.from == "", jump: !a.still(c), ink: fg}).LayoutBounds()
+		if open > 0.001 {
 			w := textWidth(label, theme.Body)
-			ui.Box(c).Width((w + 7) * k).Height(19.5).ClipX().Children(func() {
-				ui.Text(c, label).Absolute().Top(0).Left(7 * k).NoWrap().Opacity(fade)
+			ui.Box(c).Width((w + 7) * open).Height(19.5).ClipX().Children(func() {
+				t := ui.Text(c, label).Absolute().Top(0).Left(7).NoWrap().Opacity(open)
+				if bl := 1.6 * (1 - open); bl > 0.05 {
+					t.Blur(bl)
+				}
 			})
 		}
 	})
-	return b.LayoutBounds()
-}
-
-// exploreRuns counts the times Explore became current, to replay its swing.
-func (a *App) exploreRuns(on bool) int {
-	if on && !a.refresh.exploreWas {
-		a.refresh.exploreRun++
-	}
-	a.refresh.exploreWas = on
-	return a.refresh.exploreRun
+	return b.LayoutBounds(), at
 }
 
 // textWidth is how wide s is in the system face at size.
@@ -204,26 +267,38 @@ func textWidthIn(s, family string, size float32) float32 {
 
 // authorRow is an author in the sidebar (AuthorRow): their face and name,
 // brighter the more recently they wrote; ··· and a right click open the
-// subscription menu.
-func (a *App) authorRow(c *ui.Context, au *author, on, parting bool) ui.Rect {
+// subscription menu. It returns its box and whether the pointer is on it,
+// for the ground that glides between the rows (pointerGround). p is set
+// while the author is being let go.
+func (a *App) authorRow(c *ui.Context, au *author, on bool, p *partingRow) (ui.Rect, bool) {
 	id := au.src.ID
 	row := ui.Row(c.Key("author:" + id)).Radius(6).AlignItems(ui.Start)
 	// A row arriving opens its own height and comes into view in 250 ms; one
-	// leaving folds away in 150, the rows below closing up after it.
-	row.Transition(a.tr(c, ui.ElementTransition{Duration: motion.State, Ease: motion.Ease, ExitDuration: 150 * time.Millisecond, ExitEase: motion.Ease,
-		Width: true, Enter: &ui.Motion{Collapse: true}, Exit: &ui.Motion{Collapse: true}}))
-	if parting {
+	// leaving folds away in 150, the rows below closing up after it. One let
+	// go from its menu has turned into dots and closed up by then: it goes
+	// at once.
+	tr := ui.ElementTransition{Duration: motion.State, Ease: motion.Ease, ExitDuration: 150 * time.Millisecond, ExitEase: motion.Ease,
+		Width: true, Enter: &ui.Motion{Collapse: true}, Exit: &ui.Motion{Collapse: true}}
+	t, dots, gone := time.Duration(0), false, false
+	if p != nil && p.dots {
+		tr.Exit = nil
+		t, dots, gone = a.letGoRow(c, row, p)
+	} else {
+		a.comeBack(c, row)
+	}
+	row.Transition(a.tr(c, tr))
+	if p != nil {
 		row.IgnoreInput(true)
 	}
-	hover := row.Hovered()
-	if !on && hover {
-		row.Background(theme.Hover)
+	if gone {
+		return row.LayoutBounds(), false
 	}
+	hover := row.Hovered()
 	if row.RightClicked() && a.layers.renaming != id {
 		a.layers.menu = id
 	}
 	row.Children(func() {
-		if a.layers.renaming == id {
+		if a.layers.renaming == id && !dots {
 			a.renameField(c, au)
 			return
 		}
@@ -263,7 +338,7 @@ func (a *App) authorRow(c *ui.Context, au *author, on, parting bool) ui.Rect {
 			// leaves for another (the face goes with it). It flies only as the
 			// face comes back.
 			leaving := a.left != nil && a.left.page == (page{"author", id}) && !a.chipFly[id]
-			if a.current() != (page{"author", id}) && !leaving {
+			if a.current() != (page{"author", id}) && !leaving && !dots {
 				t := ui.ElementTransition{Match: faceMatch{id}}
 				if a.chipFly[id] {
 					t = motion.Back.Crossing().Shared(faceMatch{id})
@@ -275,8 +350,13 @@ func (a *App) authorRow(c *ui.Context, au *author, on, parting bool) ui.Rect {
 			if lit {
 				color = theme.Text
 			}
-			name := sideName(c, au.src.DisplayName).Grow(1).Shrink(1).MinWidth(0).TextColor(b.AnimateColor("fg", color, a.ease(motion.NameLight)))
-			a.end(name, page{}, "name:"+id)
+			fg := b.AnimateColor("fg", color, a.ease(motion.NameLight))
+			name := sideName(c, au.src.DisplayName).Grow(1).Shrink(1).MinWidth(0).TextColor(fg)
+			if dots {
+				a.dissolve(c, p, t, b, chip, name, au.src.DisplayName, fg)
+			} else {
+				a.end(name, page{}, "name:"+id)
+			}
 		})
 		// A failed feed: the dimmed row and the refresh mark, beside where ··· appears.
 		if failure != "" || pending && a.refresh.asked[id] {
@@ -288,6 +368,11 @@ func (a *App) authorRow(c *ui.Context, au *author, on, parting bool) ui.Rect {
 				lit: pending, turn: a.refresh.angle(c, a.still(c))}).Margin(3, 28, 0, 0).Description(failure)
 			if pending {
 				retry.Label(locales.SidebarRefreshingWriter(au.src.DisplayName))
+			}
+			if dots && p.strips != nil {
+				// It fades as the name's strips would there.
+				i := (retry.LayoutBounds().X - p.name.X) / stripWidth
+				retry.Opacity(1 - p.drawn(t, int(max(0, i))))
 			}
 			if retry.Clicked() && !pending {
 				a.refresh.ask(id)
@@ -303,7 +388,262 @@ func (a *App) authorRow(c *ui.Context, au *author, on, parting bool) ui.Rect {
 		more.Opacity(more.AnimateTo("show", map[bool]float32{true: 1, false: 0}[show], a.ease(motion.Reveal))).
 			Background(mb).TextColor(mc)
 	})
-	return row.LayoutBounds()
+	return row.LayoutBounds(), hover && !on
+}
+
+const (
+	rowGap     = 2 // between the authors' rows
+	stripWidth = 3 // a strip of a name turning into dots
+)
+
+// rowBack is how a row let go showed as it went, for it to come back from
+// there (comeBack): its opacity, how open it was, and its full height.
+type rowBack struct {
+	going, coming bool
+	o, open, h    float32
+}
+
+// letGoRow carries on the row of an author let go from its menu (DESIGN.md
+// 取消订阅), and returns how long since it set off and whether it turns into
+// dots (dissolve), after which the rows below close up over it; or whether
+// it is gone, closed up, an empty row kept where it was for 撤销 to bring
+// it back in (comeBack). Under less motion it fades where it is instead,
+// and the rows below close up at once.
+func (a *App) letGoRow(c *ui.Context, row ui.Element, p *partingRow) (t time.Duration, dots, gone bool) {
+	d := motion.LetGo
+	t = c.Now().Sub(p.start)
+	if p.h == 0 {
+		p.h = row.LayoutBounds().H
+	}
+	back := ui.Local(row, "back", func() rowBack { return rowBack{} })
+	*back = rowBack{going: true, open: 1, h: p.h}
+	row.AccessHidden(true)
+	still := a.still(c)
+	if still && t >= d.Fade || !still && p.strips != nil && t >= p.last+d.Wait+d.Closing() {
+		back.o, back.open = 0, 0
+		row.Height(0).Margin(0, 0, -rowGap, 0)
+		return t, false, true
+	}
+	c.AnimationFrame()
+	if still {
+		back.o = 1 - motion.Ease(through(t, d.Fade))
+		row.Opacity(back.o)
+		return t, false, false
+	}
+	if cl := d.Closed(t - p.last - d.Wait); p.strips != nil && cl > 0 {
+		back.open = 1 - cl
+		row.Height(p.h*back.open).Margin(0, 0, -rowGap*cl, 0).ClipY()
+	}
+	return t, true, false
+}
+
+// comeBack brings back a row let go and followed again before it was gone
+// (撤销): it fades in where it is, and opens back to its height if it had
+// begun to close, the rows below making room.
+func (a *App) comeBack(c *ui.Context, row ui.Element) {
+	back := ui.Local(row, "back", func() rowBack { return rowBack{} })
+	if back.going {
+		back.going, back.coming = false, true
+		row.Jump("in", back.o)
+		row.Jump("open", back.open)
+	}
+	if !back.coming {
+		return
+	}
+	in, open := row.AnimateTo("in", 1, a.ease(motion.State)), float32(1)
+	if a.kbd || a.still(c) {
+		row.Jump("open", 1)
+	} else {
+		open = row.AnimateTo("open", 1, ui.Animation{Duration: motion.State, Ease: motion.Ease})
+	}
+	row.Opacity(in)
+	if open < 1 {
+		row.Height(back.h*open).Margin(0, 0, -rowGap*(1-open), 0).ClipY()
+	}
+	back.coming = in < 1 || open < 1
+}
+
+type stripKey int
+
+// dissolve turns an author's name into dots reeled into their face, t after
+// they were let go (DESIGN.md 取消订阅). The face draws into its point. From
+// its side, each strip of the name draws in toward its ink, a little soft,
+// and fades as a dot grows there, in the name's ink; the dot is then reeled
+// into the point, smaller and fainter on the way. Once the last is in, the
+// point goes out. b, the row's button, its face and its name place it, as
+// the frame before laid them out.
+func (a *App) dissolve(c *ui.Context, p *partingRow, t time.Duration, b, face, name ui.Element, text string, ink ui.Color) {
+	d := motion.LetGo
+	bb, fb, nb := b.LayoutBounds(), face.LayoutBounds(), name.LayoutBounds()
+	if p.strips == nil {
+		// A name not laid out the frame before (it was being renamed) has
+		// no strips: only the face goes.
+		p.strips = []nameStrip{}
+		if nb.W > 0 {
+			p.strips = append(p.strips, nameStrips(text, nb.W, nb.H)...)
+		}
+		last := 0
+		for i, s := range p.strips {
+			if s.ink > 0 {
+				last = i
+			}
+		}
+		p.last = time.Duration(last)*d.Stagger + d.Grow + d.Reel
+	}
+	p.name = nb
+	nx, ny := nb.X-bb.X, nb.Y-bb.Y
+	fx, fy, fr := fb.X-bb.X+fb.W/2, fb.Y-bb.Y+fb.H/2, fb.W/2
+	// The face shrinks into its point and lightens to its grey; the point
+	// holds till the last dot is in, and goes out without swelling.
+	point := inkDot{x: fx, y: fy}
+	if sa := motion.Ease(through(t, d.Face)); sa < 1 {
+		s := 1 - 0.8*sa
+		face.TransformOrigin(0.5, 0.5).Scale(s, s)
+		point.r, point.c, point.a = fr*s, theme.Mag2, sa*sa
+	} else {
+		face.Opacity(0)
+		out := motion.Ease(through(t-p.last, d.Out))
+		point.r, point.c, point.a = 0.2*fr+(0.2-0.2*fr)*out, theme.Mag2, 1-out
+	}
+	// What the wave has not reached is still the name, in one piece.
+	cut := float32(-4)
+	for i := range p.strips {
+		if t < time.Duration(i)*d.Stagger {
+			break
+		}
+		cut = float32(i+1) * stripWidth
+	}
+	name.ClipInset(-4, -4, -4, cut, 0)
+	var dots []inkDot
+	for i, s := range p.strips {
+		e := p.drawn(t, i)
+		if e <= 0 {
+			break
+		}
+		x := float32(i) * stripWidth
+		if e < 1 && s.ink > 0 {
+			sc := 1 - 0.85*e
+			sideName(c.Key(stripKey(i)), text).Absolute().Left(nx).Top(ny).Width(nb.W).Height(nb.H).TextColor(ink).
+				ClipInset(-4, nb.W-x-stripWidth, -4, x, 0).TransformOrigin(s.cx/nb.W, s.cy/nb.H).Scale(sc, sc).
+				Opacity(1 - unit((e-0.55)/0.45)).Blur(e)
+		}
+		q := motion.Ease(through(t-time.Duration(i)*d.Stagger-d.Grow, d.Reel))
+		if s.dot && q < 1 {
+			dots = append(dots, inkDot{x: nx + s.cx + (fx-nx-s.cx)*q, y: ny + s.cy + (fy-ny-s.cy)*q, r: 0.85 * e * (1 - 0.3*q), a: 1 - 0.6*q, c: ink})
+		}
+	}
+	dots = append(dots, point)
+	ui.Box(c.Key("dots")).Absolute().Left(0).Top(0).Right(0).Bottom(0).IgnoreInput(true).Draw(func(pt *ui.Painter, r ui.Rect) {
+		for _, d := range dots {
+			if d.r > 0 && d.a > 0 {
+				pt.Fill(ui.Rect{X: r.X + d.x - d.r, Y: r.Y + d.y - d.r, W: 2 * d.r, H: 2 * d.r}, d.c.Alpha(d.a), d.r)
+			}
+		}
+	})
+}
+
+// drawn is how far strip i of the name has drawn in toward its ink, t after
+// the row set off: as far as its dot has grown.
+func (p *partingRow) drawn(t time.Duration, i int) float32 {
+	d := motion.LetGo
+	return motion.Ease(through(t-time.Duration(i)*d.Stagger, d.Grow))
+}
+
+// share is how much of d has gone by t, from 0 to 1.
+func through(t, d time.Duration) float32 { return unit(float32(t) / float32(d)) }
+
+// nameStrip is a strip of a name turning into dots: where its ink centres,
+// in the name's box, how much it holds, and whether a dot grows there.
+type nameStrip struct {
+	cx, cy, ink float32
+	dot         bool
+}
+
+// nameStrips cuts s, as sideName sets it in a box w×h, into strips from its
+// left, and finds the ink of each from the glyphs: their advances, and how
+// high their letters reach (glyphInk). As in the study, a strip with less
+// than 15% of the median strip's ink grows no dot.
+func nameStrips(s string, w, h float32) []nameStrip {
+	f := ui.Font{Family: theme.Sans, Size: theme.Body}
+	type span struct {
+		x, w float32
+		r    rune
+	}
+	rs, line := []rune(s), []span{}
+	for _, g := range ui.Shape(s, f) {
+		if g.Cluster < len(rs) {
+			line = append(line, span{g.X, g.Advance, rs[g.Cluster]})
+		}
+	}
+	if n := len(line); n > 0 && line[n-1].x+line[n-1].w > w {
+		// Cut short with an ellipsis, as it shows.
+		ew, k, end := textWidth("…", theme.Body), 0, float32(0)
+		for k < n && line[k].x+line[k].w <= w-ew {
+			end, k = line[k].x+line[k].w, k+1
+		}
+		line = append(line[:k], span{end, ew, '…'})
+	}
+	if len(line) == 0 {
+		return nil
+	}
+	m := f.Metrics()
+	base := (h-m.Ascent-m.Descent)/2 + m.Ascent
+	end := line[len(line)-1].x + line[len(line)-1].w
+	out := make([]nameStrip, int(math.Ceil(float64(end/stripWidth))))
+	masses := make([]float32, len(out))
+	for i := range out {
+		x0 := float32(i) * stripWidth
+		x1 := x0 + stripWidth
+		var ink, mx, my float32
+		for _, g := range line {
+			top, bottom := glyphInk(g.r)
+			l, r := max(x0, g.x+0.1*g.w), min(x1, g.x+0.9*g.w)
+			if top == bottom || r <= l {
+				continue
+			}
+			k := (r - l) * (top - bottom)
+			ink, mx, my = ink+k, mx+k*(l+r)/2, my+k*(base-f.Size*(top+bottom)/2)
+		}
+		if ink > 0 {
+			out[i] = nameStrip{cx: mx / ink, cy: my / ink, ink: ink}
+		}
+		masses[i] = ink
+	}
+	slices.Sort(masses)
+	median := masses[len(masses)/2]
+	for i := range out {
+		out[i].dot = out[i].ink > 0.15*median
+	}
+	return out
+}
+
+// glyphInk is how far a letter's ink reaches above its baseline and down to
+// (below it, negative), in ems: near enough to find where a strip of it
+// centres. A space has none.
+func glyphInk(r rune) (top, bottom float32) {
+	switch {
+	case unicode.IsSpace(r):
+		return 0, 0
+	case r >= 0x2E80: // CJK and the like fill the square
+		return 0.84, -0.08
+	case strings.ContainsRune("gpqy", r):
+		return 0.53, -0.21
+	case r == 'j':
+		return 0.72, -0.21
+	case strings.ContainsRune("bdfhiklt", r), unicode.IsUpper(r), unicode.IsDigit(r):
+		return 0.72, 0
+	case unicode.IsLower(r):
+		return 0.53, 0
+	case strings.ContainsRune(".,…", r):
+		return 0.12, -0.06
+	case strings.ContainsRune("-–—~", r):
+		return 0.34, 0.24
+	case strings.ContainsRune("()[]{}/\\|", r):
+		return 0.78, -0.2
+	case strings.ContainsRune("'\"‘’“”`", r):
+		return 0.72, 0.5
+	}
+	return 0.6, 0
 }
 
 // chip is an author's face in the sidebar: their site's icon, toned for the

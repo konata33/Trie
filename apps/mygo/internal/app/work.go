@@ -276,7 +276,7 @@ func (a *App) workHero(c *ui.Context, rp *readerPage, art *library.Article, afte
 				}
 				b.TextColor(b.AnimateColor("fg", color, a.ease(motion.LinkHover))).Children(func() {
 					ui.Text(c, host).Underline().UnderlineOffset(3).DecorationColor(b.AnimateColor("line", line, a.ease(motion.LinkHover)))
-					a.pressIcon(c, "openArrow", 16, false, b.Pressed())
+					a.icon(c, "openArrow", 16, false)
 				})
 				a.tip(c, b, locales.WorkOpenInBrowserTip(), false)
 			}
@@ -430,23 +430,19 @@ func (a *App) workStrip(c *ui.Context, rp *readerPage, s, first, n int, margin f
 				})
 			}
 			// The amber line under the picture shown, on the window's ground, where any picture's colours leave it clear: one
-			// line that slides along the strip to the picture picked, in the strip's own terms, so that it scrolls with it.
-			// Its two ends go on the two springs (弹一下): it draws out on the way, the end behind landing past and back.
+			// line, as wide as a shot, that slides along the strip to the picture picked on Carry, in the strip's own terms,
+			// so that it scrolls with it (DESIGN.md 选中的光是一份).
 			if s >= first {
 				line := ui.Box(c.Key("mark")).Absolute().Top(tw*10/16 + 4).Height(2).Radius(1).Background(theme.Accent).
 					IgnoreInput(true).AccessHidden(true)
 				x := float32(s-first) * (tw + 8)
-				var l, r float32
+				var l float32
 				if a.kbd || a.still(c) {
-					l, r = line.Jump("l", x), line.Jump("r", x+tw)
+					l = line.Jump("l", x)
 				} else {
-					if rp.markAt != s {
-						rp.markBack, rp.markAt = s < rp.markAt, s
-					}
-					start, end := motion.Ends(rp.markBack)
-					l, r = line.AnimateTo("l", x, start), line.AnimateTo("r", x+tw, end)
+					l = line.AnimateTo("l", x, motion.Carry)
 				}
-				line.Left(l).Width(max(0, r-l))
+				line.Left(l).Width(tw)
 			}
 		})
 	})
@@ -552,7 +548,7 @@ func (a *App) workRecording(c *ui.Context, rp *readerPage, hero ui.Element, rati
 		}
 		ui.Box(c).Size(48, 48).Radius(24).Center().TextColor(theme.Text).Background(theme.Scrim).InsetShadow(0, 0, 0, 1, theme.Line).
 			Shadow(0, 0, 0, 1, theme.ShadowEdge).Shadow(0, 12, 32, 0, theme.ShadowFloat).Opacity(shown).TransformOrigin(0.5, 0.5).
-			Scale(size, size).Children(func() { a.pressIcon(c, "play", 20, false, b.Pressed()) })
+			Scale(size, size).Children(func() { a.icon(c, "play", 20, false) })
 	})
 	// The trail, on the dark just under the picture: faint where the loop began.
 	var progress float32

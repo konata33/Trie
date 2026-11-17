@@ -72,7 +72,7 @@ func (a *App) authorPage(c *ui.Context, id string, live bool) {
 	items := a.shown(au, l.query)
 	col := a.column()
 	_, vh := c.Size()
-	headH := sceneHeight(sceneHead, vh) + profileFoot
+	headH := headHeight(vh) + profileFoot
 	sc := ui.Scroll(c.Key("scroll")).TrackScroll(&l.scroll).Grow(1).FillWidth().Scrollbars(false)
 	view := sc.LayoutBounds()
 	sc.Children(func() {
@@ -143,25 +143,33 @@ func (a *App) band(c *ui.Context, left, right func()) {
 // backLink is "‹ 首页": the way back; its glyph sits 8 out so the word keeps
 // the page's left edge.
 func (a *App) backLink(c *ui.Context, label string) {
-	b := ui.ButtonBase(c.Key("back")).Label(label).Height(28).Margin(0, 0, 0, -8).Padding(0, 10, 0, 6).Gap(4).Radius(6).AlignItems(ui.Center).
-		MaxWidth(220).FocusRing(false)
-	if b.Clicked() {
+	if a.backButton(c, label) {
 		a.back(c)
 	}
+}
+
+// backButton is backLink's look, reporting whether it was chosen: the way
+// back out of something other than a page.
+func (a *App) backButton(c *ui.Context, label string) bool {
+	b := ui.ButtonBase(c.Key("back")).Label(label).Height(28).Margin(0, 0, 0, -8).Padding(0, 10, 0, 6).Gap(4).Radius(6).AlignItems(ui.Center).
+		MaxWidth(220).FocusRing(false)
 	color, bg := theme.Text2, ui.Transparent
 	if b.Hovered() {
 		color, bg = theme.Text, theme.Hover
+	}
+	if a.pressing(b) {
+		bg = theme.Selected // pressed, a step up
 	}
 	b.Background(b.AnimateColor("bg", bg, a.ease(motion.Hover))).TextColor(b.AnimateColor("fg", color, a.ease(motion.Hover)))
 	if b.FocusVisible() {
 		b.FocusRing(true)
 	}
-	a.press(b, motion.Squashed)
 	a.control(b)
 	b.Children(func() {
 		a.icon(c, "back", 16, false)
 		ui.Text(c, label).FontSize(theme.Body).LineHeight(16.0 / 13).SingleLine().Ellipsis("…").Shrink(1)
 	})
+	return b.Clicked()
 }
 
 // searchField is the band's search, folded to its icon until it is wanted
@@ -194,7 +202,11 @@ func (a *App) searchField(c *ui.Context, query *string, search *bool, label, pla
 			if b.Clicked() {
 				*search = true
 			}
-			b.Children(func() { a.pressIcon(c, "search", 16, false, b.Pressed()) })
+			ink := theme.Muted
+			if box.Hovered() {
+				ink = theme.Text2
+			}
+			b.Children(func() { a.dotIcon(c, b, "search", 16, iconLook{ink: ink}) })
 			a.tip(c, b, locales.CommonSearch()+" · ⌘F", false)
 			return
 		}
@@ -224,7 +236,7 @@ func (a *App) searchField(c *ui.Context, query *string, search *bool, label, pla
 func (a *App) authorHead(c *ui.Context, au *author, p page, live bool) {
 	id := au.src.ID
 	_, vh := c.Size()
-	h, gh, w := sceneHeight(sceneHead, vh), groundHeight(vh), a.area.W
+	h, gh, w := headHeight(vh), groundHeight(vh), a.area.W
 	col := min(a.column(), w-80)
 	left := (w - col) / 2
 	g := &favGroup{src: au.src, list: au.arts}
@@ -340,7 +352,7 @@ func (a *App) siteLink(c *ui.Context, src *library.Source) {
 		if site.Hovered() {
 			t.Underline().UnderlineOffset(3)
 		}
-		a.pressIcon(c, "openArrow", 12, false, site.Pressed()).TextColor(site.AnimateColor("mark", mark, a.ease(motion.Hover)))
+		a.icon(c, "openArrow", 12, false).TextColor(site.AnimateColor("mark", mark, a.ease(motion.Hover)))
 	})
 	a.tip(c, site, locales.CommonOpenInBrowser(), false)
 }
@@ -665,8 +677,7 @@ func (a *App) favButton(c *ui.Context, art *library.Article, size, orbit float32
 	if b.FocusVisible() {
 		b.FocusRing(true)
 	}
-	a.press(b, motion.SquashedDot)
-	b.Children(func() { a.orbit(c, "orbit", orbit, art.Favorite) })
+	b.Children(func() { a.orbitIn(c, "orbit", orbit, art.Favorite, b) })
 	a.tip(c, b, label+" · S", false)
 	return b
 }
@@ -746,75 +757,36 @@ func moonPath(cx, cy, r, lit float32) *ui.Path {
 	return p.Close()
 }
 
-// orbit is the favourite: a centre and an arc not closed;
-// kept, the arc closes, the satellite comes round to the top and it all
-// lights amber (460 ms; its glow over 200).
+// orbit is the favourite in the favorites icon's dots (DESIGN.md 收藏用轨道):
+// a centre and an arc not closed; kept, the arc closes and it all turns
+// amber, and the satellite comes round to the top 60 ms behind the arc's
+// end, neither going past (460 ms; the colour over 200). Under less
+// motion it simply changes, its colour fading.
 func (a *App) orbit(c *ui.Context, key string, size float32, kept bool) ui.Element {
+	return a.orbitIn(c, key, size, kept, ui.Element{})
+}
+
+// orbitIn is orbit in button b, whose pointer and presses light its dots.
+func (a *App) orbitIn(c *ui.Context, key string, size float32, kept bool, b ui.Element) ui.Element {
 	box := ui.Box(c.Key(key)).Size(size, size).Shrink(0).AccessHidden(true)
 	target := float32(0)
 	if kept {
 		target = 1
 	}
-	var k, glow, round, weight float32
-	if a.kbd || a.still(c) && false {
-		k, glow = box.Jump("k", target), box.Jump("glow", target)
+	var k, round float32
+	if a.kbd || a.still(c) {
+		k, round = box.Jump("k", target), box.Jump("round", target)
 	} else {
 		k = box.AnimateTo("k", target, ui.Animation{Duration: motion.Orbit, Ease: motion.Ease})
-		glow = box.AnimateTo("glow", target, a.ease(motion.Glow))
-	}
-	// The satellite follows the arc's end a beat behind and swings past the
-	// top; closing, the ring grows heavier than it rests and settles (弹一下).
-	if a.kbd || a.still(c) {
-		k = box.Jump("k", target) // the satellite does not travel under less motion
-		round, weight = box.Jump("round", target), box.Jump("weight", target)
-	} else {
-		round, weight = box.AnimateTo("round", target, motion.Satellite), box.AnimateTo("weight", target, motion.RiseIn)
+		round = box.AnimateTo("round", target, motion.Satellite)
 	}
 	color := theme.Muted
 	if kept {
 		color = theme.Star
 	}
-	ink := box.AnimateColor("ink", color, a.ease(motion.Glow))
-	return box.Draw(func(pt *ui.Painter, r ui.Rect) {
-		s := size / 20 // the drawing's units: -10 to 10
-		cx, cy := r.X+r.W/2, r.Y+r.H/2
-		if glow > 0.001 {
-			var g ui.Path
-			g.Circle(cx, cy, 8*s)
-			pt.FillPath(&g, theme.Star.Alpha(0.16*glow))
-		}
-		arc := 0.7 + 0.3*k
-		pt.StrokePath(arcPath(cx, cy, 6.5*s, -90, 360*arc), 1.15*s*(1+motion.Heavier*max(0, weight-1)), ink)
-		var dot ui.Path
-		dot.Circle(cx, cy, 1.7*s)
-		pt.FillPath(&dot, ink)
-		// The satellite rides the arc's end, from 108° short of the top.
-		if sat := min(1, k*4); sat > 0.001 || kept {
-			ang := (-90 - 108*(1-round)) * math.Pi / 180
-			var sp ui.Path
-			sp.Circle(cx+6.5*s*float32(math.Cos(float64(ang))), cy+6.5*s*float32(math.Sin(float64(ang))), 1.5*s)
-			pt.FillPath(&sp, ink.Alpha(sat))
-		}
-	})
-}
-
-// arcPath is an arc of a circle from start, in degrees clockwise from the
-// right, sweeping clockwise, in cubic pieces of at most 90°.
-func arcPath(cx, cy, r, start, sweep float32) *ui.Path {
-	var p ui.Path
-	a0 := float64(start) * math.Pi / 180
-	p.MoveTo(cx+r*float32(math.Cos(a0)), cy+r*float32(math.Sin(a0)))
-	left := float64(sweep) * math.Pi / 180
-	for left > 1e-4 {
-		step := math.Min(left, math.Pi/2)
-		a1 := a0 + step
-		h := 4.0 / 3 * math.Tan(step/4)
-		x0, y0 := math.Cos(a0), math.Sin(a0)
-		x1, y1 := math.Cos(a1), math.Sin(a1)
-		p.CubeTo(cx+r*float32(x0-h*y0), cy+r*float32(y0+h*x0), cx+r*float32(x1+h*y1), cy+r*float32(y1-h*x1), cx+r*float32(x1), cy+r*float32(y1))
-		a0, left = a1, left-step
-	}
-	return &p
+	dots := orbitDots(size, k, round, kept, box.AnimateColor("ink", color, a.ease(motion.Light)))
+	light, _ := a.lightOf(c, b, box)
+	return box.Draw(func(p *ui.Painter, r ui.Rect) { paintDots(p, r, dots, light, 0) })
 }
 
 // emptyState is ui/states EmptyState centred on the page: the pictogram, a

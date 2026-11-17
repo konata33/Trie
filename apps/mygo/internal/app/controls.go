@@ -14,39 +14,13 @@ import (
 // Controls: one look per kind of button, every state
 // drawn. Keyboard focus shows at once, in the focus colour.
 
-// press flattens what the pointer presses into sq, from the press on, and
-// lets it go with one rebound (DESIGN.md 弹一下), and returns how far in it
-// is: 1 pressed, past 0 on the rebound. Under less motion the spring gives
-// way to the shape at once.
-func (a *App) press(e ui.Element, sq motion.Squash) float32 {
-	target, anim := float32(0), motion.Rebound
-	if e.Pressed() && !a.kbd {
-		target, anim = 1, motion.PressIn
-	}
-	var k float32
-	if a.Reduce {
-		k = e.Jump("squash", target)
-	} else {
-		k = e.AnimateTo("squash", target, anim)
-	}
-	if k != 0 {
-		e.TransformOrigin(0.5, 1).Scale(1+(sq.X-1)*k, 1+(sq.Y-1)*k)
-	}
-	return k
-}
-
-// pressRound is press for a round button of diameter size: pressed, it
-// also squares up, its corners going from round to 10 and back with the
-// press (弹一下).
-func (a *App) pressRound(e ui.Element, size float32) {
-	if k := a.press(e, motion.SquashedDot); k > 0 {
-		r := size / 2
-		e.Radius(r - (r-motion.SquaredUp)*min(k, 1))
-	}
-}
+// pressing reports whether the pointer presses e, the keys aside: a button
+// goes up a step while it does, nothing changing its shape (DESIGN.md 按下);
+// an icon button's press rings out of its icon (dotIcon).
+func (a *App) pressing(e ui.Element) bool { return e.Pressed() && !a.kbd }
 
 // give shrinks a card or a passage the pointer presses a little, from the
-// press on (DESIGN.md 按下就有反应): a surface this large is not squashed.
+// press on (DESIGN.md 按下就有反应).
 func (a *App) give(e ui.Element, scale float32) {
 	p := ui.Pose{}
 	if e.Pressed() && !a.kbd {
@@ -55,14 +29,13 @@ func (a *App) give(e ui.Element, scale float32) {
 	e.AnimatePose(p, ui.Animation{Duration: motion.Press, Ease: motion.Ease})
 }
 
-// slideGround builds list's selected ground in parent, under the item id at to
-// (both as the frame before laid them out, in window coordinates): one
-// shape sliding between the items (DESIGN.md 弹一下). Its two ends go on
-// two springs, the end ahead on Lead and the end behind on Trail, so that
-// it draws out the farther it goes and the end behind lands a little past
-// and comes back. vertical says which way the list runs. At once from the
-// keys, under less motion, and where it first shows (unslide).
-func (a *App) slideGround(c *ui.Context, parent ui.Element, list any, id string, to ui.Rect, vertical bool) {
+// slideGround builds list's selected ground in parent, under the item at
+// to (both as the frame before laid them out, in window coordinates): one
+// piece sliding between the items on Carry, its length going from the one
+// item's to the other's on the same value (DESIGN.md 选中的光是一份).
+// vertical says which way the list runs. At once from the keys, under less
+// motion, and where it first shows (unslide).
+func (a *App) slideGround(c *ui.Context, parent ui.Element, list any, to ui.Rect, vertical bool) {
 	box := parent.LayoutBounds()
 	if to.W <= 0 || box.W <= 0 {
 		return // not laid out yet
@@ -75,23 +48,14 @@ func (a *App) slideGround(c *ui.Context, parent ui.Element, list any, id string,
 	if !vertical {
 		lo, hi = r.X, r.X+r.W
 	}
-	s := a.slides[list]
-	first := s == nil
-	if first {
-		s = &slide{id: id}
-		a.slides[list] = s
-	}
-	if s.id != id {
-		s.id, s.back = id, lo < s.lo
-	}
-	s.lo = lo
+	_, shown := a.slides[list]
+	a.slides[list] = &slide{}
 	g := ui.Box(c.Key(list)).Absolute().ZIndex(-1).Radius(6).Background(theme.Selected).IgnoreInput(true)
 	var a0, a1 float32
-	if first || a.kbd || a.still(c) {
+	if !shown || a.kbd || a.still(c) {
 		a0, a1 = g.Jump("lo", lo), g.Jump("hi", hi)
 	} else {
-		start, end := motion.Ends(s.back)
-		a0, a1 = g.AnimateTo("lo", lo, start), g.AnimateTo("hi", hi, end)
+		a0, a1 = g.AnimateTo("lo", lo, motion.Carry), g.AnimateTo("hi", hi, motion.Carry)
 	}
 	if vertical {
 		g.Left(r.X).Width(r.W).Top(a0).Height(max(0, a1-a0))
@@ -104,13 +68,8 @@ func (a *App) slideGround(c *ui.Context, parent ui.Element, list any, id string,
 // shows where it is at once.
 func (a *App) unslide(list any) { delete(a.slides, list) }
 
-// slide is a list's selected ground: the item it is under, where that
-// starts along the list, and whether it last went back up the list.
-type slide struct {
-	id   string
-	lo   float32
-	back bool
-}
+// slide marks a list's selected ground as showing (slideGround).
+type slide struct{}
 
 type btnKind uint8
 
@@ -165,8 +124,9 @@ func (a *App) button(c *ui.Context, label string, o btnOpt) ui.Element {
 		b.Busy(true)
 	}
 	hover := b.Hovered() && !still
+	down := a.pressing(b) && !still
 	focus := b.FocusVisible()
-	if o.kind == ghost && hover {
+	if o.kind == ghost && (hover || down) {
 		color = theme.Text
 	}
 	kept := o.kind == primary || o.kind == danger
@@ -178,6 +138,8 @@ func (a *App) button(c *ui.Context, label string, o btnOpt) ui.Element {
 		ink = theme.Accent
 	case o.kind == danger:
 		ink = theme.Danger
+	case down:
+		ink = theme.Text // pressed, the loop goes up a step
 	}
 	draw := float32(0)
 	if kept && !o.loading || hover || focus {
@@ -194,9 +156,6 @@ func (a *App) button(c *ui.Context, label string, o btnOpt) ui.Element {
 	}
 	drawn := b.AnimateTo("ink", draw, anim)
 	gone := b.AnimateTo("gone", map[bool]float32{true: 1, false: 0}[o.loading], ui.Animation{Duration: motion.InkGone, Ease: motion.Ease})
-	if !still {
-		a.press(b, motion.Squashed)
-	}
 	inkColor := b.AnimateColor("inkColor", ink, a.ease(motion.Hover))
 	textColor := b.AnimateColor("color", color, a.ease(motion.Hover))
 	n := utf8.RuneCountInString(label)
@@ -238,12 +197,13 @@ func (a *App) button(c *ui.Context, label string, o btnOpt) ui.Element {
 
 // iconOpt is an IconButton's: its icon, its name, its tooltip; small is
 // 24 square; active shows the selected ground (its panel open); lit lights
-// the accent; turn rotates the icon, in degrees.
+// the accent; glow shows the hover ground for a moment, as a layer it opened
+// lands back in it; turn rotates the icon, in degrees.
 type iconOpt struct {
-	icon, label, tip   string
-	small, active, lit bool
-	disabled, beside   bool
-	turn               float32
+	icon, label, tip         string
+	small, active, lit, glow bool
+	disabled, beside         bool
+	turn                     float32
 }
 
 // iconButton is ui/controls IconButton: 32 square (24 small), text-2 and the
@@ -262,26 +222,23 @@ func (a *App) iconBtn(c *ui.Context, key any, o iconOpt) ui.Element {
 		b.Disabled(true).Opacity(0.4)
 	}
 	hover := b.Hovered() && !o.disabled
-	color, ground := theme.Text2, ui.Transparent
+	color, ground := theme.Icon, ui.Transparent
 	switch {
 	case o.active:
 		color, ground = theme.Text, theme.Selected
-	case hover:
+	case hover || o.glow:
 		color, ground = theme.Text, theme.Hover
 	}
-	b.Background(b.AnimateColor("bg", ground, a.ease(motion.Hover))).TextColor(b.AnimateColor("fg", color, a.ease(motion.Hover)))
+	fg := b.AnimateColor("fg", color, a.ease(motion.Hover))
+	b.Background(b.AnimateColor("bg", ground, a.ease(motion.Hover))).TextColor(fg)
 	if b.FocusVisible() {
 		b.FocusRing(true)
 	}
-	if !o.disabled {
-		a.press(b, motion.Squashed)
+	in := b
+	if o.disabled {
+		in = ui.Element{}
 	}
-	b.Children(func() {
-		ic := a.pressIcon(c, o.icon, 16, o.lit, b.Pressed() && !o.disabled)
-		if o.turn != 0 {
-			ic.TransformOrigin(0.5, 0.5).Rotate(o.turn)
-		}
-	})
+	b.Children(func() { a.dotIcon(c, in, o.icon, 16, iconLook{lit: o.lit, turn: o.turn, ink: fg}) })
 	if o.tip != "" && !o.disabled {
 		a.tip(c, b, o.tip, o.beside)
 	}
@@ -359,17 +316,11 @@ func (a *App) segmented(c *ui.Context, key any, label string, options []string, 
 				ui.Text(c, o).TextColor(s.AnimateColor("fg", color, a.ease(motion.Hover)))
 			})
 		}
-		a.slideGround(c, frame, segmentMatch{key}, options[*chosen], at, false)
+		a.slideGround(c, frame, segmentMatch{key}, at, false)
 	})
 }
 
 type segmentMatch struct{ key any }
-
-// countRoll is a count's number, the one before, and which change it is.
-type countRoll struct {
-	n, from int
-	run     uint64
-}
 
 func sign(v float32) float32 {
 	switch {
@@ -399,7 +350,7 @@ func (a *App) stepper(c *ui.Context, key any, label string, value *float32, lo, 
 		pct := int(*value/theme.ReadingSize*100 + 0.5)
 		ui.Row(c).MinWidth(44).Padding(0, 4).Justify(ui.Center).AlignItems(ui.Center).FontSize(theme.Body).LineHeight(16.0 / 13).
 			Label(strconv.Itoa(pct) + "%").Children(func() {
-			a.count(c, key, pct, 16).AccessHidden(true)
+			a.count(c, pct, 16).AccessHidden(true)
 			ui.Text(c, "%").FixedLineHeight(16).AccessHidden(true)
 		})
 		plus := a.iconButton(c, "plus", "add", more, "", false, false).Size(28, 28)
@@ -412,24 +363,10 @@ func (a *App) stepper(c *ui.Context, key any, label string, value *float32, lo, 
 	})
 }
 
-// count is a number whose digits roll to their new value, each
-// place a one-line window onto 0–9 that slides over 300 ms and a little past
-// its place, back over RollBack (弹一下). key tells this count from others,
-// for the way each digit goes; lineH is the line's height.
-func (a *App) count(c *ui.Context, key any, n int, lineH float32) ui.Element {
-	if a.counts == nil {
-		a.counts = map[any]*countRoll{}
-	}
-	cr := a.counts[key]
-	if cr == nil {
-		cr = &countRoll{n: n, from: n}
-		a.counts[key] = cr
-	}
-	if cr.n != n {
-		cr.from, cr.n = cr.n, n
-		cr.run++
-	}
-	was := strconv.Itoa(cr.from)
+// count is a number whose digits roll to their new value, each place a
+// one-line window onto 0–9 that slides over 300 ms along the one curve and
+// stops at its place (DESIGN.md Continuity); lineH is the line's height.
+func (a *App) count(c *ui.Context, n int, lineH float32) ui.Element {
 	s := strconv.Itoa(n)
 	row := ui.Row(c).Label(s).FontFeatures(theme.Numbers).Height(lineH)
 	return row.Children(func() {
@@ -443,16 +380,6 @@ func (a *App) count(c *ui.Context, key any, n int, lineH float32) ui.Element {
 					y = col.Jump("y", -d)
 				} else {
 					y = col.AnimateTo("y", -d, ui.Animation{Duration: motion.Roll, Ease: motion.Ease})
-					// The same place in the number before, 0 where it had none.
-					old := float32(0)
-					if j := len(was) - (len(s) - i); j >= 0 {
-						old = float32(was[j] - '0')
-					}
-					if dir := sign(old - d); dir != 0 {
-						y += dir * motion.RollPast * col.Keyframes("past", []ui.Keyframe{{Value: 0},
-							{At: motion.Roll * 4 / 5, Value: 1, Ease: motion.Ease}, {At: motion.Roll + motion.RollBack, Value: 0, Ease: motion.Ease}},
-							ui.KeyframeOptions{Run: cr.run})
-					}
 				}
 				col.Translate(0, y*lineH).Children(func() {
 					for k := 0; k <= 9; k++ {

@@ -31,6 +31,7 @@ func TestMoonWanesOnHomeAndFavorites(t *testing.T) {
 				} else {
 					must(t, tt.Click("收藏"))
 					settle(tt)
+					toArticles(t, a, tt)
 					must(t, tt.Click(inneiShelf))
 					back = page{"favorites", "innei"}
 				}

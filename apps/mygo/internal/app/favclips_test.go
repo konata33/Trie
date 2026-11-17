@@ -15,6 +15,7 @@ import (
 
 	"trie/internal/explore"
 	"trie/internal/library"
+	"trie/internal/locales"
 	"trie/internal/motion"
 	"trie/internal/reading"
 	"trie/internal/subscription"
@@ -241,15 +242,15 @@ const (
 	leadText   = "这个 loop 的问题在人这一侧。中间的截图、日志、无障碍树和测试输出都被 agent 自己读完、消化掉了，人能看到的通常只有最后一句\"已验证通过\"。"
 )
 
-// cardCopy is where the card's 复制引文 is: the last of its foot, 48 in
-// from its right edge, 32 up from its foot (the clip bars over the page
-// behind it have the same name).
+// cardCopy is where the stage's 复制引文 is: the last of its foot, at the
+// foot's right end (the clip bars over the page behind it have the same
+// name).
 func cardCopy(a *App) (x, y float32) {
 	r := a.clips.cardBox
-	return r.X + r.W - 48 - 40, r.Y + r.H - 32 - 16
+	return r.X + r.W - 40, r.Y + r.H - 16
 }
 
-// cardCite is where the card's article title is: just after its 《 (the
+// cardCite is where the stage's article title is: just after its 《 (the
 // page behind it names the article too).
 func cardCite(t *testing.T, tt *ui.Tester) (x, y float32) {
 	r, ok := tt.Find("《")
@@ -257,6 +258,20 @@ func cardCite(t *testing.T, tt *ui.Tester) (x, y float32) {
 		t.Fatal("the card names no article")
 	}
 	return r.X + r.W + 24, r.Y + r.H/2
+}
+
+// toArticles zooms 收藏's map into the articles, where the writers are.
+func toArticles(t *testing.T, a *App, tt *ui.Tester) {
+	t.Helper()
+	_, groups := a.kept("")
+	for _, b := range mapBlocks(groups) {
+		if b.key == articles {
+			must(t, tt.Click(locales.FavoritesWriterCount(blockName(b), b.n)))
+			settle(tt)
+			return
+		}
+	}
+	t.Fatal("the map has no articles")
 }
 
 func kept(a *App, id string) bool {
@@ -273,11 +288,12 @@ func TestFavoritesPages(t *testing.T) {
 	settle(tt)
 	must(t, tt.Click("收藏"))
 	settle(tt)
-	if a.page != (page{kind: "favorites"}) || !tt.HasText("收藏 4 篇") || !tt.HasText(lobeTitle) {
-		t.Fatalf("the shelves: page %v, %q", a.page, tt.Texts())
+	if a.page != (page{kind: "favorites"}) || !tt.HasText(lobeTitle) {
+		t.Fatalf("the map: page %v, %q", a.page, tt.Texts())
 	}
-	if r, _ := tt.Find(inneiShelf); r.Y > 10 {
-		t.Errorf("the author kept last starts at the window's top: %v", r)
+	toArticles(t, a, tt)
+	if ri, _ := tt.Find(inneiShelf); ri.Y > 160 {
+		t.Errorf("the author kept last does not stand first among the articles: %v", ri)
 	}
 	must(t, tt.Click(inneiShelf))
 	tt.Advance(50 * time.Millisecond)
@@ -336,6 +352,7 @@ func TestFavoritesLetGoAndUndo(t *testing.T) {
 	settle(tt)
 	must(t, tt.Click("收藏"))
 	settle(tt)
+	toArticles(t, a, tt)
 	must(t, tt.Click(antfuShelf))
 	settle(tt)
 	before := *a.article(ecoID).FavoritedAt
@@ -392,12 +409,33 @@ func TestFavoritesKeyboard(t *testing.T) {
 	settle(tt)
 	tt.Key(ui.Cmd, ui.Key2)
 	settle(tt)
-	tt.Key(0, ui.KeyJ)
+	// J walks the map's blocks to the articles; Enter zooms in, the focus on
+	// the first writer; J walks on: Innei's sheet, its titles, then Anthony Fu's.
+	_, groups := a.kept("")
+	words := mapBlocks(groups)[len(mapBlocks(groups))-1]
+	label := locales.FavoritesWriterCount(blockName(words), words.n)
+	for range 8 {
+		if tt.Focused(label) {
+			break
+		}
+		tt.Key(0, ui.KeyJ)
+		tt.Frame()
+	}
+	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
-	tt.Key(0, ui.KeyJ)
 	tt.Frame()
+	if a.favs().kind != articles || !tt.Focused(inneiShelf) {
+		t.Fatalf("Enter on the articles: zoomed into %q, cursor %q", a.favs().kind, a.favs().cursor)
+	}
+	for range 8 {
+		if tt.Focused(antfuShelf) {
+			break
+		}
+		tt.Key(0, ui.KeyJ)
+		tt.Frame()
+	}
 	if !tt.Focused(antfuShelf) {
-		t.Fatalf("J J: the focus is not on Anthony Fu (cursor %q)", a.favs().cursor)
+		t.Fatalf("J: the focus never reached Anthony Fu (cursor %q)", a.favs().cursor)
 	}
 	tt.Key(0, ui.KeyEnter)
 	if a.page != (page{"favorites", "antfu"}) || a.left != nil {
@@ -522,6 +560,83 @@ func TestClipsPage(t *testing.T) {
 	}
 }
 
+// A passage takes the stage: its shared parts travel on one value while
+// the stage's own parts wait until they are nearly there; the pointer
+// resting in the dark lifts the card it came from; Esc sends it back on
+// the way it came, quicker, and the passage takes the focus back. From the
+// keys it comes and goes at once; under less motion it fades where it
+// stands while the page goes dark at once.
+func TestClipStage(t *testing.T) {
+	a, _ := newSeededApp(t)
+	tt := ui.NewTester(a.View, 1280, 850)
+	settle(tt)
+	must(t, tt.Click("摘录"))
+	settle(tt)
+	lead, _ := tt.Find(leadText)
+	tt.Move(lead.X+lead.W/2, lead.Y+lead.H/2)
+	tt.Advance(300 * time.Millisecond)
+	tt.ClickAt(lead.X+lead.W/2, lead.Y+lead.H/2)
+	tt.Advance(120 * time.Millisecond)
+	cs := a.clips
+	s := cs.stage
+	if s == nil || !s.built || s.from.quote.W <= 0 || s.from.head.W <= 0 || s.from.card.W <= 0 {
+		t.Fatalf("the stage should know where the passage came from: %+v", s)
+	}
+	q, own := s.values(tt.Now())
+	if q <= 0.2 || q >= motion.StageLand || own != 0 {
+		t.Errorf("120 ms in, the words should be on their way and the stage's own parts not yet in: q %.2f, own %.2f", q, own)
+	}
+	tt.Advance(time.Second)
+	if q, own = s.values(tt.Now()); q != 1 || own != 1 || s.dark(q, own) != 1 {
+		t.Fatalf("landed: q %.2f, own %.2f", q, own)
+	}
+	// The pointer resting in the dark lifts the card it came from.
+	tt.Move(1110, 650)
+	tt.Advance(300 * time.Millisecond)
+	if !tt.HasText("1 / 14") || a.clips.cardBox.W <= 0 {
+		t.Fatalf("the stage: %q", tt.Texts())
+	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Advance(200 * time.Millisecond)
+	if s.open || cs.stage != s {
+		t.Fatal("Esc should send the passage back, on its way")
+	}
+	if q, _ = s.values(tt.Now()); q <= 0 || q >= 1 {
+		t.Errorf("200 ms after Esc the words should be on their way back: q %.2f", q)
+	}
+	tt.Advance(400 * time.Millisecond)
+	if cs.stage != nil || !tt.Focused(leadText) {
+		t.Fatalf("back: stage %v, the passage focused %v", cs.stage != nil, tt.Focused(leadText))
+	}
+	// From the keys: at once both ways.
+	a.kbd = true
+	a.showClip(leadClip)
+	tt.Frame()
+	if s = cs.stage; s == nil || !s.keyed {
+		t.Fatal("the keys should put the passage on the stage at once")
+	}
+	if q, own = s.values(tt.Now()); q != 1 || own != 1 {
+		t.Errorf("from the keys: q %.2f, own %.2f", q, own)
+	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	tt.Frame()
+	if cs.stage != nil {
+		t.Fatal("from the keys, Esc should take it back at once")
+	}
+	// Less motion: it fades in where it stands; the page is dark at once.
+	a.Reduce = true
+	a.kbd = false
+	tt.ClickAt(lead.X+lead.W/2, lead.Y+lead.H/2)
+	tt.Advance(60 * time.Millisecond)
+	if s = cs.stage; s == nil || !s.still {
+		t.Fatal("under less motion the passage should take the stage where it stands")
+	}
+	if q, own = s.values(tt.Now()); q != 1 || own <= 0 || own >= 1 || s.dark(q, own) != 1 {
+		t.Errorf("less motion, 60 ms in: q %.2f, own %.2f, dark %.2f", q, own, s.dark(q, own))
+	}
+}
+
 // Under less motion nothing travels or flies: the picture does not fold
 // (it only fades with its page), no face flies onto the notice, a copy's
 // wash only fades.
@@ -531,7 +646,8 @@ func TestFavClipsReducedMotion(t *testing.T) {
 	settle(tt)
 	must(t, tt.Click("收藏"))
 	settle(tt)
-	must(t, tt.Click(lobeTitle)) // a title on Innei's picture
+	toArticles(t, a, tt)
+	must(t, tt.Click(lobeTitle)) // a title on Innei's sheet
 	tt.Advance(50 * time.Millisecond)
 	if a.page != (page{"reader", lobehub}) || len(a.flights) != 0 || a.lay == nil || !a.lay.Still {
 		t.Fatalf("opening: page %v, flights %d, ground still %v", a.page, len(a.flights), a.lay != nil && a.lay.Still)
@@ -686,5 +802,90 @@ func TestFavClipsSearchAndEmpty(t *testing.T) {
 	settle(tt)
 	if !tt.HasText("留一篇，慢慢读") || !tt.HasText("收藏的文章按作者收在这里。") {
 		t.Errorf("收藏 empty: %q", tt.Texts())
+	}
+}
+
+// TestClipStageFrames records a passage taking the stage on 摘录 and going
+// back, a frame every 33 ms at 2x and at 1x, into CLIPSTAGE (a folder): the
+// lead opening, a hold with the pointer in the dark, closing by a click in
+// the dark and by Esc, turning to the next passage with the pointer and
+// with →, closing from there, and a passage beside the lead opening and
+// closing. Each run is a
+// folder of frames and a contact sheet of them at 640 wide (SCALE=1 or 2
+// records one scale): CLIPSTAGE=dir go test -run ClipStageFrames.
+func TestClipStageFrames(t *testing.T) {
+	dir := os.Getenv("CLIPSTAGE")
+	if dir == "" {
+		t.Skip("CLIPSTAGE not set")
+	}
+	pinNow(t)
+	const step = 33 * time.Millisecond
+	const side = "期间还顺手把 Nyatabi 正在用的那套圆润线条图标库开源了出来" // beside the lead
+	type phase struct {
+		name string
+		act  func(tt *ui.Tester)
+		span time.Duration
+	}
+	over := func(tt *ui.Tester, text string) (x, y float32) {
+		r, ok := tt.Find(text)
+		if !ok {
+			t.Fatalf("no %q", text)
+		}
+		x, y = r.X+r.W/2, r.Y+r.H/2
+		tt.Move(x, y)
+		tt.Advance(300 * time.Millisecond)
+		return x, y
+	}
+	open := func(text string) func(*ui.Tester) {
+		return func(tt *ui.Tester) { tt.ClickAt(over(tt, text)) }
+	}
+	rest := func(tt *ui.Tester) { tt.Advance(time.Second) }
+	phases := []phase{
+		{"1-open", open(leadText), 700 * time.Millisecond},
+		{"2-dark-hold", func(tt *ui.Tester) { tt.Move(1110, 650) }, 330 * time.Millisecond},
+		{"3-close-click", func(tt *ui.Tester) { tt.ClickAt(1110, 650) }, 500 * time.Millisecond},
+		{"4-open-again", open(leadText), 0},
+		{"5-close-esc", func(tt *ui.Tester) { tt.Move(1110, 650); tt.Advance(300 * time.Millisecond); tt.Key(0, ui.KeyEscape) }, 500 * time.Millisecond},
+		{"6-open-again", open(leadText), 0},
+		{"7-turn-pointer", func(tt *ui.Tester) { tt.ClickAt(over(tt, locales.ClipsNext())) }, 330 * time.Millisecond},
+		{"8-turn-key", func(tt *ui.Tester) { tt.Key(0, ui.KeyRight) }, 99 * time.Millisecond},
+		{"9-close-turned", func(tt *ui.Tester) { tt.ClickAt(1110, 650) }, 500 * time.Millisecond},
+		{"10-open-side", open(side), 700 * time.Millisecond},
+		{"11-close-side", func(tt *ui.Tester) { tt.ClickAt(1110, 650) }, 500 * time.Millisecond},
+	}
+	for _, scale := range []float32{2, 1} {
+		if only := os.Getenv("SCALE"); only != "" && only != fmt.Sprint(scale) {
+			continue
+		}
+		a, _ := newSeededApp(t)
+		tt := ui.NewTester(a.View, 1280, 850)
+		tt.SetScale(scale)
+		settle(tt)
+		must(t, tt.Click("摘录"))
+		tt.Move(1270, 845)
+		settle(tt)
+		for _, ph := range phases {
+			ph.act(tt)
+			if ph.span == 0 {
+				rest(tt)
+				continue
+			}
+			out := filepath.Join(dir, fmt.Sprintf("%gx", scale), ph.name)
+			must(t, os.MkdirAll(out, 0o755))
+			var sheet []*image.RGBA
+			t0 := tt.Now()
+			for d := time.Duration(0); d <= ph.span; d += step {
+				tt.Advance(d - tt.Now().Sub(t0))
+				m := tt.Image()
+				savePNG(t, filepath.Join(out, fmt.Sprintf("%03dms.png", d/time.Millisecond)), m)
+				for m.Bounds().Dx() > 640 {
+					m = halve(m)
+				}
+				sheet = append(sheet, m)
+			}
+			writeSheet(t, filepath.Join(dir, fmt.Sprintf("%gx-%s.png", scale, ph.name)), sheet)
+			rest(tt)
+		}
+		savePNG(t, filepath.Join(dir, fmt.Sprintf("%gx-end.png", scale)), tt.Image())
 	}
 }

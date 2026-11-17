@@ -1538,22 +1538,6 @@ func (msgs Messages) FavoritesWriterActions(name string) string {
 	return Catalog.Format(msgs.locale, "favoritesWriterActions", map[string]any{"name": name})
 }
 
-// FavoritesRecentFrom says "Recent favorites from {name}"
-// in the language the app shows.
-//
-// Favorites: accessible name of the few latest favorites under a writer's
-// name.
-func FavoritesRecentFrom(name string) string { return In(i18n.Locale()).FavoritesRecentFrom(name) }
-
-// FavoritesRecentFrom says "Recent favorites from {name}"
-// in the language of msgs.
-//
-// Favorites: accessible name of the few latest favorites under a writer's
-// name.
-func (msgs Messages) FavoritesRecentFrom(name string) string {
-	return Catalog.Format(msgs.locale, "favoritesRecentFrom", map[string]any{"name": name})
-}
-
 // FavoritesRemoveAll says "Remove All {count} from Favorites"
 // in the language the app shows.
 //
@@ -4556,18 +4540,106 @@ func (msgs Messages) ExploreKinds() string {
 	return Catalog.Format(msgs.locale, "exploreKinds", nil)
 }
 
-// FavoritesKinds says "Kept Designs"
+// FavoritesWorkCount says "{name}, {count, plural, one {# work} other {# works}}"
 // in the language the app shows.
 //
-// Accessible name of the board of kept designs, by kind, on the first
-// screen of Favorites; no visible heading.
-func FavoritesKinds() string { return In(i18n.Locale()).FavoritesKinds() }
+// Favorites: accessible name of a block of the map holding a kind's or a
+// gallery's kept designs (and, with the articles' name, the block of
+// articles), which zooms into it.
+func FavoritesWorkCount(name string, count int) string {
+	return In(i18n.Locale()).FavoritesWorkCount(name, count)
+}
 
-// FavoritesKinds says "Kept Designs"
+// FavoritesWorkCount says "{name}, {count, plural, one {# work} other {# works}}"
 // in the language of msgs.
 //
-// Accessible name of the board of kept designs, by kind, on the first
-// screen of Favorites; no visible heading.
-func (msgs Messages) FavoritesKinds() string {
-	return Catalog.Format(msgs.locale, "favoritesKinds", nil)
+// Favorites: accessible name of a block of the map holding a kind's or a
+// gallery's kept designs (and, with the articles' name, the block of
+// articles), which zooms into it.
+func (msgs Messages) FavoritesWorkCount(name string, count int) string {
+	return Catalog.Format(msgs.locale, "favoritesWorkCount", map[string]any{"name": name, "count": count})
+}
+
+// FavoritesWorksCount says "{count, plural, one {# work kept} other {# works kept}}"
+// in the language the app shows.
+//
+// Favorites: how many designs of a kind or a gallery are kept, at the head
+// of their page.
+func FavoritesWorksCount(count int) string { return In(i18n.Locale()).FavoritesWorksCount(count) }
+
+// FavoritesWorksCount says "{count, plural, one {# work kept} other {# works kept}}"
+// in the language of msgs.
+//
+// Favorites: how many designs of a kind or a gallery are kept, at the head
+// of their page.
+func (msgs Messages) FavoritesWorksCount(count int) string {
+	return Catalog.Format(msgs.locale, "favoritesWorksCount", map[string]any{"count": count})
+}
+
+// FavoritesRemoveAllWorks says "Remove All {count} from Favorites"
+// in the language the app shows.
+//
+// Menu item that removes all the kept designs of a kind or a gallery
+// (always more than one).
+func FavoritesRemoveAllWorks(count int) string {
+	return In(i18n.Locale()).FavoritesRemoveAllWorks(count)
+}
+
+// FavoritesRemoveAllWorks says "Remove All {count} from Favorites"
+// in the language of msgs.
+//
+// Menu item that removes all the kept designs of a kind or a gallery
+// (always more than one).
+func (msgs Messages) FavoritesRemoveAllWorks(count int) string {
+	return Catalog.Format(msgs.locale, "favoritesRemoveAllWorks", map[string]any{"count": count})
+}
+
+// FavoritesRemovedWorksFrom says "{count, plural, one {Removed # work from {name}} other {Removed # works from {name}}}"
+// in the language the app shows.
+//
+// Notice after several kept designs of a kind or a gallery were removed;
+// offers Undo.
+func FavoritesRemovedWorksFrom(name string, count int) string {
+	return In(i18n.Locale()).FavoritesRemovedWorksFrom(name, count)
+}
+
+// FavoritesRemovedWorksFrom says "{count, plural, one {Removed # work from {name}} other {Removed # works from {name}}}"
+// in the language of msgs.
+//
+// Notice after several kept designs of a kind or a gallery were removed;
+// offers Undo.
+func (msgs Messages) FavoritesRemovedWorksFrom(name string, count int) string {
+	return Catalog.Format(msgs.locale, "favoritesRemovedWorksFrom", map[string]any{"name": name, "count": count})
+}
+
+// FavoritesAllFrom says "All {count}"
+// in the language the app shows.
+//
+// Favorites: under a writer's latest kept titles, the link to all of them
+// on their page.
+func FavoritesAllFrom(count int) string { return In(i18n.Locale()).FavoritesAllFrom(count) }
+
+// FavoritesAllFrom says "All {count}"
+// in the language of msgs.
+//
+// Favorites: under a writer's latest kept titles, the link to all of them
+// on their page.
+func (msgs Messages) FavoritesAllFrom(count int) string {
+	return Catalog.Format(msgs.locale, "favoritesAllFrom", map[string]any{"count": count})
+}
+
+// FavoritesArticles says "Articles"
+// in the language the app shows.
+//
+// Favorites: the name of the map's block of kept articles, shown when it is
+// pointed at, and the accessible name of the writers' sheets inside it.
+func FavoritesArticles() string { return In(i18n.Locale()).FavoritesArticles() }
+
+// FavoritesArticles says "Articles"
+// in the language of msgs.
+//
+// Favorites: the name of the map's block of kept articles, shown when it is
+// pointed at, and the accessible name of the writers' sheets inside it.
+func (msgs Messages) FavoritesArticles() string {
+	return Catalog.Format(msgs.locale, "favoritesArticles", nil)
 }

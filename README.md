@@ -43,17 +43,15 @@ TRIE_DATA_DIR=/tmp/trie-dev go tool mygo dev
 | [docs/PAGES.md](docs/PAGES.md) | 各页的版面和交互规格 |
 | [docs/READER_ENGINE.md](docs/READER_ENGINE.md) | 正文从取回到显示的处理规则 |
 | [apps/mygo/README.md](apps/mygo/README.md) | 应用架构、数据位置和安全边界 |
-| [assets/pictograms/README.md](assets/pictograms/README.md) | 场景小图形的原图和画法基准 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 开发环境、检查、打包和提交约定 |
 | [AGENTS.md](AGENTS.md) | 给 coding agent 的工作约定 |
 
 ## 项目结构
 
 ```text
-apps/mygo/          macOS 应用（Go + MyGo 原生界面）
-assets/pictograms/  场景小图形的生成原图、分层矢量稿和描线工具
-docs/               产品、设计、页面规格和正文引擎
-.tools/             开发辅助工具（Ryugi 画板，用于界面方案对比）
+apps/mygo/  macOS 应用（Go + MyGo 原生界面）
+docs/       产品、设计、页面规格和正文引擎
+.tools/     开发辅助工具（Ryugi 画板，用于界面方案对比）
 ```
 
 ## 参与开发

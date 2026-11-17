@@ -267,7 +267,7 @@ func TestElasticMore(t *testing.T) {
 		x, y := center(more.Bounds)
 		tt.Move(x, y)
 		tt.Advance(time.Second)
-		tt.ClickAt(x, y) // its menu opens: the ··· squares up
+		tt.ClickAt(x, y) // its menu opens: the middle dot lights amber
 		write("more", film(tt, around(more.Bounds), 2, 600*time.Millisecond))
 		tt.SetScale(1)
 		settle(tt)
@@ -279,41 +279,52 @@ func TestElasticMore(t *testing.T) {
 	}
 }
 
-// An icon's accent moves while its button is pressed, but not from the
-// keys, nor under less motion.
-func TestIconNudgeQuiet(t *testing.T) {
+// A press on an icon button rings out of its icon from where it went down
+// while the button keeps its shape; from the keys, or under less motion,
+// nothing rings. At rest, nothing is painted again.
+func TestPressRings(t *testing.T) {
 	for _, mode := range []string{"pointer", "keys", "reduce"} {
-		a := &App{kbd: mode == "keys"}
-		pressed := false
+		a := &App{}
 		tt := ui.NewTester(func(c *ui.Context) {
-			ui.Box(c).Size(64, 64).Background(ui.RGB(0, 0, 0)).Children(func() {
-				a.pressIcon(c, "play", 48, true, pressed)
+			ui.Row(c).Padding(16).Background(theme.Window).Children(func() {
+				a.iconBtn(c, "play", iconOpt{icon: "play", label: "play"})
 			})
 		}, 64, 64)
 		if mode == "reduce" {
 			tt.SetPreferences(ui.Preferences{ReduceMotion: true})
 		}
-		tt.Frame()
+		settle(tt)
+		b, _ := tt.Access("play")
+		x, y := center(b.Bounds)
+		tt.Move(x, y)
+		a.kbd = mode == "keys" // as the window's input observer marks it after a key
 		tt.Advance(time.Second)
 		rest := cloneRGBA(tt.Image())
-		pressed = true
-		tt.Frame()
-		tt.Advance(400 * time.Millisecond)
-		moved := false
+		tt.Press(x-4, y)
+		tt.Advance(100 * time.Millisecond)
+		rang := false
 		for i := range rest.Pix {
 			if rest.Pix[i] != tt.Image().Pix[i] {
-				moved = true
+				rang = true
 				break
 			}
 		}
-		if moved != (mode == "pointer") {
-			t.Errorf("%s: the accent moved %v", mode, moved)
+		if rang != (mode == "pointer") {
+			t.Errorf("%s: the press rang %v", mode, rang)
+		}
+		if held, _ := tt.Access("play"); held.Bounds != b.Bounds {
+			t.Errorf("%s: pressed, the button went from %v to %v", mode, b.Bounds, held.Bounds)
+		}
+		tt.Release(x-4, y)
+		tt.Advance(2 * time.Second)
+		if tt.FramePending() {
+			t.Errorf("%s: the icon still asks for frames at rest", mode)
 		}
 	}
 }
 
-// TestElasticIcons writes each icon's press and let-go frame by frame, at
-// scale 3: ELASTIC=dir go test -run ElasticIcons.
+// TestElasticIcons writes each icon's press, its ring of light, and its
+// let-go frame by frame, at scale 3: ELASTIC=dir go test -run ElasticIcons.
 func TestElasticIcons(t *testing.T) {
 	dir := os.Getenv("ELASTIC")
 	if dir == "" {
@@ -321,7 +332,7 @@ func TestElasticIcons(t *testing.T) {
 	}
 	os.MkdirAll(dir, 0o755)
 	const step, s = time.Second / 60, 3
-	for name := range nudges {
+	for name := range iconDots16 {
 		a := &App{}
 		tt := ui.NewTester(func(c *ui.Context) {
 			ui.Row(c).Padding(20).Background(theme.Window).Children(func() {
