@@ -282,15 +282,16 @@ func (a *App) showsRow(p page, id string) bool {
 	return false
 }
 
-func (a *App) fly(key, text string, at, to page, old, new func(*ui.Context, string) ui.Element, ratio float32, d motion.Depth) {
+func (a *App) fly(key, text string, at, to page, old, new func(*ui.Context, string) ui.Element, ratio float32, d motion.Depth) *flight {
 	for i, f := range a.flights {
 		if f.key == key {
 			a.flights = append(a.flights[:i], a.flights[i+1:]...)
 			break
 		}
 	}
-	a.flights = append(a.flights, &flight{key: key, text: text, at: at, to: to, old: old, new: new,
-		w: motion.Words{Ratio: ratio, Travel: d.Crossing().Travel}})
+	f := &flight{key: key, text: text, at: at, to: to, old: old, new: new, w: motion.Words{Ratio: ratio, Travel: d.Crossing().Travel}}
+	a.flights = append(a.flights, f)
+	return f
 }
 
 // end is a text a flight may leave or reach, built on page where (the

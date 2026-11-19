@@ -126,7 +126,8 @@ func (a *App) openPost(c *ui.Context, e *explore.Entry, post explore.Post, from 
 	}
 	still := a.still(c)
 	if !still && from.title.W > 0 {
-		a.fly("title:"+id, titleOf(post.Title), at, m.to, from.style, a.headline, 32/from.size, motion.Deep)
+		// From where its title shows: built before its click came, it was not there yet to give its box (end).
+		a.fly("title:"+id, titleOf(post.Title), at, m.to, from.style, a.headline, 32/from.size, motion.Deep).w.From = from.title
 	}
 	if from.button.W > 0 {
 		a.lay, a.layRow = &motion.Lay{Ground: motion.Spread, From: from.button, To: a.paper(), Run: a.run, Still: still}, ""

@@ -542,7 +542,7 @@ func (a *App) story(c *ui.Context, it exFresh, size string, w, h float32, g exGe
 			})
 		})
 		if b.Clicked() {
-			a.openPost(c, e, post, &trialFrom{title: title.LayoutBounds(), button: b.LayoutBounds(), style: titleStyle, size: ts})
+			a.openPost(c, e, post, &trialFrom{title: title.Bounds(), button: b.Bounds(), style: titleStyle, size: ts})
 		}
 		a.byline(c, e, post, size)
 	})
@@ -940,7 +940,7 @@ func (a *App) capPost(c *ui.Context, e *explore.Entry, post explore.Post, key st
 		a.end(title, page{kind: "explore"}, "title:"+a.postID(post.URL))
 	})
 	if b.Clicked() {
-		a.openPost(c, e, post, &trialFrom{title: title.LayoutBounds(), button: b.LayoutBounds(), style: func(c *ui.Context, s string) ui.Element {
+		a.openPost(c, e, post, &trialFrom{title: title.Bounds(), button: b.Bounds(), style: func(c *ui.Context, s string) ui.Element {
 			return style(c, s).TextColor(theme.Text2)
 		}, size: theme.Body})
 	}
@@ -1154,7 +1154,7 @@ func (a *App) cover(c *ui.Context, e *explore.Entry, w, h float32) {
 				}
 			})
 			if lb.Clicked() {
-				a.openPost(c, e, latest, &trialFrom{title: title.LayoutBounds(), button: lb.LayoutBounds(), style: style, size: 18})
+				a.openPost(c, e, latest, &trialFrom{title: title.Bounds(), button: lb.Bounds(), style: style, size: 18})
 			}
 			if len(posts) > 1 {
 				a.toc(c, e, posts[1:], w, h)
@@ -1194,7 +1194,7 @@ func (a *App) toc(c *ui.Context, e *explore.Entry, posts []explore.Post, w, h fl
 					}
 				})
 				if b.Clicked() {
-					a.openPost(c, e, p, &trialFrom{title: title.LayoutBounds(), button: b.LayoutBounds(), style: func(c *ui.Context, s string) ui.Element {
+					a.openPost(c, e, p, &trialFrom{title: title.Bounds(), button: b.Bounds(), style: func(c *ui.Context, s string) ui.Element {
 						return style(c, s).TextColor(theme.Text2)
 					}, size: theme.Body})
 				}

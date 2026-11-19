@@ -449,6 +449,10 @@ func TestExplorePreview(t *testing.T) {
 	if a.page != (page{"reader", id}) || len(a.flights) != 1 || a.lay == nil {
 		t.Fatalf("the post opens in the reader, its title flying, its ground spreading: %v %d %v", a.page, len(a.flights), a.lay)
 	}
+	// From its card, where the writing room's track has slid it into view.
+	if r, _ := tt.Find(f.post.Title); abs32(a.lay.From.X-r.X) > 1 || a.flights[0].w.From.X < r.X || a.flights[0].w.From.X > r.X+r.W {
+		t.Fatalf("its title and ground set off from its card at %v: %v %v", r, a.flights[0].w.From, a.lay.From)
+	}
 	rest(tt)
 	if _, ok := tt.Find("探索"); !ok {
 		t.Fatal("the way back is 探索")

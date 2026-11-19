@@ -355,6 +355,7 @@ func (a *App) landedLight(c *ui.Context, target string, radius float32) {
 // the reader's headline, drawn as style draws it at size, and its button,
 // whose ground spreads into the page.
 type trialFrom struct {
+	// Where they show (Bounds): Explore's rooms slide on a track (Translate), which a layout's box leaves out.
 	title, button ui.Rect
 	style         func(*ui.Context, string) ui.Element
 	size          float32
