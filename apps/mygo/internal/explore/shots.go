@@ -26,6 +26,8 @@ import (
 const (
 	// shotFresh is FRESH: a capture is taken again after this long, so a site's redesign reaches Explore.
 	shotFresh = 30 * 24 * time.Hour
+	// shotRetry is how long a site whose first screen could not be taken stays off Explore before it is tried again.
+	shotRetry = 24 * time.Hour
 	// atOnce is AT_ONCE: enough that a first visit fills in quickly, few enough to stay out of the way.
 	atOnce = 3
 )
@@ -45,7 +47,9 @@ func ShotFile(dir, site string, width int) string {
 type Shots struct {
 	dir string
 	// take captures site's first screen from url and keeps it; the hidden window (window) unless a test sets another.
-	take    func(site, url string) bool
+	take func(site, url string) bool
+	// hosted takes site's first screen from the snapshot (Options.Snapshot) instead, in a moment; nil takes none so.
+	hosted  func(site string) bool
 	mu      sync.Mutex
 	waiting []*shotJob
 	running int
@@ -70,8 +74,25 @@ func NewShots(dir string) *Shots {
 	return s
 }
 
-// Stale tells whether a site has no capture, or one older than shotFresh.
+// failedFile marks a site whose first screen could not be taken, as of its modification time.
+func failedFile(dir, site string) string {
+	return filepath.Join(dir, unsafeName.ReplaceAllString(site, "-")+".failed")
+}
+
+// Failed tells a site with no capture whose last capture failed within shotRetry: Explore leaves it off its walls.
+func (s *Shots) Failed(site string) bool {
+	if _, err := os.Stat(ShotFile(s.dir, site, 1280)); err == nil {
+		return false
+	}
+	info, err := os.Stat(failedFile(s.dir, site))
+	return err == nil && now().Sub(info.ModTime()) < shotRetry
+}
+
+// Stale tells whether a site has no capture, or one older than shotFresh; one that just failed waits for shotRetry.
 func (s *Shots) Stale(site string) bool {
+	if s.Failed(site) {
+		return false
+	}
 	info, err := os.Stat(ShotFile(s.dir, site, 1280))
 	return err != nil || now().Sub(info.ModTime()) > shotFresh
 }
@@ -135,11 +156,18 @@ func (s *Shots) next() {
 		s.waiting = s.waiting[1:]
 		s.running++
 		go func() {
-			taken := false
+			taken := s.hosted != nil && s.hosted(j.site)
 			for _, url := range j.urls {
-				if taken = s.try(j.site, url); taken || s.ended() {
+				if taken || s.ended() {
 					break
 				}
+				taken = s.try(j.site, url)
+			}
+			// A site that could not be taken is marked so (Failed); one taken since is marked no more.
+			if taken {
+				os.Remove(failedFile(s.dir, j.site))
+			} else if !s.ended() && os.MkdirAll(s.dir, 0o755) == nil {
+				os.WriteFile(failedFile(s.dir, j.site), nil, 0o644)
 			}
 			s.mu.Lock()
 			defer s.mu.Unlock()

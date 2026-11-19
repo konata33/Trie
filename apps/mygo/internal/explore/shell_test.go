@@ -201,6 +201,76 @@ func TestWorkPictures(t *testing.T) {
 	}
 }
 
+// A picture too narrow to stand behind a writer still shows as a work, whichever is asked for first.
+func TestNarrowPictureStillAWork(t *testing.T) {
+	dir, fetchFeed := galleryOf(t)
+	get, _ := served(t, map[string]*fetch.Response{"https://cdn.example/narrow.jpg": picture("image/jpeg", jpegOf(400, 300))})
+	s := service(t, Options{Resources: dir, Cache: filepath.Join(dir, "cache.json"), FetchFeed: fetchFeed, Fetch: get})
+	ctx := context.Background()
+	if behind := s.picture(ctx, "https://cdn.example/narrow.jpg", 600); behind != "" {
+		t.Fatal("a narrow picture stood behind a writer")
+	}
+	if work := s.Picture(ctx, "https://cdn.example/narrow.jpg"); work == "" {
+		t.Fatal("the narrow picture was refused as a work too")
+	}
+}
+
+// A read behind the list holds what a feed adds until its pictures are in, so a new work comes onto the page with its
+// picture; the page's first fill fetches none ahead.
+func TestNewWorksComeWithPictures(t *testing.T) {
+	dir, _ := galleryOf(t)
+	works := []string{"https://cdn.example/old.jpg"}
+	fetchFeed := feedsOf(t, func(url string) string {
+		if strings.Contains(url, "writer") {
+			return `<rss><channel><title>Writer</title><link>https://writer.example/</link></channel></rss>`
+		}
+		var items strings.Builder
+		for i, src := range works {
+			items.WriteString(`<item><title>W` + src + `</title><link>` + src + `.html</link><pubDate>` + daysAgo(i+1) +
+				`</pubDate><description><![CDATA[<p><img src="` + src + `"></p>]]></description></item>`)
+		}
+		return `<rss><channel><title>G</title><link>https://g.example/</link>` + items.String() + `</channel></rss>`
+	})
+	base, calls := served(t, map[string]*fetch.Response{
+		"https://cdn.example/old.jpg": picture("image/jpeg", jpegOf(1600, 1000)),
+		"https://cdn.example/new.jpg": picture("image/jpeg", jpegOf(1600, 1000)),
+	})
+	var s *Service
+	var shownEarly atomic.Bool
+	get := func(ctx context.Context, url string, scope func(string) bool, max int) (*fetch.Response, error) {
+		if s != nil && url == "https://cdn.example/new.jpg" {
+			if src, _ := s.workImage("gallery", 0); src == url {
+				shownEarly.Store(true)
+			}
+		}
+		return base(ctx, url, scope, max)
+	}
+	o := Options{Resources: dir, Cache: filepath.Join(dir, "cache.json"), FetchFeed: fetchFeed, Fetch: get}
+	first := service(t, o)
+	list(t, first)
+	first.bg.Wait()
+	if calls.Load() != 0 {
+		t.Fatalf("the first fill fetched %d pictures ahead", calls.Load())
+	}
+	// The next launch shows the kept list and reads the feed behind it; the feed now has a new work.
+	works = []string{"https://cdn.example/new.jpg", "https://cdn.example/old.jpg"}
+	s = service(t, o)
+	if src, _ := s.workImage("gallery", 0); src != "https://cdn.example/old.jpg" {
+		t.Fatal("the kept list first:", src)
+	}
+	list(t, s)
+	s.bg.Wait()
+	if src, _ := s.workImage("gallery", 0); src != "https://cdn.example/new.jpg" {
+		t.Fatal("the new work is shown once read:", src)
+	}
+	if shownEarly.Load() || calls.Load() != 1 {
+		t.Fatalf("the new work's picture comes before the work: shown early %v, %d fetches", shownEarly.Load(), calls.Load())
+	}
+	if pic, _ := s.Work(context.Background(), "gallery", 0); pic == "" || calls.Load() != 1 {
+		t.Fatal("the page finds the picture already in")
+	}
+}
+
 // An AVIF picture, which the native window cannot decode, goes as macOS's sips converts it: JPEG, PNG when it has
 // transparency; one sips cannot read is none. One kept from before is converted as it is read.
 func TestWorkAVIF(t *testing.T) {
@@ -329,6 +399,47 @@ func TestShotStage(t *testing.T) {
 	}
 	if none, err := s.SourceShot(ctx, "feed:2"); none != "" || err != nil {
 		t.Fatal("a source with no site")
+	}
+}
+
+// A design site whose first screen could not be taken stays off the walls, and is not tried again, for a day; one not
+// tried yet shows meanwhile. Galleries and writers are not touched.
+func TestFailedSiteOffTheWall(t *testing.T) {
+	dir, fetchFeed := galleryOf(t)
+	g := newGated(t)
+	g.dir = filepath.Join(dir, "explore-shots")
+	s := service(t, Options{Resources: dir, Cache: filepath.Join(dir, "cache.json"), FetchFeed: fetchFeed, Shots: g.Shots})
+	if _, ok := list(t, s)["site"]; !ok {
+		t.Fatal("a site not tried yet shows")
+	}
+	done := make(chan string, 1)
+	go func() {
+		shot, _ := s.Shot(context.Background(), "site")
+		done <- shot
+	}()
+	g.expect(t, []string{"site.example"}, 1)
+	g.gate("site.example") <- false
+	if shot := <-done; shot != "" {
+		t.Fatal("no capture was taken")
+	}
+	g.expect(t, nil, 0)
+	shown := list(t, s)
+	if _, ok := shown["site"]; ok {
+		t.Fatal("a site that could not be taken is on the wall")
+	}
+	if _, ok := shown["gallery"]; !ok || shown["writer"].ID == "" {
+		t.Fatal("galleries and writers stay")
+	}
+	if g.Stale("site.example") {
+		t.Fatal("tried again before a day is out")
+	}
+	defer func(was func() time.Time) { now = was }(now)
+	now = func() time.Time { return time.Now().Add(shotRetry + time.Minute) }
+	if !g.Stale("site.example") {
+		t.Fatal("tried again after a day")
+	}
+	if _, ok := list(t, s)["site"]; !ok {
+		t.Fatal("back on the wall, to be tried again")
 	}
 }
 

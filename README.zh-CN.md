@@ -44,6 +44,7 @@ go tool mygo build -skip-dmg
 - 数据都在本机：`~/Library/Application Support/Trie`。
 - 没有账号，不收集使用数据。
 - 只在取回文章、图片和网页截图时联网，只访问公网地址。
+- 探索页的内容先从 Trie 的网站（konata33.github.io/Trie）取一份每 3 小时更新的汇总，取不到时直接读各个网站。这份汇总由仓库里的定时任务用 Trie 自己生成。
 
 ## 参与开发
 

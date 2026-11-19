@@ -55,6 +55,8 @@ const (
 	// thinText is THIN: a recommended post whose feed gives less text than this (a member teaser, a digest's
 	// one-paragraph summary) is shown only once its page reads; the same bar the page read is held to (Open).
 	thinText = 400
+	// aheadWait is how long a background read holds what a feed adds while its pictures come (fetchAhead).
+	aheadWait = 60 * time.Second
 )
 
 // platforms are sites where many writers publish: their picks are told apart by author, and there is no one feed to
@@ -239,8 +241,11 @@ type Options struct {
 	Site func(sourceID string) (*library.Site, error)
 	// Shots takes sites' first screens; nil takes none, and only those on disk show.
 	Shots *Shots
-	// Fetch reads the pictures Work and Shot show; nil reads each with a fetch.New(6) of its own.
+	// Fetch reads the pictures Work and Shot show, and the snapshot; nil reads each with a fetch.New(6) of its own.
 	Fetch fetch.Fetch
+	// Snapshot is where a published snapshot of Explore is pulled from (SnapshotURL), before the feeds' own sites and
+	// before pictures and first screens are fetched or taken; "" pulls none.
+	Snapshot string
 }
 
 // Service is Explore, with the app's handlers (shell.go). Its methods may be called from any goroutine.
@@ -259,8 +264,11 @@ type Service struct {
 	inflight map[string]chan struct{}
 	// Feed entries behind the posts on screen, so a preview can start from the feed's own body. Memory only.
 	shown map[string]library.FeedEntry
-	// Feed bodies live in memory only, so the first visit after launch refreshes everything once in the background.
+	// Feed bodies live in memory only, so the first visit after launch refreshes everything once in the background,
+	// unless a pull of the snapshot did (pull); a preview then reads the feed again for its body (ReadTarget).
 	warmed                        bool
+	pulling                       chan struct{} // a pull of the snapshot under way (pullDue)
+	pulledAt                      time.Time
 	lookingForIcons, readingPages bool
 	// Sites whose icon could not be reached this session; they are asked again next launch.
 	unreached map[string]bool
@@ -285,6 +293,9 @@ func New(o Options) *Service {
 		icons: map[string]*string{}, images: map[string]*string{}, captures: map[string]capture{}, inflight: map[string]chan struct{}{},
 		shown: map[string]library.FeedEntry{}, unreached: map[string]bool{}, pickSites: map[string]siteInfo{}, featuredSites: map[string]siteInfo{}}
 	s.shell.init()
+	if o.Shots != nil {
+		o.Shots.hosted = s.hostedShot
+	}
 	if data, err := os.ReadFile(s.iconsPath); err == nil {
 		var icons map[string]*string
 		if json.Unmarshal(data, &icons) == nil && icons != nil {
@@ -505,10 +516,11 @@ func (s *Service) refresh(urls []string) {
 	s.mu.Lock()
 	b := s.claim(urls)
 	s.mu.Unlock()
-	s.readAll(b)
+	s.readAll(b, false)
 }
 
-func (s *Service) readAll(b batch) {
+// readAll reads b's feeds; ahead, as behind the list, what a feed adds waits for its pictures (fetchAhead).
+func (s *Service) readAll(b batch, ahead bool) {
 	next := make(chan string, len(b.queue))
 	for _, url := range b.queue {
 		next <- url
@@ -518,7 +530,7 @@ func (s *Service) readAll(b batch) {
 	for range min(6, len(b.queue)) {
 		wg.Go(func() {
 			for url := range next {
-				s.read(url)
+				s.read(url, ahead)
 			}
 		})
 	}
@@ -529,10 +541,17 @@ func (s *Service) readAll(b batch) {
 	s.save(s.o.Cache, func() any { return s.stats })
 }
 
-func (s *Service) read(url string) {
+func (s *Service) read(url string, ahead bool) {
 	feed, err := s.o.FetchFeed(context.Background(), url)
 	if err == nil {
+		if ahead {
+			s.fetchAhead(url, feed)
+		}
 		s.remember(url, feed)
+		if ahead {
+			// What a feed adds shows once its pictures are in, not after the slowest feed's.
+			s.tell()
+		}
 	}
 	s.mu.Lock()
 	if err != nil {
@@ -618,6 +637,122 @@ func (s *Service) keepShown(feed library.ParsedFeed, url string) {
 			return
 		}
 	}
+}
+
+// fetchAhead fetches, before a feed's new read is shown, the pictures of what it adds: a gallery's new works and the
+// first screens of the sites it newly features, a writer's new latest post's picture, an upstream's new posts'
+// pictures. What is new thus comes onto the page with its picture; a feed with nothing shown yet (the page's first
+// fill) waits for none. It waits at most aheadWait; what is not in by then comes as it is.
+func (s *Service) fetchAhead(url string, feed library.ParsedFeed) {
+	s.ahead(url, s.peek(url, feed))
+}
+
+// peek is what remember will keep of a feed's read, as far as ahead looks: an upstream's picks and their pictures, a
+// feed's stats.
+func (s *Service) peek(url string, feed library.ParsedFeed) *stats {
+	if i := slices.IndexFunc(s.o.Upstreams, func(up Upstream) bool { return up.FeedURL == url }); i >= 0 {
+		picks := s.o.Upstreams[i].Picks(feed)
+		out := &stats{}
+		for _, p := range picks[:min(picksKept, len(picks))] {
+			out.Picks = append(out.Picks, &pickRecord{URL: p.URL, Pictures: postPictures(p.Entry)})
+		}
+		return out
+	}
+	catalog, _ := s.catalogEntries()
+	entry := feedEntry(catalog, url)
+	st := feedStats(feed, nowMS(), entry != nil && entry.gallery())
+	return &st
+}
+
+// feedEntry is the catalog entry a feed belongs to, as its own feed or a shelf's; nil for none.
+func feedEntry(catalog []catalogEntry, url string) *catalogEntry {
+	for i, e := range catalog {
+		if e.feed() == url || slices.Contains(e.shelfFeeds(), url) {
+			return &catalog[i]
+		}
+	}
+	return nil
+}
+
+// ahead fetches the pictures of what read adds to the stats on the page for url, as fetchAhead tells: read is a
+// feed's read, or what a pull of the snapshot brought for it.
+func (s *Service) ahead(url string, read *stats) {
+	s.mu.Lock()
+	prev := s.stats[url]
+	catalog, _ := s.load()
+	s.mu.Unlock()
+	if prev == nil {
+		return
+	}
+	was := map[string]bool{}
+	for _, p := range prev.Posts {
+		was[p.URL] = true
+	}
+	for _, w := range prev.Works {
+		was[w.URL] = true
+	}
+	for _, p := range prev.Picks {
+		was[p.URL] = true
+	}
+	for _, site := range prev.Sites {
+		was[site.URL] = true
+	}
+	var jobs []func(ctx context.Context)
+	// A writer stands on the first of a post's pictures wide enough for a card, as Shot takes it.
+	standOn := func(pictures []string) {
+		if len(pictures) > 0 {
+			jobs = append(jobs, func(ctx context.Context) {
+				for _, src := range pictures {
+					if s.picture(ctx, src, 600) != "" || ctx.Err() != nil {
+						return
+					}
+				}
+			})
+		}
+	}
+	if slices.ContainsFunc(s.o.Upstreams, func(up Upstream) bool { return up.FeedURL == url }) {
+		for _, p := range read.Picks {
+			if !was[p.URL] {
+				standOn(p.Pictures)
+			}
+		}
+	} else {
+		entry := feedEntry(catalog, url)
+		for _, w := range read.Works {
+			if !was[w.URL] && w.Image != "" {
+				jobs = append(jobs, func(ctx context.Context) { s.picture(ctx, w.Image, 0) })
+			}
+		}
+		if entry != nil && entry.Kind == "blog" && len(read.Posts) > 0 && !was[read.Posts[0].URL] {
+			standOn(read.Pictures[read.Posts[0].URL])
+		}
+		for _, site := range read.Sites {
+			if name := host(site.URL); s.o.Shots != nil && name != "" && !was[site.URL] && s.o.Shots.Stale(name) {
+				jobs = append(jobs, func(ctx context.Context) { s.o.Shots.Capture(name, []string{site.URL}, false)(ctx) })
+			}
+		}
+	}
+	if len(jobs) == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), aheadWait)
+	defer cancel()
+	next := make(chan func(context.Context), len(jobs))
+	for _, j := range jobs {
+		next <- j
+	}
+	close(next)
+	var wg sync.WaitGroup
+	for range min(4, len(jobs)) {
+		wg.Go(func() {
+			for j := range next {
+				if ctx.Err() == nil {
+					j(ctx)
+				}
+			}
+		})
+	}
+	wg.Wait()
 }
 
 // ReadTarget is readTarget: what the reader needs to preview one of an entry's latest posts. After a restart the posts
@@ -971,7 +1106,9 @@ func (s *Service) shot(entryID string) string {
 
 // List is loadExplore (list()): the catalog's entries, then the writers the upstreams recommend, then the websites the
 // design galleries feature. Feeds never read yet are read first; the others are shown at once and read again behind
-// the list when stale, or on the first visit after launch, and Changed is told once they have been.
+// the list when stale, or on the first visit after launch, and Changed is told once they have been. With a snapshot
+// (Options.Snapshot) the feeds are first pulled from it, at most every pullEvery, and only what it does not hold
+// fresh is read from the sites.
 func (s *Service) List(ctx context.Context) ([]Entry, error) {
 	s.mu.Lock()
 	catalog, err := s.load()
@@ -979,35 +1116,25 @@ func (s *Service) List(ctx context.Context) ([]Entry, error) {
 		s.mu.Unlock()
 		return nil, err
 	}
-	t := float64(nowMS())
-	var missing, stale, upstream []string
-	for _, e := range catalog {
-		for _, f := range e.shelfFeeds() {
-			if st := s.stats[f]; st == nil || !s.warmed || t-st.At > fresh || st.V != version {
-				stale = append(stale, f)
-			}
-		}
-		url := e.feed()
-		if url == "" {
-			continue
-		}
-		// Stats saved before works were kept are read again at once for the galleries, whose page is built from them.
-		st := s.stats[url]
-		if st == nil || e.gallery() && st.Works == nil {
-			missing = append(missing, url)
-		}
-		if st != nil && (!s.warmed || t-st.At > fresh || st.V != version) {
-			stale = append(stale, url)
-		}
-	}
-	s.warmed = true
-	// Upstreams never hold the page, and are read at most every fresh: they are large and some refuse frequent readers.
-	for _, up := range s.o.Upstreams {
-		if st := s.stats[up.FeedURL]; st == nil || t-st.At > fresh || st.V != version {
-			upstream = append(upstream, up.FeedURL)
-		}
+	pulling := s.pullDue()
+	missing := s.missing(catalog)
+	// The feeds to read behind the list are counted now, before the missing ones are read; with a pull under way, once
+	// it is in.
+	var behind []string
+	if pulling == nil {
+		behind = s.behind(catalog)
 	}
 	s.mu.Unlock()
+	if len(missing) > 0 && pulling != nil {
+		select {
+		case <-pulling:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		s.mu.Lock()
+		missing = s.missing(catalog)
+		s.mu.Unlock()
+	}
 	if len(missing) > 0 {
 		done := make(chan struct{})
 		go func() { s.refresh(missing); close(done) }()
@@ -1021,25 +1148,85 @@ func (s *Service) List(ctx context.Context) ([]Entry, error) {
 	s.mu.Lock()
 	// Stale feeds are read again behind the list, upstreams first: their writers lead the writing room. They are in
 	// flight from here on, and land once the list is made from what was known before.
-	var behind *batch
-	if len(stale) > 0 || len(upstream) > 0 {
-		b := s.claim(append(upstream, stale...))
-		behind = &b
+	var claimed *batch
+	if len(behind) > 0 {
+		b := s.claim(behind)
+		claimed = &b
 	}
 	out := make([]Entry, 0, len(catalog))
 	for _, e := range catalog {
-		out = append(out, s.entry(e, sources))
+		if e.Kind != "site" || e.gallery() || !s.failedShot(host(e.HomeURL)) {
+			out = append(out, s.entry(e, sources))
+		}
 	}
 	out = append(out, s.picked(catalog, sources)...)
-	out = append(out, s.featured(catalog)...)
+	for _, f := range s.featured(catalog) {
+		if !s.failedShot(f.Host) {
+			out = append(out, f)
+		}
+	}
 	s.mu.Unlock()
-	if behind != nil {
+	if claimed != nil || pulling != nil {
 		s.bg.Go(func() {
-			s.readAll(*behind)
+			if pulling != nil {
+				<-pulling
+				s.mu.Lock()
+				b := s.claim(s.behind(catalog))
+				s.mu.Unlock()
+				claimed = &b
+			}
+			s.readAll(*claimed, true)
 			s.changed()
 		})
 	}
 	return out, nil
+}
+
+// missing are the feeds never read yet, which the page waits for. s.mu is held.
+func (s *Service) missing(catalog []catalogEntry) []string {
+	var out []string
+	for _, e := range catalog {
+		// Stats saved before works were kept are read again at once for the galleries, whose page is built from them.
+		if url := e.feed(); url != "" {
+			if st := s.stats[url]; st == nil || e.gallery() && st.Works == nil {
+				out = append(out, url)
+			}
+		}
+	}
+	return out
+}
+
+// behind are the feeds to read again behind the list, upstreams first (their writers lead the writing room): the
+// stale ones, and on the first visit after launch all those read before (warmed). s.mu is held.
+func (s *Service) behind(catalog []catalogEntry) []string {
+	t := float64(nowMS())
+	var stale, upstream []string
+	for _, e := range catalog {
+		for _, f := range e.shelfFeeds() {
+			if st := s.stats[f]; st == nil || !s.warmed || t-st.At > fresh || st.V != version {
+				stale = append(stale, f)
+			}
+		}
+		if url := e.feed(); url != "" {
+			if st := s.stats[url]; st != nil && (!s.warmed || t-st.At > fresh || st.V != version) {
+				stale = append(stale, url)
+			}
+		}
+	}
+	s.warmed = true
+	// Upstreams never hold the page, and are read at most every fresh: they are large and some refuse frequent readers.
+	for _, up := range s.o.Upstreams {
+		if st := s.stats[up.FeedURL]; st == nil || t-st.At > fresh || st.V != version {
+			upstream = append(upstream, up.FeedURL)
+		}
+	}
+	return append(upstream, stale...)
+}
+
+// failedShot tells a design site whose first screen could not be taken: it stays off the walls until a capture lands
+// (Shots.Failed). Galleries and writers stand on pictures of their own.
+func (s *Service) failedShot(site string) bool {
+	return s.o.Shots != nil && s.o.Shots.Failed(site)
 }
 
 // entry is a catalog site as List shows it. s.mu is held.
@@ -1062,7 +1249,7 @@ func (s *Service) entry(e catalogEntry, sources []library.Source) Entry {
 	if e.gallery() {
 		out.Shelves = e.Kinds
 		for _, w := range s.works(e) {
-			out.Works = append(out.Works, Post{Title: w.Title, URL: w.URL, PublishedAt: w.PublishedAt, Kinds: w.kinds})
+			out.Works = append(out.Works, Post{Title: w.Title, URL: w.URL, PublishedAt: w.PublishedAt, Kinds: w.kinds, Image: w.Image})
 		}
 	}
 	var match *library.Source

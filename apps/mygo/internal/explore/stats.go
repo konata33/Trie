@@ -22,6 +22,8 @@ type Post struct {
 	Excerpt string `json:"excerpt,omitempty"`
 	// What a gallery's work is shelved under (Shelf.Kind): landing, portfolio, motion, type, brand.
 	Kinds []string `json:"kinds,omitempty"`
+	// A gallery's work's picture, by its address (Picture gives it).
+	Image string `json:"image,omitempty"`
 }
 
 // work is a design gallery's latest featured site and the picture its feed shows of it.

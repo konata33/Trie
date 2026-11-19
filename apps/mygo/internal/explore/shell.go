@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -33,7 +34,7 @@ import (
 // those previews showed.
 type shell struct {
 	pmu          sync.Mutex
-	pictures     map[string]*future // by file
+	pictures     map[string]*future // by file and the width asked for
 	previews     []*preview         // in the order they were first kept
 	previewLinks map[string]bool
 	tmu          sync.Mutex
@@ -82,8 +83,9 @@ func Open(resources, dir string, store *library.Store, subscriptions *subscripti
 		Preview: func(ctx context.Context, t reading.Target, source string) library.ArticleContent {
 			return reader.Preview(ctx, t, source, reading.PreviewWait)
 		},
-		Site:  store.Site,
-		Shots: NewShots(filepath.Join(dir, "explore-shots")),
+		Site:     store.Site,
+		Shots:    NewShots(filepath.Join(dir, "explore-shots")),
+		Snapshot: SnapshotURL,
 	})
 }
 
@@ -147,6 +149,9 @@ func (s *Service) Work(ctx context.Context, entryID string, index int) (string, 
 	}
 	return s.picture(ctx, src, 0), nil
 }
+
+// Picture is a work's picture by its address, kept as Work keeps one, as a data URL; "" when it cannot be had.
+func (s *Service) Picture(ctx context.Context, src string) string { return s.picture(ctx, src, 0) }
 
 // Shot is loadExploreShot: what stands behind an entry, as a data URL. A writer stands on their latest post's own
 // picture, the first wide enough to fill a card ("" with none: the page sets the post's words instead); a design site
@@ -285,15 +290,17 @@ func or(s, fallback string) string {
 
 // picture is a picture Explore shows from another site (a gallery's work, a recommended writer's latest post), fetched
 // on first sight, shrunk to wall size and kept on disk, as a data URL. One narrower than minWidth (a logo, an avatar)
-// is not kept; "" says there is none worth showing, and stays so for the session.
+// is not kept; "" says there is none worth showing, and stays so for the session. A picture asked for with and without
+// a width is asked for twice, so a narrow one refused behind a writer still shows as a work.
 func (s *Service) picture(ctx context.Context, src string, minWidth int) string {
 	sum := sha1.Sum([]byte(src))
 	file := filepath.Join(s.worksDir, hex.EncodeToString(sum[:])+"-1200.jpg")
+	key := file + "#" + strconv.Itoa(minWidth)
 	s.pmu.Lock()
-	f := s.pictures[file]
+	f := s.pictures[key]
 	if f == nil {
 		f = &future{done: make(chan struct{})}
-		s.pictures[file] = f
+		s.pictures[key] = f
 		go func() {
 			f.value = s.fetchPicture(file, src, minWidth)
 			close(f.done)
@@ -309,7 +316,16 @@ func (s *Service) picture(ctx context.Context, src string, minWidth int) string 
 }
 
 func (s *Service) fetchPicture(file, src string, minWidth int) string {
-	if cached, err := os.ReadFile(file); err == nil {
+	cached, err := os.ReadFile(file)
+	if err != nil {
+		// The snapshot keeps it under the same name, already shrunk; from one site, so much sooner than from its own.
+		ctx, cancel := context.WithTimeout(context.Background(), pullWait)
+		if data := s.hosted(ctx, "explore-works/"+filepath.Base(file)); extract.ImageType(data) != "" && writeFile(file, data) == nil {
+			cached, err = data, nil
+		}
+		cancel()
+	}
+	if err == nil {
 		// One kept as it came before AVIF was converted is converted now, and kept so.
 		if extract.ImageType(cached) == "image/avif" {
 			if data, mime := reading.FromAVIF(context.Background(), cached); mime != "" && writeFile(file, data) == nil {

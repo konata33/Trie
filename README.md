@@ -44,6 +44,7 @@ Drag `apps/mygo/build/darwin-arm64/Trie.app` into Applications.
 - Everything stays on your Mac, in `~/Library/Application Support/Trie`.
 - No account, and no usage data collected.
 - Trie goes online only to fetch articles, images and page captures, and only from public addresses.
+- Explore first pulls a digest from Trie's own site (konata33.github.io/Trie), refreshed every three hours, and reads the sites directly when it cannot. The digest is made by Trie itself, in a scheduled job in this repository.
 
 ## Contributing
 

@@ -625,3 +625,40 @@ func TestResetTwice(t *testing.T) {
 	_, err := subscription.New(openStore(t), func() fetch.Fetch { return get }, nil, nil).Preview(context.Background(), "https://writer.example/feed")
 	check(t, err != nil && strings.Contains(err.Error(), "连接中断了，稍后再试。"), "the message", err)
 }
+
+// The shipped seed holds every feed the catalog reads, galleries with their works, in the stats version the app
+// reads, so a first visit is never held up reading feeds before it shows anything. A new seed is the published
+// snapshot's list, taken before a release and after the catalog gains a feed (once the snapshot has it):
+//
+//	curl -fsSL https://konata33.github.io/Trie/explore/v12/explore-cache.json -o resources/explore/seed.json
+//
+// or, from the sites themselves: TRIE_DATA_DIR=<empty folder> TRIE_PUBLISH_EXPLORE=<folder> "./Trie Dev" (snapshot.go).
+func TestSeedCoversCatalog(t *testing.T) {
+	read := func(name string, v any) {
+		data, err := os.ReadFile(filepath.Join("..", "..", "resources", "explore", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(data, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var catalog []catalogEntry
+	var seed map[string]*stats
+	read("catalog.json", &catalog)
+	read("seed.json", &seed)
+	for _, e := range catalog {
+		for _, url := range append(e.shelfFeeds(), e.feed()) {
+			if url == "" {
+				continue
+			}
+			if st := seed[url]; st == nil {
+				t.Errorf("%s: the seed has no %s", e.ID, url)
+			} else if st.V != version {
+				t.Errorf("%s: the seed holds %s in stats version %d, not %d", e.ID, url, st.V, version)
+			} else if e.gallery() && st.Works == nil {
+				t.Errorf("%s: the seed has no works of %s", e.ID, url)
+			}
+		}
+	}
+}

@@ -6,6 +6,7 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -147,8 +148,21 @@ func main() {
 		log.Fatal("trie: ", err)
 	}
 	ex = explore.Open(filepath.Join(resources, "explore"), dir, store, subs, reader, func() {
-		post(func() { a.ExploreChanged() })
+		post(func() {
+			// Publishing, there is no app to tell.
+			if a != nil {
+				a.ExploreChanged()
+			}
+		})
 	})
+	// TRIE_PUBLISH_EXPLORE=<dir> reads all of Explore into the library and writes the snapshot copies of the app pull
+	// into dir (explore.Publish), with no window, then quits: what the project's site publishes.
+	if out := os.Getenv("TRIE_PUBLISH_EXPLORE"); out != "" {
+		if err := publish(ex, out); err != nil {
+			log.Fatal("trie: ", err)
+		}
+		return
+	}
 	// Sources subscribed before subscriptions took the catalog's name take it now.
 	if err := store.AdoptNames(ex.NameFor); err != nil {
 		log.Print("trie: ", err)
@@ -219,6 +233,28 @@ func main() {
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// publish runs explore.Publish into out under MyGo's event loop, which the captures' hidden windows need, and quits
+// once it is done.
+func publish(ex *explore.Service, out string) error {
+	var err error
+	mygo.App.SetName("Trie")
+	// The captures' windows closing is not the app's last window closing.
+	mygo.App.OnWindowAllClosed(func() {})
+	mygo.App.WhenReady(func() {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 40*time.Minute)
+			defer cancel()
+			err = ex.Publish(ctx, out)
+			ex.Stop()
+			mygo.RunOnMain(mygo.App.Quit)
+		}()
+	})
+	if runErr := mygo.App.Run(); runErr != nil {
+		return runErr
+	}
+	return err
 }
 
 // keepOpen keeps the app running with its window closed, in the Dock, as Mac apps do: a click on its icon

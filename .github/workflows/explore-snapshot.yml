@@ -1,0 +1,66 @@
+name: Explore snapshot
+
+# Trie reads all of Explore, as a first visit sees it, into the library kept from the last run: every feed, the picture
+# behind every card and work, the design sites' first screens. What it kept is published on the project's site, where
+# copies of the app pull it before reading the sites themselves (apps/mygo/internal/explore/snapshot.go). A run that
+# reads too few feeds fails and leaves the published snapshot as it was; one that has not run for a while leaves the
+# app reading the sites, as with no snapshot.
+
+on:
+  schedule:
+    - cron: "17 */3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: explore-snapshot
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # The first screens are taken in WebKit windows, as the app takes them on a Mac.
+    runs-on: macos-latest
+    timeout-minutes: 50
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    defaults:
+      run:
+        working-directory: apps/mygo
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/mygo/go.mod
+          cache-dependency-path: apps/mygo/go.sum
+      # Pictures and first screens still fresh are not taken again; a feed that fails keeps its last read.
+      - uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/library
+          key: explore-library-${{ github.run_id }}
+          restore-keys: explore-library-
+      - name: Read Explore
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin" "$RUNNER_TEMP/library"
+          go build -o "$RUNNER_TEMP/bin/Trie Dev" .
+          cp -R resources/. "$RUNNER_TEMP/bin/"
+          cd "$RUNNER_TEMP/bin"
+          TRIE_DATA_DIR="$RUNNER_TEMP/library" TRIE_PUBLISH_EXPLORE="$RUNNER_TEMP/site" "./Trie Dev"
+          du -sh "$RUNNER_TEMP/site"
+          # ponytail: pictures fetched over a month ago go, so the kept library does not grow without end; one still
+          # shown is fetched again next run.
+          find "$RUNNER_TEMP/library/explore-works" -type f -mtime +30 -delete
+      - uses: actions/cache/save@v6
+        if: always()
+        with:
+          path: ${{ runner.temp }}/library
+          key: explore-library-${{ github.run_id }}
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: ${{ runner.temp }}/site
+      - id: deploy
+        uses: actions/deploy-pages@v5
