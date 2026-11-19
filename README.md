@@ -1,63 +1,54 @@
 <div align="center">
-  <img src="apps/mygo/resources/icon.png" width="96" height="96" alt="Trie 图标">
+  <img src="apps/mygo/resources/icon.png" width="96" height="96" alt="Trie icon">
   <h1>Trie</h1>
-  <p>为细读而做的 macOS 阅读器。<br>跟住一小组挑过的独立作者和设计网站，把读到的东西整理成可以交给 coding agent 借鉴的材料。</p>
+  <p><b>The next-generation RSS reader for design.</b></p>
+  <p>Hand-picked feeds. Work shown in full. One click to your AI.</p>
+  <p>English · <a href="README.zh-CN.md">简体中文</a></p>
 </div>
 
-## 简介
+![Trie's Favourites page: kept design work from Fonts In Use, Awwwards and Behance, with followed writers and sites in the sidebar](docs/images/favorites-en.jpg)
 
-Trie 不追求「把所有新内容都推给你」，那是通用 RSS 阅读器的事。它只管一小组挑过的来源，把每一篇读好：结构完整的正文，安静的版面，读到一半可以接着读。读到值得借鉴的东西，一篇文章的想法，或者一个网站的版式、配色、字体和动效，可以连同出处一起复制成 Markdown，交给 Claude Code、Codex 或笔记。
+Trie is an open-source RSS reader for the Mac that comes already filled: more than sixty hand-picked indie blogs, design writers and design galleries, all readable before you subscribe. Articles open as clean, structured text. Design work opens with its screen recording, screenshots and colour palette. When something is worth borrowing, Trie captures the page into a folder your coding agent can read.
 
-## 功能
+## Why Trie
 
-- **首页**：一屏往下滚的总览：画廊里今天的设计例子、聚合站排得最高的几篇、每位关注作者的最新一篇，以及几位还没关注的作者。
-- **订阅**：每位作者一个文章列表。没有已读、未读和计数，只记阅读进度。
-- **探索**：手挑的中英文独立博客、设计写作、通讯和设计画廊目录，加上上游聚合站推荐的作者。订阅前就能在应用里读。
-- **阅读器**：统一排版的结构化正文，保留标题目录、代码、表格、图片和脚注；设计画廊的条目按作品页显示（录屏、截图、配色与署名）。
-- **收藏**：按作者收，一键收藏，不用归类，可以撤销。
-- **摘录**：带出处的段落摘录，可以连同链接和想法一起复制成 Markdown。
+- **Feeds worth reading, already picked.** Indie blogs, design writing, newsletters and galleries in English and Chinese, plus the writers Hacker News, Lobsters, UX Collective and Latent Space point to.
+- **Design, not summaries.** A gallery entry opens as the work itself: its recording, every page it shot, its palette and its credits.
+- **Hand it to your AI.** One click captures a page in the background: every screen, all of its text, its images and fonts, in one folder. Paste the path into Claude Code or Codex. Trie never calls an AI itself.
 
-计划中：翻译和 AI 精读，范围刻意做小。
+## Inside
 
-## 系统要求
+- **Home**: today's design pick, the top stories from the aggregators, what you were halfway through, and new posts from the people you follow.
+- **Explore**: every source Trie has picked, open to read without subscribing.
+- **Author pages**: one page per writer or site. Follow them to see their new posts on Home.
+- **Reader**: headings, code, tables, images and footnotes kept intact, and your place remembered.
+- **Favourites**: one click to keep, with undo.
+- **Clips**: keep a paragraph with a note on why, and copy it as Markdown with its source.
 
-- macOS，Apple Silicon
-- 从源码构建需要 Go 1.27.3 或更高
+![The reader: an article by Anthony Fu with a section heading, highlighted code and inline code](docs/images/reader-en.jpg)
 
-## 快速开始
+## Install
+
+Trie builds from source for now. You need an Apple Silicon Mac and Go 1.27.3 or later.
 
 ```sh
-git clone <仓库地址> trie
-cd trie/apps/mygo
-TRIE_DATA_DIR=/tmp/trie-dev go tool mygo dev
+git clone https://github.com/konata33/Trie.git
+cd Trie/apps/mygo
+go tool mygo build -skip-dmg
 ```
 
-开发版在程序坞上叫「Trie Dev」，只打开 `TRIE_DATA_DIR` 指向的资料库（必须是绝对路径），不会碰已安装版本的资料库。打包和安装见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+Drag `apps/mygo/build/darwin-arm64/Trie.app` into Applications.
 
-## 文档
+## Your data
 
-| 文档 | 内容 |
-| --- | --- |
-| [docs/PRODUCT.md](docs/PRODUCT.md) | 产品定位、目标用户、功能范围和约束 |
-| [docs/DESIGN.md](docs/DESIGN.md) | 设计系统：颜色、字体、布局、层次、形状、动效、图标和组件 |
-| [docs/PAGES.md](docs/PAGES.md) | 各页的版面和交互规格 |
-| [docs/READER_ENGINE.md](docs/READER_ENGINE.md) | 正文从取回到显示的处理规则 |
-| [apps/mygo/README.md](apps/mygo/README.md) | 应用架构、数据位置和安全边界 |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | 开发环境、检查、打包和提交约定 |
-| [AGENTS.md](AGENTS.md) | 给 coding agent 的工作约定 |
+- Everything stays on your Mac, in `~/Library/Application Support/Trie`.
+- No account, and no usage data collected.
+- Trie goes online only to fetch articles, images and page captures, and only from public addresses.
 
-## 项目结构
+## Contributing
 
-```text
-apps/mygo/  macOS 应用（Go + MyGo 原生界面）
-docs/       产品、设计、页面规格和正文引擎
-.tools/     开发辅助工具（Ryugi 画板，用于界面方案对比）
-```
+Start with [CONTRIBUTING.md](CONTRIBUTING.md) for running, checking and packaging. Before changing the interface, read [docs/DESIGN.md](docs/DESIGN.md) and the page in [docs/PAGES.md](docs/PAGES.md); how articles are extracted and shown is in [docs/READER_ENGINE.md](docs/READER_ENGINE.md). Coding agents follow [AGENTS.md](AGENTS.md). The project docs are in Chinese.
 
-## 参与开发
+## License
 
-欢迎提交问题和改动。开始之前请先读 [CONTRIBUTING.md](CONTRIBUTING.md)；改界面前先读 [docs/DESIGN.md](docs/DESIGN.md) 和 [docs/PAGES.md](docs/PAGES.md) 中对应的页面。
-
-## 许可
-
-代码以 [MIT](LICENSE) 许可发布。`apps/mygo/resources/explore` 中的站点图标、站点名称和文章摘要归各自网站所有，只用于在应用里标识来源，不在 MIT 许可范围内。
+The code is released under the [MIT](LICENSE) licence. Site icons, site names and article excerpts in `apps/mygo/resources/explore` belong to their sites, are used only to identify sources inside the app, and are not covered by the MIT licence.
