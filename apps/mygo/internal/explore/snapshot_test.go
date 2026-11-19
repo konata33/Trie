@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -100,7 +101,8 @@ func TestPulledNewsWaitsForItsPictures(t *testing.T) {
 	picture := hostedBase + "explore-works/" + hex.EncodeToString(sum[:]) + "-1200.jpg"
 	var gotPicture bool
 	var mu sync.Mutex
-	pages := map[string]*fetch.Response{hostedBase + "explore-cache.json": hostedJSON(t, news), picture: {Status: 200, Body: jpegBytes}}
+	pages := map[string]*fetch.Response{hostedBase + "explore-cache.json": hostedJSON(t, news), picture: {Status: 200, Body: jpegBytes},
+		hostedBase + filesList: hostedJSON(t, []string{strings.TrimPrefix(picture, hostedBase)})}
 	base, _ := served(t, pages)
 	get := func(ctx context.Context, url string, scope func(string) bool, max int) (*fetch.Response, error) {
 		if url == picture {
@@ -144,14 +146,24 @@ func TestPicturesAndFirstScreensComeFromTheSnapshot(t *testing.T) {
 	sum := sha1.Sum([]byte("https://img.example/far.jpg"))
 	name := hex.EncodeToString(sum[:]) + "-1200.jpg"
 	get, calls := served(t, map[string]*fetch.Response{
+		hostedBase + "explore-cache.json": hostedJSON(t, map[string]*stats{}),
+		hostedBase + filesList: hostedJSON(t, []string{"explore-works/" + name, "explore-shots/site.example-400.jpg",
+			"explore-shots/site.example-1280.jpg"}),
 		hostedBase + "explore-works/" + name:               {Status: 200, Body: jpegBytes},
 		hostedBase + "explore-shots/site.example-400.jpg":  {Status: 200, Body: jpegBytes},
 		hostedBase + "explore-shots/site.example-1280.jpg": {Status: 200, Body: jpegBytes},
+		"https://img.example/new.jpg":                      {Status: 200, Body: jpegBytes},
 	})
 	g := newGated(t)
 	s := service(t, Options{Resources: dir, Cache: filepath.Join(dir, "cache.json"), Fetch: get, Snapshot: hostedBase, Shots: g.Shots})
+	list(t, s)
+	s.bg.Wait()
+	pulled := calls.Load()
 	check(t, strings.HasPrefix(s.Picture(context.Background(), "https://img.example/far.jpg"), "data:image/jpeg;base64,"), "a picture from the snapshot")
-	check(t, calls.Load() == 1, "not from its own site", calls.Load())
+	check(t, calls.Load() == pulled+1, "not from its own site", calls.Load()-pulled)
+	// One newer than the snapshot's last run is not asked of it: straight to its own site.
+	check(t, s.Picture(context.Background(), "https://img.example/new.jpg") != "" && calls.Load() == pulled+2, "one request for a picture the snapshot does not hold",
+		calls.Load()-pulled)
 	check(t, g.Capture("site.example", []string{"https://site.example/"}, true)(context.Background()), "a first screen from the snapshot")
 	check(t, len(g.urls) == 0, "taken with no window", g.urls)
 	check(t, !g.Stale("site.example"), "and kept as a capture", g.Stale("site.example"))
@@ -189,6 +201,11 @@ func TestPublishWritesTheSnapshot(t *testing.T) {
 	check(t, err == nil, "a design site's first screen", err)
 	_, err = os.Stat(filepath.Join(at, "explore-icons.json"))
 	check(t, err == nil, "the icons", err)
+	var held []string
+	if data, err = os.ReadFile(filepath.Join(at, filesList)); err == nil {
+		err = json.Unmarshal(data, &held)
+	}
+	check(t, err == nil && slices.Contains(held, "explore-shots/site.example-1280.jpg"), "the list of what it holds", held, err)
 
 	// A run that reads too few feeds writes nothing.
 	failing := service(t, Options{Resources: dir, Cache: filepath.Join(t.TempDir(), "explore-cache.json"), FetchFeed: func(context.Context, string) (library.ParsedFeed, error) {

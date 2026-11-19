@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -25,6 +26,8 @@ const (
 	pullEvery = time.Hour
 	// pullWait is how long a pull of the snapshot's lists may take; the feeds are then read from their sites.
 	pullWait = 20 * time.Second
+	// filesList is the snapshot's list of the pictures and first screens it holds, as paths in it.
+	filesList = "explore-files.json"
 )
 
 // pullDue is the pull of the snapshot under way, started now when none was made within pullEvery; nil with no
@@ -41,21 +44,29 @@ func (s *Service) pullDue() chan struct{} {
 	return s.pulling
 }
 
-// pull reads the snapshot's stats and icons. Stats newer than those kept are taken as a read of their feeds would
-// take them: a feed nothing is shown for yet at once, one on the page once the pictures of what it adds are in
-// (ahead). Icons not looked for yet are taken. A pull that lands counts as the launch's read of every feed (warmed), so
-// only what the snapshot does not hold fresh is read from its site; one that fails leaves everything to the sites.
-// ch is closed once the stats are known, before the pictures.
+// pull reads the snapshot's stats, icons and list of files. Stats newer than those kept are taken as a read of their
+// feeds would take them: a feed nothing is shown for yet at once, one on the page once the pictures of what it adds
+// are in (ahead). Icons not looked for yet are taken. A pull that lands counts as the launch's read of every feed
+// (warmed), so only what the snapshot does not hold fresh is read from its site; one that fails leaves everything to
+// the sites. ch is closed once all of it is known, before the pictures.
 func (s *Service) pull(ch chan struct{}) {
 	ctx, cancel := context.WithTimeout(context.Background(), pullWait)
 	var cache map[string]*stats
 	var icons map[string]*string
+	var files []string
 	var wg sync.WaitGroup
 	wg.Go(func() { cache = pullJSON[map[string]*stats](ctx, s, "explore-cache.json") })
 	wg.Go(func() { icons = pullJSON[map[string]*string](ctx, s, "explore-icons.json") })
+	wg.Go(func() { files = pullJSON[[]string](ctx, s, filesList) })
 	wg.Wait()
 	cancel()
 	s.mu.Lock()
+	if files != nil {
+		s.hostedFiles = map[string]bool{}
+		for _, f := range files {
+			s.hostedFiles[f] = true
+		}
+	}
 	var later []string
 	if cache != nil {
 		s.warmed = true
@@ -123,6 +134,20 @@ func pullJSON[T any](ctx context.Context, s *Service, name string) T {
 	return v
 }
 
+// held tells whether the snapshot holds a picture or first screen, by its path there, once a pull under way is in:
+// one it does not hold, newer than its last run, is fetched or taken from its own site with no request to the snapshot.
+func (s *Service) held(path string) bool {
+	s.mu.Lock()
+	pulling := s.pulling
+	s.mu.Unlock()
+	if pulling != nil {
+		<-pulling
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.hostedFiles[path]
+}
+
 // hosted is a file of the snapshot, by its path there (as the library's folder keeps it); nil when it cannot be had.
 func (s *Service) hosted(ctx context.Context, path string) []byte {
 	if s.o.Snapshot == "" {
@@ -141,10 +166,13 @@ func (s *Service) hosted(ctx context.Context, path string) []byte {
 
 // hostedShot takes site's first screen from the snapshot, both sizes as a capture keeps them; false when it holds none.
 func (s *Service) hostedShot(site string) bool {
+	smallPath, largePath := "explore-shots/"+filepath.Base(ShotFile("", site, 400)), "explore-shots/"+filepath.Base(ShotFile("", site, 1280))
+	if !s.held(smallPath) || !s.held(largePath) {
+		return false
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), pullWait)
 	defer cancel()
-	small := s.hosted(ctx, "explore-shots/"+filepath.Base(ShotFile("", site, 400)))
-	large := s.hosted(ctx, "explore-shots/"+filepath.Base(ShotFile("", site, 1280)))
+	small, large := s.hosted(ctx, smallPath), s.hosted(ctx, largePath)
 	if extract.ImageType(small) != "image/jpeg" || extract.ImageType(large) != "image/jpeg" {
 		return false
 	}
@@ -230,6 +258,7 @@ func (s *Service) Publish(ctx context.Context, out string) error {
 	if err := os.RemoveAll(dir); err != nil {
 		return err
 	}
+	held := []string{}
 	for to, from := range files {
 		data, err := os.ReadFile(from)
 		if os.IsNotExist(err) {
@@ -241,6 +270,14 @@ func (s *Service) Publish(ctx context.Context, out string) error {
 		if err := writeFile(to, data); err != nil {
 			return err
 		}
+		if rel, _ := filepath.Rel(dir, to); strings.HasPrefix(rel, "explore-works/") || strings.HasPrefix(rel, "explore-shots/") {
+			held = append(held, rel)
+		}
 	}
-	return nil
+	slices.Sort(held)
+	data, err := json.Marshal(held)
+	if err != nil {
+		return err
+	}
+	return writeFile(filepath.Join(dir, filesList), data)
 }

@@ -269,6 +269,7 @@ type Service struct {
 	warmed                        bool
 	pulling                       chan struct{} // a pull of the snapshot under way (pullDue)
 	pulledAt                      time.Time
+	hostedFiles                   map[string]bool // the pictures and first screens the snapshot holds (held)
 	lookingForIcons, readingPages bool
 	// Sites whose icon could not be reached this session; they are asked again next launch.
 	unreached map[string]bool

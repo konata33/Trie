@@ -317,10 +317,10 @@ func (s *Service) picture(ctx context.Context, src string, minWidth int) string 
 
 func (s *Service) fetchPicture(file, src string, minWidth int) string {
 	cached, err := os.ReadFile(file)
-	if err != nil {
+	if path := "explore-works/" + filepath.Base(file); err != nil && s.held(path) {
 		// The snapshot keeps it under the same name, already shrunk; from one site, so much sooner than from its own.
 		ctx, cancel := context.WithTimeout(context.Background(), pullWait)
-		if data := s.hosted(ctx, "explore-works/"+filepath.Base(file)); extract.ImageType(data) != "" && writeFile(file, data) == nil {
+		if data := s.hosted(ctx, path); extract.ImageType(data) != "" && writeFile(file, data) == nil {
 			cached, err = data, nil
 		}
 		cancel()
