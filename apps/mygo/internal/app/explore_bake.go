@@ -20,8 +20,12 @@ import (
 // (40 wide) and the blur leaving nothing finer than half a pixel a DIP.
 const bakeScale = 0.5
 
-// bandKey is the geometry a band is baked for (band).
-type bandKey struct{ w, h, top, rise, y, ph float32 }
+// bandKey is the geometry a band is baked for (band): a band w wide, h high
+// at top, rising over rise, over a picture whose box has its top at y and is
+// ph high. The box is the band's width and holds the picture top-aligned,
+// unless pw is set: then it is pw wide from x, the picture held at px, py
+// (a door's, kindDoor).
+type bandKey struct{ w, h, top, rise, y, ph, x, pw, px, py float32 }
 
 // bandRise is the words' band rising from clear:
 // how much of it shows, at fractions of its rise.
@@ -50,7 +54,7 @@ func bandScrim(k float32) ui.LinearGradient {
 }
 
 // bakeBand is a band w×h DIPs as band drew it: soft, the picture's small
-// copy, covering pw×ph (its top y above the band's top, top-aligned), under
+// copy, covering its box (bandKey), under
 // the scrim, the two rising from clear over rise. A mask fades each thing
 // drawn on its own (MaskLinearGradient), so the scrim over the picture is
 // the scrim faded over the picture faded, not the two faded together.
@@ -58,8 +62,12 @@ func bakeBand(soft image.Image, g bandKey) *image.RGBA {
 	out := image.NewRGBA(image.Rect(0, 0, max(1, int(math.Ceil(float64(g.w*bakeScale)))), max(1, int(math.Ceil(float64(g.h*bakeScale))))))
 	src := premultiplied(soft)
 	sw, sh := float32(src.Bounds().Dx()), float32(src.Bounds().Dy())
-	scale := max(g.w/sw, g.ph/sh) // Fit(Cover), ObjectPosition(0.5, 0)
-	ox := (g.w - sw*scale) / 2
+	pw, px, py := g.w, float32(0.5), float32(0)
+	if g.pw > 0 {
+		pw, px, py = g.pw, g.px, g.py
+	}
+	scale := max(pw/sw, g.ph/sh) // Fit(Cover), ObjectPosition(px, py)
+	ox, oy := g.x+(pw-sw*scale)*px, (g.ph-sh*scale)*py
 	sr, sg, sb, sa := theme.Scrim.R, theme.Scrim.G, theme.Scrim.B, float32(theme.Scrim.A)/255
 	r := min(g.rise, g.h)
 	bw, bh := out.Bounds().Dx(), out.Bounds().Dy()
@@ -73,8 +81,8 @@ func bakeBand(soft image.Image, g bandKey) *image.RGBA {
 		for bx := range bw {
 			xd := (float32(bx) + 0.5) * g.w / float32(bw)
 			var p [4]float32
-			if yp >= 0 && yp < g.ph && xd >= 0 && xd < g.w {
-				p = sample(src, (xd-ox)/scale, yp/scale)
+			if yp >= 0 && yp < g.ph && xd >= g.x && xd < g.x+pw {
+				p = sample(src, (xd-ox)/scale, (yp-oy)/scale)
 			}
 			// The picture faded by m, then the scrim faded by m over it.
 			s := m * sa

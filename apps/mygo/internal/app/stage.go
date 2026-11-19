@@ -25,6 +25,7 @@ type move struct {
 	from  []page // where going back goes from the next page
 	chip  string // the author whose sidebar chip takes the face back
 	run   uint64 // tells this crossing from the one before
+	door  string // the kind whose door opens into its page, or closes back (doorGround)
 }
 
 // leaving is the page left, built on through the frame that shows the
@@ -220,7 +221,12 @@ func (a *App) back(c *ui.Context) {
 	still := a.still(c)
 	switch left.kind {
 	case "reader":
-		if to.kind == "explore" || to.kind == "kind" || a.trials[left.id] != nil {
+		if to.kind == "kind" {
+			// Back to a kind's wall, the page gathers into the work's tile (kindTile).
+			a.lay, a.layRow = &motion.Lay{Ground: motion.Gather, From: a.paper(), Run: a.run, Still: still}, left.id
+			break
+		}
+		if to.kind == "explore" || a.trials[left.id] != nil {
 			// Back to Explore, or to an Explore post's row on 首页, it just crosses; from the keys, the focus goes back to the post.
 			break
 		}
@@ -231,6 +237,12 @@ func (a *App) back(c *ui.Context) {
 		// The page rises under the article and shrinks into its row, once
 		// the row is laid out; without one, it melts where it is.
 		a.lay, a.layRow = &motion.Lay{Ground: motion.Gather, From: a.paper(), Run: a.run, Still: still}, left.id
+	case "kind":
+		// Back to Explore the name goes home to its door, as the head closes back into it (kindShare).
+		if !still && to.kind == "explore" {
+			m.door = left.id
+			a.fly("kind:"+left.id, kindName(left.id), left, to, kindTitle, doorNameAtRest, float32(theme.Item)/theme.Headline, motion.Back)
+		}
 	case "author":
 		// Back to the sidebar the name goes home to its row; elsewhere the page just crosses.
 		if !still && to.kind == "home" && a.exPersonOf(left.id) == nil {
@@ -371,14 +383,22 @@ func (a *App) stage(c *ui.Context) {
 		if l := a.lay; l != nil && !l.View(c, ui.Point{X: a.area.X, Y: a.area.Y}) {
 			a.lay = nil
 		}
-		// The page left, under the next, lets go as the change says.
+		// The page left, under the next, lets go as the change says; through a door it is built on as it goes
+		// (doorLeave), a kind's page closing back into its door going over Explore, which its ground uncovers
+		// (doorGround).
 		if l := a.left; l != nil {
-			t := l.move.depth.Crossing().Leave()
-			if a.still(c) {
-				t = motion.Still(t)
+			lp := ui.Column(c.Key(l.page.kind + ":" + l.page.id)).Absolute().Fill()
+			if l.move.door != "" {
+				a.doorLeave(lp, l.move)
 			}
-			ui.Column(c.Key(l.page.kind + ":" + l.page.id)).Absolute().Fill().ZIndex(1).
-				Children(func() { a.pageView(c, l.page, l.from, false) }).Transition(t)
+			lp.Children(func() { a.pageView(c, l.page, l.from, false) })
+			if l.move.door == "" {
+				t := l.move.depth.Crossing().Leave()
+				if a.still(c) {
+					t = motion.Still(t)
+				}
+				lp.ZIndex(1).Transition(t)
+			}
 		}
 		// The article under the pointer, laid out unseen where its page will
 		// be; not while a crossing plays, nor while its page is leaving.
@@ -402,11 +422,31 @@ func (a *App) stage(c *ui.Context) {
 					Children(func() { a.unseen(func() { a.pageView(c, page{"author", id}, nil, false) }) })
 			}
 		}
+		// And Explore under a kind's way back to it, the pointer on it.
+		if p := a.page; p.kind == "kind" && a.next == nil && a.left == nil && a.backTo() == (page{kind: "explore"}) {
+			if at := a.wall(p.id).back; !at.IsZero() {
+				if wait := max(hoverWarm-c.Now().Sub(at), crossingTime-c.Now().Sub(a.movedAt)); wait > 0 {
+					c.After(wait)
+				} else {
+					ui.Column(c.Key("explore:")).Absolute().Fill().ZIndex(1).Invisible().AccessHidden(true).
+						Children(func() { a.unseen(func() { a.pageView(c, page{kind: "explore"}, nil, false) }) })
+				}
+			}
+		}
 		p := a.page
+		m := a.came
+		door := m != nil && m.door != ""
+		if door && m.depth == motion.Deep {
+			a.doorGround(c, m, true)
+		}
 		pg := ui.Column(c.Key(p.kind + ":" + p.id)).Absolute().Fill().ZIndex(1)
 		pg.Children(func() { a.pageView(c, p, a.from, true) })
-		if m := a.came; m != nil && !m.kbd {
+		// Through a door the page comes in on the ground the door opens, or Explore lies under the ground closing.
+		if m != nil && !m.kbd && !(door && !a.still(c)) {
 			a.comeIn(c, pg, m)
+		}
+		if door && m.depth == motion.Back {
+			a.doorGround(c, m, false)
 		}
 		a.scrollbar(c)
 	})

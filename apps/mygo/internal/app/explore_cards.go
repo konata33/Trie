@@ -68,17 +68,37 @@ func firstRune(s string) string {
 // where there is no picture: no clip and no mask, which a scroll would make
 // the CPU draw again in every frame.
 func band(c *ui.Context, top, h, rise float32, pic *exPic, y, pw, ph float32, radius float32) {
-	if h <= 0 {
+	bandOver(c, bandKey{w: pw, h: h, top: top, rise: rise, y: y, ph: ph}, pic, radius)
+}
+
+// bandAtFoot is band baked for g, held at the foot of its box however tall
+// the box is: in a frame that flies, it goes with the picture.
+func bandAtFoot(c *ui.Context, g bandKey, pic *exPic, radius float32) {
+	var box ui.Element
+	if bmp := pic.band(g); bmp != nil {
+		box = ui.Image(c, bmp).Fit(ui.FillBox)
+	} else {
+		box = ui.Box(c).LinearGradient(bandScrim(min(1, g.rise/g.h)))
+	}
+	box.Absolute().Left(0).Right(0).Bottom(0).Height(g.h).IgnoreInput(true).AccessHidden(true)
+	if radius > 0 {
+		box.Radius(0, 0, radius, radius)
+	}
+}
+
+// bandOver is band baked for g.
+func bandOver(c *ui.Context, g bandKey, pic *exPic, radius float32) {
+	if g.h <= 0 {
 		return
 	}
 	var box ui.Element
-	if bmp := pic.band(bandKey{w: pw, h: h, top: top, rise: rise, y: y, ph: ph}); bmp != nil {
+	if bmp := pic.band(g); bmp != nil {
 		box = ui.Image(c, bmp).Fit(ui.FillBox)
 	} else {
-		box = ui.Box(c).LinearGradient(bandScrim(min(1, rise/h)))
+		box = ui.Box(c).LinearGradient(bandScrim(min(1, g.rise/g.h)))
 	}
 	// Under the words, whether they are laid out in the flow or placed (absolute boxes paint above the flow).
-	box.Absolute().Left(0).Right(0).Top(top).Height(h).ZIndex(-1).IgnoreInput(true).AccessHidden(true)
+	box.Absolute().Left(0).Right(0).Top(g.top).Height(g.h).ZIndex(-1).IgnoreInput(true).AccessHidden(true)
 	if radius > 0 {
 		box.Radius(0, 0, radius, radius)
 	}

@@ -1,13 +1,17 @@
 package app
 
 import (
+	"image"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
+	"trie/internal/explore"
 	"trie/internal/library"
+	"trie/internal/motion"
 )
 
 // Under the design room's front page, a door for each kind the galleries
@@ -62,6 +66,47 @@ func TestExploreKinds(t *testing.T) {
 	tt.Frame()
 	if a.page != (page{kind: "explore"}) || !tt.Focused("落地页") {
 		t.Fatalf("Esc goes back to the door: %+v", a.page)
+	}
+}
+
+// Through a door Explore goes on, inert and unread, while it goes out of
+// focus over the door's ground, and is let go once gone, rather than left
+// to a copy that would lay its text out anew. On the wall, the pointer
+// resting on the way back marks it, for Explore to be laid out unseen.
+func TestDoorLeave(t *testing.T) {
+	a, _ := newExploreApp(t, nil)
+	tt := exploreTester(a)
+	toExplore(t, a, tt)
+	a.ex.scroll.Y = 500
+	tt.Frame()
+	rest(tt)
+	must(t, tt.Click("落地页"))
+	tt.Advance(50 * time.Millisecond)
+	if l := a.left; l == nil || l.page != (page{kind: "explore"}) {
+		t.Fatalf("Explore goes on as the door opens: %+v", a.left)
+	}
+	if _, ok := tt.AccessByRole(ui.RoleNavigation, "按要做的东西找"); ok {
+		t.Fatal("the page left is not read out")
+	}
+	tt.Advance(motion.DoorLeave)
+	if a.left != nil {
+		t.Fatalf("Explore is let go once gone: %+v", a.left)
+	}
+	rest(tt)
+	h, ok := tt.Find("落地页")
+	if !ok || a.page != (page{"kind", "landing"}) {
+		t.Fatalf("on the wall: %+v", a.page)
+	}
+	kw := a.wall("landing")
+	tt.Move(h.X-20, 30) // on the way back, above the head
+	tt.Advance(50 * time.Millisecond)
+	if kw.back.IsZero() {
+		t.Fatal("resting on the way back marks it")
+	}
+	tt.Move(h.X+200, 400)
+	tt.Frame()
+	if !kw.back.IsZero() {
+		t.Fatal("leaving it unmarks it")
 	}
 }
 
@@ -195,5 +240,74 @@ func TestMapLayout(t *testing.T) {
 	rows := mapRows([]float32{1.5, 1.5, 1.5, 1.5, 1.5}, 1000, 280, 8)
 	if last := rows[2]; last.Y != rows[0].Y || last.X+last.W < 999 {
 		t.Errorf("the first row does not fill the width: %v", rows[:3])
+	}
+}
+
+// A door stands on the work chosen for its kind, the same on every visit;
+// where that cannot be had (offline on a first start), on the kind's newest.
+func TestDoorCover(t *testing.T) {
+	for _, k := range kindOrder {
+		if doorCovers[k].src == "" {
+			t.Errorf("%s has no work of its own to stand on", k)
+		}
+	}
+	a, _ := newExploreApp(t, nil)
+	tt := exploreTester(a)
+	toExplore(t, a, tt)
+	ex := a.ex
+	ex.scroll.Y = 500
+	tt.Frame()
+	rest(tt)
+	works := ex.kinds["landing"]
+	if len(works) == 0 {
+		t.Fatal("Land-book shelves its works under landing")
+	}
+	if cov, pic := a.doorPic("landing"); cov.src != "" || pic != a.workPic(works[0]) {
+		t.Fatalf("offline, the door stands on the kind's newest: %q %p", cov.src, pic)
+	}
+	ex.pics["door:landing"] = &exPic{done: true, bmp: ui.NewBitmap(image.NewRGBA(image.Rect(0, 0, 4, 5)))}
+	if cov, pic := a.doorPic("landing"); cov.src != doorCovers["landing"].src || pic.bmp == nil {
+		t.Fatalf("its own work, once had: %q", cov.src)
+	}
+}
+
+// A kind's wall has the galleries take turns: the newest first, each
+// gallery's works in its own order, spread by its share, and none three
+// times running while another has works left.
+func TestTakeTurns(t *testing.T) {
+	big, b, c := &explore.Entry{ID: "big"}, &explore.Entry{ID: "b"}, &explore.Entry{ID: "c"}
+	var works []exWork
+	for i := range 8 {
+		works = append(works, exWork{entry: big, index: i})
+	}
+	works = append(works, exWork{entry: b, index: 0}, exWork{entry: c, index: 0}, exWork{entry: b, index: 1}, exWork{entry: c, index: 1})
+	got := takeTurns(works)
+	if len(got) != len(works) || got[0] != works[0] {
+		t.Fatalf("every work, the newest first: %v", got)
+	}
+	last := map[string]int{}
+	for i, w := range got {
+		if w.index < last[w.entry.ID] {
+			t.Fatalf("a gallery's works keep their order: %v", got)
+		}
+		last[w.entry.ID] = w.index
+		if i >= 2 && got[i-1].entry == w.entry && got[i-2].entry == w.entry && slices.ContainsFunc(got[i+1:], func(x exWork) bool { return x.entry != w.entry }) {
+			t.Fatalf("%s three times running at %d while others wait: %v", w.entry.ID, i, got)
+		}
+	}
+	if got[1].entry == big && got[2].entry == big {
+		t.Errorf("the small galleries come in near the top: %v", got[:4])
+	}
+}
+
+// A work's picture taller than twice its width keeps only its top, as no
+// box holding it by its top shows more; one no taller stays as it is.
+func TestTopOf(t *testing.T) {
+	if b := topOf(image.NewRGBA(image.Rect(0, 0, 120, 1240))).Bounds(); b != image.Rect(0, 0, 120, 240) {
+		t.Fatalf("a page captured whole keeps its top: %v", b)
+	}
+	short := image.Image(image.NewRGBA(image.Rect(0, 0, 120, 200)))
+	if topOf(short) != short {
+		t.Fatal("a picture no taller than twice its width stays whole")
 	}
 }

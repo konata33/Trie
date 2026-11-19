@@ -81,6 +81,8 @@ type exPic struct {
 	bands map[bandKey]*ui.Bitmap
 	at    time.Time  // when it came, for its fade (set on the first frame that shows it)
 	dots  []ui.Color // its three main colours (palette)
+	// How bright it rests and comes up to, by how light it is (toneOf); a door's.
+	rest, lit float32
 }
 
 // roomMove is the rooms on their spring, from where they were toward room
@@ -440,9 +442,26 @@ func (ex *exploreState) find(id string) *explore.Entry {
 
 // decodePic decodes a data: picture; soft also makes the blurred copy the
 // words' band shows under them.
-func decodePic(data string, soft bool) *exPic {
+func decodePic(data string, soft bool) *exPic { return picOf(decodeData(data), soft) }
+
+// topOf is the top of a picture taller than twice its width, as tall as
+// that: a page captured whole (1200×12000) shows no more of itself in a box
+// holding it by its top, none of which is taller than that, and costs a
+// fifth to draw.
+func topOf(img image.Image) image.Image {
+	b := img.Bounds()
+	sub, ok := img.(interface {
+		SubImage(image.Rectangle) image.Image
+	})
+	if h := 2 * b.Dx(); ok && b.Dy() > h {
+		return sub.SubImage(image.Rect(b.Min.X, b.Min.Y, b.Max.X, b.Min.Y+h))
+	}
+	return img
+}
+
+// picOf is img as Explore draws it (decodePic), or a picture of none.
+func picOf(img image.Image, soft bool) *exPic {
 	p := &exPic{done: true}
-	img := decodeData(data)
 	if img == nil {
 		return p
 	}
@@ -451,6 +470,7 @@ func decodePic(data string, soft bool) *exPic {
 	if soft {
 		p.small = shrinkTo(img, 40)
 		p.soft = ui.NewBitmap(p.small)
+		p.rest, p.lit = toneOf(p.small)
 	}
 	return p
 }
@@ -496,8 +516,9 @@ func decodeData(data string) image.Image {
 
 // picture is a picture Explore loads on first sight (a gallery's work, a
 // site's capture, a writer's latest picture): load gives its data URL, ""
-// for none. Works come four at a time.
-func (a *App) picture(key string, queued bool, load func() string) *exPic {
+// for none. Works come four at a time. top keeps only the top of a tall one
+// (topOf), for a picture every box holds by its top.
+func (a *App) picture(key string, queued, top bool, load func() string) *exPic {
 	ex := a.ex
 	if p := ex.pics[key]; p != nil || a.warming {
 		return p
@@ -511,7 +532,11 @@ func (a *App) picture(key string, queued bool, load func() string) *exPic {
 		}
 		got := &exPic{done: true}
 		if data := load(); data != "" {
-			got = decodePic(data, true)
+			img := decodeData(data)
+			if top && img != nil {
+				img = topOf(img)
+			}
+			got = picOf(img, true)
 		}
 		return func() { *p = *got }
 	})
@@ -520,7 +545,9 @@ func (a *App) picture(key string, queued bool, load func() string) *exPic {
 
 func (a *App) workPic(w exWork) *exPic {
 	svc, id, i := a.opt.Explore, w.entry.ID, w.index
-	return a.picture("work:"+w.key(), true, func() string {
+	// Every box holds a work by its top, but a wall holding its kind's by their middle (wallLooks).
+	top := !slices.ContainsFunc(a.ex.kindOf[w.url], func(k string) bool { return wallLooks[k].py != 0 })
+	return a.picture("work:"+w.key(), true, top, func() string {
 		data, _ := svc.Work(bg, id, i)
 		return data
 	})
@@ -530,7 +557,7 @@ func (a *App) workPic(w exWork) *exPic {
 // capture, a writer's latest post's picture.
 func (a *App) fullShot(e *explore.Entry) *exPic {
 	svc, id := a.opt.Explore, e.ID
-	return a.picture("shot:"+id, false, func() string {
+	return a.picture("shot:"+id, false, false, func() string {
 		data, _ := svc.Shot(bg, id)
 		return data
 	})
@@ -934,7 +961,7 @@ func (a *App) room(c *ui.Context, g exGeometry, room int, live, both bool, p flo
 		}
 		part.Children(func() {
 			if room == design {
-				a.kindShelf(c, g)
+				a.kindShelf(c, g, live)
 				a.siteStream(c, g, live && on)
 			} else {
 				a.coverStream(c, g, live && on)

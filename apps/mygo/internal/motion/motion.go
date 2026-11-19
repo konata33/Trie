@@ -661,3 +661,16 @@ func (d Dissolve) Closed(t time.Duration) float32 {
 func (d Dissolve) Closing() time.Duration {
 	return time.Duration(settleRate / (2 * math.Pi) * float64(d.Close))
 }
+
+// Unfold is a kind's wall coming in under its head as its door opens into
+// it (PAGES.md 类别页): its rows come into focus from Rise below over In,
+// the first After the crossing starts, each Row after the one above.
+var Unfold = struct {
+	After, Row, In time.Duration
+	Rise           float32
+}{After: 240 * time.Millisecond, Row: 60 * time.Millisecond, In: 420 * time.Millisecond, Rise: 16}
+
+// DoorLeave is how long the page a door opens or closes over takes to go:
+// covered by the ground the door opens, or gone from over Explore before
+// that ground draws back into the door (PAGES.md 类别页).
+const DoorLeave = 150 * time.Millisecond

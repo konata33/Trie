@@ -31,16 +31,6 @@ func artSVG(name string) *ui.SVG {
 // element's text is given.
 type glyph struct{ ink, accent *ui.SVG }
 
-// doorArt are Explore's doors, a poster for each kind
-// (art/door-<kind>.svg, 1024 by 1280): an ink and one fill, as an icon's.
-var doorArt = sync.OnceValue(func() map[string]glyph {
-	m := map[string]glyph{}
-	for _, k := range kindOrder {
-		m[k] = glyph{ink: artSVG("door-" + k), accent: artSVG("door-" + k + "-accent")}
-	}
-	return m
-})
-
 // loading is the loading mark (DESIGN.md 读取记号): refresh's trail without
 // its arrowhead, in the colour of the text around it, turning clockwise
 // 1.1 s a turn; under less motion it holds still and breathes.

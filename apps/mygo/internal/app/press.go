@@ -12,7 +12,7 @@ import (
 // Press asks the window to do what a named control does, as the pointer
 // would, in its next frame: "author:<source ID>", "open:<article ID>",
 // "back", "dialog", "close", "sheet", and on Explore "tab:explore", "door",
-// "card:<entry ID>", "scroll:<y>"; in 收藏 "shelf:<source ID>" (into
+// "card:<entry ID>", "kind:<kind>", "scroll:<y>"; in 收藏 "shelf:<source ID>" (into
 // an author), "letgo:<source ID>" (their whole shelf), "undo"; in 摘录
 // "clip:<clip ID>" (its card), "cite" (the card's article); on 首页
 // "read:<article ID>" (a column of the people followed); on 收藏 (the
@@ -52,6 +52,10 @@ func (a *App) presses(c *ui.Context) {
 		case "door": // Explore's way across
 			if a.page.kind == "explore" {
 				a.enterRoom(c, 1-a.ex.room, false, 0)
+			}
+		case "kind": // a kind's door opening into its wall
+			if a.page.kind == "explore" {
+				a.openKind(c, id)
 			}
 		case "card": // an Explore card opening its author's page
 			if e := a.ex.find(id); e != nil {

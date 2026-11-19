@@ -251,8 +251,8 @@ func (a *App) View(c *ui.Context) {
 	if len(a.pressed) > 0 {
 		a.presses(c)
 	}
-	if l := a.left; l != nil && c.Now().After(l.at) {
-		a.left = nil // a frame later: its copy goes as its exit says
+	if l := a.left; l != nil && c.Now().After(l.at) && (l.move.door == "" || c.Now().Sub(l.at) >= motion.DoorLeave) {
+		a.left = nil // a frame later: its copy goes as its exit says; through a door, once it has gone (doorLeave)
 	}
 	if m := a.next; m != nil {
 		a.movedAt = c.Now()

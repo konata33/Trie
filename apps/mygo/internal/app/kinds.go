@@ -13,11 +13,10 @@ import (
 )
 
 // What is being made (落地页, 作品集, 动效, 字体, 品牌): under the design
-// room's front page, a door for each, standing on its newest work and
-// turning through the next while pointed at; behind each, a wall of the
-// kind's works from every gallery that shelves them, newest first. A
-// gallery shelves its works by the catalog (explore.Shelf), never by a
-// guess at one work.
+// room's front page, a door for each, standing on a work chosen for it;
+// behind each, a wall of the kind's works from every gallery that shelves
+// them, newest first. A gallery shelves its works by the catalog
+// (explore.Shelf), never by a guess at one work.
 
 var kindOrder = []string{"landing", "portfolio", "motion", "type", "brand"}
 
@@ -54,8 +53,9 @@ func kindSources(works []exWork) []*explore.Entry {
 }
 
 // kindShelf is the doors, in one row as wide as the stream under them; a
-// kind with no work yet has none.
-func (a *App) kindShelf(c *ui.Context, g exGeometry) {
+// kind with no work yet has none. live is false for Explore built for its
+// exit.
+func (a *App) kindShelf(c *ui.Context, g exGeometry, live bool) {
 	var kinds []string
 	for _, k := range kindOrder {
 		if len(a.ex.kinds[k]) > 0 {
@@ -66,26 +66,94 @@ func (a *App) kindShelf(c *ui.Context, g exGeometry) {
 		return
 	}
 	n := float32(len(kinds))
-	w := (g.cw - 32 - (n-1)*16) / n
+	w := (g.cw - (n-1)*16) / n
 	ui.Row(c.Key("kinds")).Gap(16).Margin(0, 0, 56, 0).Role(ui.RoleNavigation).Label(locales.ExploreKinds()).Children(func() {
 		for _, k := range kinds {
-			a.kindDoor(c, k, w, w*5/4)
+			a.kindDoor(c, k, w, w*5/4, live)
 		}
 	})
 }
 
-// kindDoor is one kind's door: a poster of our own, the same on every
-// visit whatever the galleries showed last: the kind's subject drawn large
-// in the icons' hand and cut by the door's edges, the guide line its makers
-// watch running across it; its lower part sinks into the plate, its name
-// over it. Pointed at, the plate comes up, the lines brighten and the fill
-// lights.
-func (a *App) kindDoor(c *ui.Context, k string, w, h float32) {
+// doorCover is what a kind's door stands on: a work chosen for the kind,
+// the same on every visit, held as that kind is looked at; lit, it moves
+// on as one goes on looking.
+type doorCover struct {
+	src string // the work's picture
+	// At rest the picture covers a box zoom times the door, grown about
+	// fx, fy of it, and is held there at px, py (ObjectPosition).
+	px, py, zoom, fx, fy float32
+	// Lit, it is held at litX, litY and as close as litZoom.
+	litX, litY, litZoom float32
+	// At the head of the kind's page, the door opened, it is held at
+	// headX, headY.
+	headX, headY float32
+}
+
+// doorCovers are the works the doors stand on: dark ones, so that the five
+// sit together under the front page and none glares.
+var doorCovers = map[string]doorCover{
+	// A landing page from its first screen, as it opens; lit, it scrolls
+	// on down. Unicorn Studio, from Land-book.
+	"landing": {src: "https://cdn.land-book.com/image/0x0:2880x4320/600x0/filters:format(jpeg)/website/100879/08621d6d6013a7df-screenshot-upload?signature=aa9cf3c7d5cdefd041bbb75ef52292fa68cd7e5a7f576165d492469eb2d00edb",
+		px: 0.5, py: 0, zoom: 1, fx: 0.5, fy: 0.5, litX: 0.5, litY: 1, litZoom: 1, headX: 0.5, headY: 0.36},
+	// A portfolio open at one work, the next ones beside it; lit, it leafs
+	// on to the next. Carter Ogunsola, from Minimal Gallery.
+	"portfolio": {src: "https://minimal.gallery/wp-content/uploads/2026/10/carterogunsola.com_.jpg",
+		px: 0.5, py: 0.5, zoom: 1, fx: 0.5, fy: 0.5, litX: 0.62, litY: 0.5, litZoom: 1, headX: 0.5, headY: 0.5},
+	// A frame of a piece in motion; lit, the camera moves in. Orchestrated,
+	// from The FWA.
+	"motion": {src: "https://thefwa.com/img/submissions/26538a45-6a0d-462a-a363-8ec91dc1f698/1-a143568e-af6a-494c-a7fb-7e0db8a5bf0f.webp?w=1200",
+		px: 0.56, py: 0.5, zoom: 1, fx: 0.5, fy: 0.5, litX: 0.56, litY: 0.5, litZoom: 1.06, headX: 0.5, headY: 0.42},
+	// One letter in many faces, seen close; lit, closer. The Bitcoin
+	// Typefaces poster, from Fonts In Use.
+	"type": {src: "https://assets.fontsinuse.com/static/use-media-items/308/307552/upto-700xauto/6ad61590/bitcoin-typefaces-2000x2824.png",
+		px: 0.5, py: 0, zoom: 1.15, fx: 0.5, fy: 0.25, litX: 0.5, litY: 0, litZoom: 1.25, headX: 0.5, headY: 0.3},
+	// A mark where it lives, on a label; lit, it leans in. Blæst, from
+	// Abduzeedo.
+	"brand": {src: "https://cms.abduzeedo.com/sites/default/files/originals/hero_blaest-www-kurppahosk-com.jpg",
+		px: 0.5, py: 0.5, zoom: 1, fx: 0.5, fy: 0.5, litX: 0.5, litY: 0.5, litZoom: 1.03, headX: 0.5, headY: 0.12},
+}
+
+// doorNewest is how a door holds the kind's newest work when its own
+// cannot be had: as the stream holds a picture.
+var doorNewest = doorCover{px: 0.5, py: 0, zoom: 1, fx: 0.5, fy: 0.5, litX: 0.5, litY: 0, litZoom: 1.03, headX: 0.5, headY: 0.2}
+
+// doorPic is the picture a kind's door stands on, and how it holds it: its
+// own work, or the kind's newest where that cannot be had (offline on a
+// first start, or gone from the web).
+func (a *App) doorPic(k string) (doorCover, *exPic) {
+	if cov, ok := doorCovers[k]; ok && a.opt.Explore != nil {
+		svc, src := a.opt.Explore, cov.src
+		p := a.picture("door:"+k, true, false, func() string { return svc.Picture(bg, src) })
+		if p == nil || !p.done || p.bmp != nil {
+			return cov, p
+		}
+	}
+	if works := a.ex.kinds[k]; len(works) > 0 {
+		return doorNewest, a.workPic(works[0])
+	}
+	return doorNewest, nil
+}
+
+func lerpf(a, b, t float32) float32 { return a + (b-a)*t }
+
+// kindDoor is one kind's door: its work fills it, resting as bright as the
+// picture allows (toneOf, as the home page's first screen does), its name
+// at the foot on the words' band as the stream's names below sit on
+// theirs. Pointed at or in focus, one number lights it, the name coming up
+// from text-2, and moves the picture the way its kind is looked at.
+// Opened, the picture and the name go on to the head of the kind's page
+// (kindShare, openKind).
+func (a *App) kindDoor(c *ui.Context, k string, w, h float32, live bool) {
 	ex := a.ex
+	cov, pic := a.doorPic(k)
 	door := ui.Box(c.Key(k)).Size(w, h).Radius(10)
 	a.intoView(door, 0)
+	if b := door.LayoutBounds(); live && b.W > 0 {
+		a.wall(k).doorAt = b
+	}
 	door.Children(func() {
-		b := ui.ButtonBase(c.Key("open")).Label(kindName(k)).Absolute().Fill().Radius(10).ClipX().ClipY().FocusRing(false)
+		b := ui.ButtonBase(c.Key("open")).Label(kindName(k)).Absolute().Fill().Radius(10).ClipX().ClipY().FocusRing(false).Background(theme.Surface)
 		if ex.focus == "kind:"+k {
 			ex.focus = ""
 			b.Focus()
@@ -102,104 +170,86 @@ func (a *App) kindDoor(c *ui.Context, k string, w, h float32) {
 			p := door.AnimateTo("press", s, ui.Animation{Duration: motion.Press, Ease: motion.Ease})
 			door.TransformOrigin(0.5, 0.5).Scale(p, p)
 		}
-		lit := b.Hovered() || focus
-		ground, edge, ink, fill := theme.Surface, theme.LineSoft, theme.Muted, theme.IconFill
-		if lit {
-			ground, edge, ink, fill = theme.Elevated, theme.Line, theme.Text2, theme.Accent
+		on := float32(0)
+		if b.Hovered() || focus {
+			on = 1
 		}
-		ease := a.ease(motion.Hover)
-		ground = b.AnimateColor("bg", ground, ease)
-		b.Background(ground).InsetShadow(0, 0, 0, 1, b.AnimateColor("edge", edge, ease))
+		light := b.AnimateTo("light", on, a.ease(motion.Lean))
+		look := light // under less motion the door lights and stays still
+		if a.still(c) {
+			look = 0
+		}
 		if b.Clicked() {
 			a.openKind(c, k)
 		}
-		art := doorArt()[k]
 		b.Children(func() {
-			ui.Icon(c, art.accent).Absolute().Fill().AccessHidden(true).TextColor(b.AnimateColor("fill", fill, a.ease(motion.State)))
-			ui.Icon(c, art.ink).Absolute().Fill().AccessHidden(true).TextColor(b.AnimateColor("ink", ink, ease))
-			// Whatever runs under the name sinks into the plate first.
-			ui.Box(c.Key("sink")).Absolute().Left(0).Right(0).Bottom(0).Height(h * 0.5).IgnoreInput(true).LinearGradient(ui.LinearGradient{Angle: 180,
-				Stops: []ui.GradientStop{{Color: ground.Alpha(0), At: 0}, {Color: ground.Alpha(0.94), At: 0.45}, {Color: ground, At: 1}}})
-			ui.Text(c, kindName(k)).FontSize(theme.Title).LineHeight(1.2).FontWeight(650).LetterSpacing(-0.01 * theme.Title).TextColor(theme.Text).
-				MaxLines(2).Absolute().Left(18).Right(16).Bottom(18)
+			// The picture in a frame of its own, which opens into the head of the kind's page, the words' band going
+			// with it: flying, it is drawn over the page, and its own words would show through where the name lands.
+			frm := ui.Box(c.Key("pic")).Absolute().Fill().Radius(10).ClipX().ClipY().IgnoreInput(true).AccessHidden(true)
+			fly := a.kindShare(c, frm, k, page{kind: "explore"}, live)
+			frm.Children(func() {
+				if pic != nil && pic.bmp != nil {
+					z, x, y := lerpf(cov.zoom, cov.litZoom, look), lerpf(cov.px, cov.litX, look), lerpf(cov.py, cov.litY, look)
+					// Closing back from the head, held at first as the head held it, coming to the door's own hold.
+					kw := a.wall(k)
+					kw.door = hold{w, h, x, y}
+					if fly != nil {
+						t := opening(frm, fly)
+						x, y = between(pic, kw.head, kw.door, t)
+						z = lerpf(1, z, t)
+					}
+					// In shares of the frame, so that the picture fills it at every size it flies through.
+					ui.Image(c, pic.bmp).Fit(ui.Cover).ObjectPosition(x, y).Absolute().
+						LeftPercent(-100 * (z - 1) * cov.fx).TopPercent(-100 * (z - 1) * cov.fy).WidthPercent(100 * z).HeightPercent(100 * z).Opacity(a.arrived(c, pic, motion.SwapIn))
+					if v := 1 - lerpf(pic.rest, pic.lit, light); pic.rest > 0 && v > 0.001 {
+						ui.Box(c).Absolute().Fill().Background(theme.Darken).Opacity(v)
+					}
+				}
+				// The band is baked for the picture at rest; lit, the picture moves under it, which the blur hides.
+				pw, ph := w*cov.zoom, h*cov.zoom
+				bandAtFoot(c, bandKey{w: w, h: 130, top: h - 130, rise: 96, y: -(ph - h) * cov.fy, ph: ph, x: -(pw - w) * cov.fx, pw: pw, px: cov.px, py: cov.py}, pic, 10)
+			})
+			if pic == nil || !pic.done {
+				a.breathing(c, theme.Hover)
+			}
+			ui.Box(c.Key("cap")).Absolute().Fill().IgnoreInput(true).ZIndex(1).Children(func() {
+				name := ui.Text(c, kindName(k)).FontSize(theme.Item).LineHeight(20.0 / 15).FontWeight(600).TextColor(theme.Text2.Mix(theme.Text, light)).
+					SingleLine().Absolute().Left(16).Right(16).Bottom(14)
+				a.end(name, page{kind: "explore"}, "kind:"+k)
+			})
+			// The edge drawn over the picture, so that a dark work keeps its door's shape on the dark page.
+			ui.Box(c).Absolute().Fill().Radius(10).InsetShadow(0, 0, 0, 1, theme.LineSoft).IgnoreInput(true).ZIndex(2)
 		})
 	})
 }
 
-// openKind goes into a kind's wall from its door; the door takes the focus
-// back when the keys come back.
+// openKind goes into a kind's wall from its door: the door's picture opens
+// into the head of the page (kindShare) and its name goes up to the head's,
+// growing; the door takes the focus back when the keys come back.
 func (a *App) openKind(c *ui.Context, k string) {
 	a.ex.opener = "kind:" + k
-	a.goTo(c, page{"kind", k}, motion.Deep, append(a.from[:len(a.from):len(a.from)], a.page))
+	at := a.page
+	m := a.goTo(c, page{"kind", k}, motion.Deep, append(a.from[:len(a.from):len(a.from)], at))
+	if m != nil && !m.kbd && !a.still(c) {
+		m.door = k
+		a.fly("kind:"+k, kindName(k), at, m.to, doorName, kindTitle, float32(theme.Headline)/theme.Item, motion.Deep)
+	}
 }
 
-// kindWall is what a kind's page keeps: its scroll, and how many works it
-// shows so far.
-type kindWall struct {
-	scroll ui.ScrollState
-	shown  int
-	endY   float32
+// doorName is a kind's name on its door, lit; doorNameAtRest, at rest.
+func doorName(c *ui.Context, s string) ui.Element { return doorWords(c, s).TextColor(theme.Text) }
+
+func doorNameAtRest(c *ui.Context, s string) ui.Element {
+	return doorWords(c, s).TextColor(theme.Text2)
 }
 
-// kindPage is a kind's wall: its name, the galleries behind it, then its
-// works three across, newest first, a picture each, the title rising over
-// it when pointed at; the next twelve come as the end nears.
-func (a *App) kindPage(c *ui.Context, k string, live bool) {
-	ex := a.ex
-	if ex.walls == nil {
-		ex.walls = map[string]*kindWall{}
-	}
-	kw := ex.walls[k]
-	if kw == nil {
-		kw = &kindWall{shown: 12}
-		ex.walls[k] = kw
-	}
-	works := ex.kinds[k]
-	n := min(kw.shown, len(works))
-	sc := ui.Scroll(c.Key("scroll")).TrackScroll(&kw.scroll).Grow(1).FillWidth().Scrollbars(false)
-	if live {
-		a.scrolling = &kw.scroll
-	}
-	cw := (min(1200, a.area.W) - 64 - 2*16) / 3
-	sc.Children(func() {
-		frame(c).Padding(0, 32, 140, 32).Children(func() {
-			a.band(c, func() { a.backLink(c, backLabel(a, a.backTo())) }, func() {})
-			ui.Row(c.Key("head")).Margin(16, 0, 40, 0).Gap(16).AlignItems(ui.End).Children(func() {
-				ui.Text(c, kindName(k)).FontSize(40).LineHeight(1.15).FontWeight(650).LetterSpacing(-0.02 * 40).TextColor(theme.Text).
-					Role(ui.RoleHeading).Level(1).Grow(1)
-				from := kindSources(works)
-				ui.Row(c.Key("from")).Gap(8).Padding(0, 0, 6, 0).Children(func() {
-					for _, e := range from {
-						f := a.exFace(c, e, 24, false, 11)
-						a.tip(c, f, e.Name, false)
-					}
-				})
-			})
-			ui.Column(c.Key("wall")).Gap(16).Role(ui.RoleList).Label(kindName(k)).Children(func() {
-				for row := 0; row*3 < n; row++ {
-					ui.Row(c.Key(row)).Gap(16).Children(func() {
-						for col := range 3 {
-							if i := row*3 + col; i < n {
-								cell := ui.Box(c.Key(works[i].key())).Role(ui.RoleListItem)
-								a.intoView(cell, 0)
-								cell.Children(func() { a.frame(c, works[i], cw, cw*10/16) })
-							}
-						}
-					})
-				}
-			})
-			if n < len(works) {
-				end := ui.Box(c.Key("end")).Height(1).FillWidth().AccessHidden(true)
-				if live && !a.warming {
-					if y := end.LayoutBounds().Y; end.InViewMargin(0, 0, 600, 0) && y != kw.endY {
-						kw.endY = y
-						kw.shown += 12
-						c.Invalidate()
-					}
-				}
-			}
-		})
-	})
+func doorWords(c *ui.Context, s string) ui.Element {
+	return ui.Text(c, s).FontSize(theme.Item).LineHeight(20.0 / 15).FontWeight(600).SingleLine()
+}
+
+// kindTitle is a kind's name at the head of its page.
+func kindTitle(c *ui.Context, s string) ui.Element {
+	return ui.Text(c, s).FontSize(theme.Headline).LineHeight(40.0 / 32).FontWeight(650).LetterSpacing(-0.015 * theme.Headline).TextColor(theme.Text).SingleLine()
 }
 
 // kindsOf is what a kept article is shelved under: what it was kept with
