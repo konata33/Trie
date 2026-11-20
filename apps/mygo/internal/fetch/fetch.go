@@ -188,7 +188,19 @@ func systemResolve(ctx context.Context, host string) ([]netip.Addr, error) {
 
 // One pool for every client, as node:https shares its global agent: a pooled
 // connection was dialled to an address checked for its host.
-var shared = newTransport(nil, (&net.Dialer{}).DialContext)
+var shared = newTransport(classicHello(nil), (&net.Dialer{}).DialContext)
+
+// classicHello leaves the post-quantum key share (X25519MLKEM768) out of the
+// TLS hello. It grows the hello past one packet, and through a fake-IP proxy
+// (Clash, mihomo) about two handshakes in five then end in EOF, against one in
+// seven for the classic hello; trying a feed twice did not get past that.
+func classicHello(config *tls.Config) *tls.Config {
+	if config == nil {
+		config = &tls.Config{}
+	}
+	config.CurvePreferences = []tls.CurveID{tls.X25519, tls.CurveP256, tls.CurveP384}
+	return config
+}
 
 type pinKey struct{}
 
@@ -206,10 +218,12 @@ func newTransport(config *tls.Config, dial func(ctx context.Context, network, ad
 			return dial(ctx, network, net.JoinHostPort(ip.String(), port))
 		},
 		TLSClientConfig: config,
-		// HTTP/1.1 only, as node:https speaks.
-		TLSNextProto:           map[string]func(string, *tls.Conn) http.RoundTripper{},
+		// A new connection through a proxy can take seconds to set up, so connections are kept for the next pictures:
+		// HTTP/2 where the site speaks it carries a page's pictures over one, and idle ones wait a minute and a half.
+		ForceAttemptHTTP2:      true,
+		MaxIdleConnsPerHost:    6,
 		MaxResponseHeaderBytes: 16 * 1024,
-		IdleConnTimeout:        5 * time.Second,
+		IdleConnTimeout:        90 * time.Second,
 	}
 }
 

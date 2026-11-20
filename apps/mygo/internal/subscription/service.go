@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"log"
 	"regexp"
 	"strings"
 	"sync"
@@ -138,6 +139,7 @@ func (s *Service) FetchFeed(ctx context.Context, input string) (library.ParsedFe
 		// Raw socket errors are English and technical; the reader only needs to know it was the connection.
 		res, err = get(ctx, url, anywhere, fetch.MaxBytes)
 		if errors.As(err, &ne) {
+			log.Printf("subscription: reading %s: %v", url, err)
 			return nil, errors.New(locales.SubscribeConnectionLost())
 		}
 		return res, err
@@ -368,6 +370,7 @@ func (s *Service) Refresh(ctx context.Context, sourceID string, onProgress func(
 					finished++
 					onProgress(Progress{SourceID: src.ID, State: "done", ImportedCount: &r.ImportedCount, Finished: finished, Total: total})
 				} else {
+					log.Printf("subscription: refreshing %s: %v", *src.FeedURL, err)
 					// Kept with the source in Chinese, as libraries hold it; the app translates it where it shows it.
 					const message = "刷新失败，已保留已有文章。请检查网络或订阅地址后重试"
 					if err := s.store.RecordFeedError(src.ID, message); err != nil && stored == nil {

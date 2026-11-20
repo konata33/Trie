@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -59,7 +60,9 @@ var certificate = sync.OnceValue(func() tls.Certificate {
 	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key, Leaf: leaf}
 })
 
-func newWire(t *testing.T, replies ...reply) *wire {
+func newWire(t *testing.T, replies ...reply) *wire { return startWire(t, false, replies...) }
+
+func startWire(t *testing.T, h2 bool, replies ...reply) *wire {
 	w := &wire{}
 	w.srv = httptest.NewUnstartedServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		w.mu.Lock()
@@ -95,6 +98,7 @@ func newWire(t *testing.T, replies ...reply) *wire {
 		rw.Write(rep.body)
 	}))
 	w.srv.TLS = &tls.Config{Certificates: []tls.Certificate{certificate()}}
+	w.srv.EnableHTTP2 = h2
 	w.srv.StartTLS()
 	t.Cleanup(w.srv.Close)
 	return w
@@ -256,6 +260,72 @@ func TestPinnedAddress(t *testing.T) {
 	if r.Header.Get("Cookie") != "" || r.Header.Get("Authorization") != "" || r.Header.Get("User-Agent") != "Trie/0.1 (Personal blog reader)" ||
 		r.Header.Get("Accept") != "text/html,application/xhtml+xml,application/rss+xml,application/atom+xml,image/*;q=0.8,*/*;q=0.5" || r.Header.Get("Accept-Encoding") != "gzip" || r.Proto != "HTTP/1.1" {
 		t.Fatalf("headers %v %s", r.Header, r.Proto)
+	}
+}
+
+// A site that speaks HTTP/2 is read over it, to the checked address: the reads after the first share its connection,
+// at once, and keep the request target and headers.
+func TestHTTP2SharesConnection(t *testing.T) {
+	w := startWire(t, true)
+	c := w.client(10, time.Second, google)
+	if _, err := c.Fetch(context.Background(), "https://writer.example/first", anywhere, MaxBytes); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	errs := make(chan error, 3)
+	for range 3 {
+		wg.Go(func() {
+			res, err := c.Fetch(context.Background(), "https://writer.example/a%20b?q=1", anywhere, MaxBytes)
+			if err == nil && (res.Status != 200 || string(res.Body) != "body") {
+				err = errors.New("bad response")
+			}
+			errs <- err
+		})
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := w.requests[len(w.requests)-1]
+	if r.ProtoMajor != 2 || r.Host != "writer.example" || r.RequestURI != "/a%20b?q=1" || r.Header.Get("User-Agent") != "Trie/0.1 (Personal blog reader)" {
+		t.Fatalf("%s Host %q target %q headers %v", r.Proto, r.Host, r.RequestURI, r.Header)
+	}
+	if len(w.dialed) != 1 || w.dialed[0] != "8.8.8.8:443" {
+		t.Fatalf("dialed %v", w.dialed)
+	}
+}
+
+// The pool's TLS hello offers no post-quantum key share, which fake-IP proxies often drop: a server that refuses
+// such a hello still answers the app, and refuses Go's default one.
+func TestClassicHello(t *testing.T) {
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) { rw.Write([]byte("feed")) }))
+	srv.TLS = &tls.Config{Certificates: []tls.Certificate{certificate()}, GetConfigForClient: func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
+		if slices.Contains(hello.SupportedCurves, tls.X25519MLKEM768) {
+			return nil, errors.New("hello too large")
+		}
+		return nil, nil
+	}}
+	srv.StartTLS()
+	defer srv.Close()
+	roots := x509.NewCertPool()
+	roots.AddCert(certificate().Leaf)
+	dial := func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, srv.Listener.Addr().String())
+	}
+	read := func(config *tls.Config) error {
+		config.RootCAs = roots
+		c := &Client{limit: 5, timeout: time.Second, resolve: google, transport: newTransport(config, dial)}
+		_, err := c.Fetch(context.Background(), "https://writer.example/feed", anywhere, MaxBytes)
+		return err
+	}
+	if err := read(shared.TLSClientConfig.Clone()); err != nil {
+		t.Fatal(err)
+	}
+	if read(&tls.Config{}) == nil {
+		t.Fatal("the server took a post-quantum hello")
 	}
 }
 
