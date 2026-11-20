@@ -68,11 +68,11 @@ func (a *App) follow(c *ui.Context, e *explore.Entry, where string) ui.Element {
 	ex := a.ex
 	key := where + ":" + e.ID
 	on := a.subscribedSource(e) != ""
-	busy := ex.busy == e.ID
+	busyAt, busy := ex.busy[e.ID]
 	now := c.Now()
-	working := busy && now.Sub(ex.busyAt) >= 150*time.Millisecond
+	working := busy && now.Sub(busyAt) >= 150*time.Millisecond
 	if busy && !working {
-		c.After(150*time.Millisecond - now.Sub(ex.busyAt))
+		c.After(150*time.Millisecond - now.Sub(busyAt))
 	}
 	st := ex.pills[key]
 	if st == nil {
@@ -191,10 +191,13 @@ func brighten(c ui.Color, k float32) ui.Color {
 // pill that subscribes again.
 func (a *App) toggleFollow(c *ui.Context, e *explore.Entry, pill string) {
 	ex := a.ex
-	if ex.busy != "" {
+	if _, ok := ex.busy[e.ID]; ok {
 		return
 	}
-	ex.busy, ex.busyAt = e.ID, c.Now()
+	if ex.busy == nil {
+		ex.busy = map[string]time.Time{}
+	}
+	ex.busy[e.ID] = c.Now()
 	name := e.Name
 	var icon *exPic
 	if p := ex.pics["icon:"+e.ID]; p != nil && p.bmp != nil {
@@ -207,7 +210,7 @@ func (a *App) toggleFollow(c *ui.Context, e *explore.Entry, pill string) {
 		a.do(func() func() {
 			lib, err := store.Mutate(library.SetSubscription{ID: cur, Subscribed: false})
 			return func() {
-				ex.busy = ""
+				delete(ex.busy, e.ID)
 				if err != nil {
 					a.fail(err.Error())
 					return
@@ -225,7 +228,7 @@ func (a *App) toggleFollow(c *ui.Context, e *explore.Entry, pill string) {
 	from := ex.faces[pill]
 	feed := *e.FeedURL
 	if subs == nil {
-		ex.busy = ""
+		delete(ex.busy, e.ID)
 		return
 	}
 	a.do(func() func() {
@@ -235,7 +238,7 @@ func (a *App) toggleFollow(c *ui.Context, e *explore.Entry, pill string) {
 			res, err = subs.Add(p.Token, true)
 		}
 		return func() {
-			ex.busy = ""
+			delete(ex.busy, e.ID)
 			if err != nil {
 				a.fail(err.Error())
 				return

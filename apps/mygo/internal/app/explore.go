@@ -155,12 +155,11 @@ type exploreState struct {
 
 	pics     map[string]*exPic
 	auras    map[auraKey]*ui.Bitmap
-	px       float32       // the screen's pixels a DIP, as the last frame drew the rooms
-	loads    chan struct{} // work pictures come a few at a time
-	away     sync.Map      // work pictures waiting their turn whose card was scrolled away (nearPic)
-	busy     string        // the source being subscribed or let go
-	busyAt   time.Time
-	fresh2   map[string]bool // a pill just pressed: no 取消订阅 hint until the pointer leaves
+	px       float32              // the screen's pixels a DIP, as the last frame drew the rooms
+	loads    chan struct{}        // work pictures come a few at a time
+	away     sync.Map             // work pictures waiting their turn whose card was scrolled away (nearPic)
+	busy     map[string]time.Time // the sources being subscribed or let go, and since when
+	fresh2   map[string]bool      // a pill just pressed: no 取消订阅 hint until the pointer leaves
 	live     string
 	focus    string // "card:<id>", "who:<id>", "post:<url>", "door"
 	opener   string // what opened the author's page last opened from here: the focus going back by the keys
