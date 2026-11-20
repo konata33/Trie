@@ -110,6 +110,19 @@ var (
 	CodeWord         = ui.RGBA(227, 176, 97, 0.18)
 	// ChipLight is the disc behind a site's icon in the reader's byline.
 	ChipLight = ui.Hex("#EDEDED")
+
+	// The capture thumbnail (DESIGN.md Capture): its dots with no picture to
+	// take colours from, the faint ones breathing where none has come yet, and
+	// the light passing over a page once taken.
+	CaptureDot   = ui.Hex("#6A6A6A")
+	CaptureFaint = ui.RGBA(255, 255, 255, 0.11)
+	CaptureSweep = ui.RGBA(255, 255, 255, 0.22)
+	// CaptureEdge is the hairline inside the capture card's edge.
+	CaptureEdge = ui.RGBA(255, 255, 255, 0.07)
+	// CaptureLineShade lies under the card's white line of where its page is, so
+	// that the line reads on light pages and dark.
+	CaptureLineShade = ui.RGBA(0, 0, 0, 0.28)
+
 	// Swatches are a gallery's colour tags drawn as the colour the word
 	// names (DESIGN.md 作品页色名).
 	Swatches = map[string]ui.Color{

@@ -44,6 +44,7 @@ func (a *App) sideParts(c *ui.Context) {
 		for _, t := range tabs {
 			tabAt[t.kind], iconAt[t.kind] = a.tabButton(c, t.kind, t.label(), t.icon, tab == t.kind, cr)
 		}
+		a.favTab = iconAt["favorites"]
 		// The current tab's ground: from the tab the light left to the one it goes to, on its value.
 		if authorOn != "" {
 			return
@@ -238,6 +239,9 @@ func (a *App) tabButton(c *ui.Context, kind, label, icon string, on bool, cr tab
 		open = 1
 	}
 	b.Children(func() {
+		if kind == "favorites" {
+			a.landedLight(c, favLight, 6) // a capture just landed in it
+		}
 		at = a.dotIcon(c, b, icon, 16, iconLook{lit: on && cr.from == "", jump: !a.still(c), ink: fg}).LayoutBounds()
 		if open > 0.001 {
 			w := textWidth(label, theme.Body)

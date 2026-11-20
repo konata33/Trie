@@ -2,19 +2,19 @@
   <img src="apps/mygo/resources/icon.png" width="96" height="96" alt="Trie icon">
   <h1>Trie</h1>
   <p><b>The next-generation RSS reader for design.</b></p>
-  <p>Hand-picked feeds. Work shown in full. One click to your AI.</p>
+  <p>Hand-picked feeds. Work shown in full. Any page, captured in one click.</p>
   <p>English · <a href="README.zh-CN.md">简体中文</a></p>
 </div>
 
 ![Trie's Favourites page: kept design work from Fonts In Use, Awwwards and Behance, with followed writers and sites in the sidebar](docs/images/favorites-en.jpg)
 
-Trie is an open-source RSS reader for the Mac that comes already filled: more than sixty hand-picked indie blogs, design writers and design galleries, all readable before you subscribe. Articles open as clean, structured text. Design work opens with its screen recording, screenshots and colour palette. When something is worth borrowing, Trie captures the page into a folder your coding agent can read.
+Trie is an open-source RSS reader for the Mac that comes already filled: more than sixty hand-picked indie blogs, design writers and design galleries, all readable before you subscribe. Articles open as clean, structured text. Design work opens with its screen recording, screenshots and colour palette. When something is worth borrowing, Trie captures the page as it is, in a folder your coding agent can work from.
 
 ## Why Trie
 
 - **Feeds worth reading, already picked.** Indie blogs, design writing, newsletters and galleries in English and Chinese, plus the writers Hacker News, Lobsters, UX Collective and Latent Space point to.
 - **Design, not summaries.** A gallery entry opens as the work itself: its recording, every page it shot, its palette and its credits.
-- **Hand it to your AI.** One click captures a page in the background: every screen, all of its text, its images and fonts, in one folder. Paste the path into Claude Code or Codex. Trie never calls an AI itself.
+- **Capture.** One click captures a page in the background: every screen, all of its text, its images and fonts, in one folder kept in Favourites. Copy its brief and paste it into Claude Code or Codex to rebuild the page. Trie never calls an AI itself.
 
 ## Inside
 
@@ -22,7 +22,7 @@ Trie is an open-source RSS reader for the Mac that comes already filled: more th
 - **Explore**: every source Trie has picked, open to read without subscribing.
 - **Author pages**: one page per writer or site. Follow them to see their new posts on Home.
 - **Reader**: headings, code, tables, images and footnotes kept intact, and your place remembered.
-- **Favourites**: one click to keep, with undo.
+- **Favourites**: one click to keep, with undo. The pages you captured are here too.
 - **Clips**: keep a paragraph with a note on why, and copy it as Markdown with its source.
 
 ![The reader: an article by Anthony Fu with a section heading, highlighted code and inline code](docs/images/reader-en.jpg)

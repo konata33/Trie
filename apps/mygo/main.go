@@ -209,7 +209,7 @@ func main() {
 			} else if w.IsMinimized() {
 				w.Restore()
 			}
-		}, ex.Stop)
+		}, func() { ex.Stop(); a.StopPacks() })
 		if steps != "" {
 			// On the display that draws finest, so that runs time the same pixels wherever the pointer is.
 			d := mygo.Display{ScaleFactor: 0}

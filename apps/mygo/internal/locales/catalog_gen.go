@@ -4643,3 +4643,393 @@ func FavoritesArticles() string { return In(i18n.Locale()).FavoritesArticles() }
 func (msgs Messages) FavoritesArticles() string {
 	return Catalog.Format(msgs.locale, "favoritesArticles", nil)
 }
+
+// FavoritesCaptures says "Captures"
+// in the language the app shows.
+//
+// Favorites: the name of the map's block of captured pages (see capture),
+// shown when it is pointed at, and the accessible name of the captures
+// inside it.
+func FavoritesCaptures() string { return In(i18n.Locale()).FavoritesCaptures() }
+
+// FavoritesCaptures says "Captures"
+// in the language of msgs.
+//
+// Favorites: the name of the map's block of captured pages (see capture),
+// shown when it is pointed at, and the accessible name of the captures
+// inside it.
+func (msgs Messages) FavoritesCaptures() string {
+	return Catalog.Format(msgs.locale, "favoritesCaptures", nil)
+}
+
+// FavoritesCaptureCount says "{name}, {count, plural, one {# page} other {# pages}}"
+// in the language the app shows.
+//
+// Favorites: accessible name of the map's block of captured pages, which
+// zooms into it.
+func FavoritesCaptureCount(name string, count int) string {
+	return In(i18n.Locale()).FavoritesCaptureCount(name, count)
+}
+
+// FavoritesCaptureCount says "{name}, {count, plural, one {# page} other {# pages}}"
+// in the language of msgs.
+//
+// Favorites: accessible name of the map's block of captured pages, which
+// zooms into it.
+func (msgs Messages) FavoritesCaptureCount(name string, count int) string {
+	return Catalog.Format(msgs.locale, "favoritesCaptureCount", map[string]any{"name": name, "count": count})
+}
+
+// Capture says "Capture"
+// in the language the app shows.
+//
+// Reader toolbar: the button that captures the page, a folder of its
+// screens, text, pictures and fonts for one's own AI; and its accessible
+// name. Also the feature's name.
+func Capture() string { return In(i18n.Locale()).Capture() }
+
+// Capture says "Capture"
+// in the language of msgs.
+//
+// Reader toolbar: the button that captures the page, a folder of its
+// screens, text, pictures and fonts for one's own AI; and its accessible
+// name. Also the feature's name.
+func (msgs Messages) Capture() string {
+	return Catalog.Format(msgs.locale, "capture", nil)
+}
+
+// CaptureTip says "Capture this page"
+// in the language the app shows.
+//
+// Reader toolbar: tooltip of the Capture button before the page is
+// captured.
+func CaptureTip() string { return In(i18n.Locale()).CaptureTip() }
+
+// CaptureTip says "Capture this page"
+// in the language of msgs.
+//
+// Reader toolbar: tooltip of the Capture button before the page is
+// captured.
+func (msgs Messages) CaptureTip() string {
+	return Catalog.Format(msgs.locale, "captureTip", nil)
+}
+
+// CaptureTakingTip says "Capturing this page…"
+// in the language the app shows.
+//
+// Reader toolbar: tooltip of the Capture button while the page is being
+// captured or waits its turn.
+func CaptureTakingTip() string { return In(i18n.Locale()).CaptureTakingTip() }
+
+// CaptureTakingTip says "Capturing this page…"
+// in the language of msgs.
+//
+// Reader toolbar: tooltip of the Capture button while the page is being
+// captured or waits its turn.
+func (msgs Messages) CaptureTakingTip() string {
+	return Catalog.Format(msgs.locale, "captureTakingTip", nil)
+}
+
+// CaptureReadyTip says "Captured, open to see"
+// in the language the app shows.
+//
+// Reader toolbar: tooltip of the Capture button once the page is captured;
+// pressing it opens the capture's card.
+func CaptureReadyTip() string { return In(i18n.Locale()).CaptureReadyTip() }
+
+// CaptureReadyTip says "Captured, open to see"
+// in the language of msgs.
+//
+// Reader toolbar: tooltip of the Capture button once the page is captured;
+// pressing it opens the capture's card.
+func (msgs Messages) CaptureReadyTip() string {
+	return Catalog.Format(msgs.locale, "captureReadyTip", nil)
+}
+
+// CaptureIsland says "Captures"
+// in the language the app shows.
+//
+// Accessible name of the island at the top of the window holding the pages
+// being captured and those just captured.
+func CaptureIsland() string { return In(i18n.Locale()).CaptureIsland() }
+
+// CaptureIsland says "Captures"
+// in the language of msgs.
+//
+// Accessible name of the island at the top of the window holding the pages
+// being captured and those just captured.
+func (msgs Messages) CaptureIsland() string {
+	return Catalog.Format(msgs.locale, "captureIsland", nil)
+}
+
+// CaptureHide says "Hide"
+// in the language the app shows.
+//
+// Capture island: the round button at its top-left corner, shown while it
+// is pointed at, that sends the island away (what is being captured goes
+// on); its accessible name and tooltip.
+func CaptureHide() string { return In(i18n.Locale()).CaptureHide() }
+
+// CaptureHide says "Hide"
+// in the language of msgs.
+//
+// Capture island: the round button at its top-left corner, shown while it
+// is pointed at, that sends the island away (what is being captured goes
+// on); its accessible name and tooltip.
+func (msgs Messages) CaptureHide() string {
+	return Catalog.Format(msgs.locale, "captureHide", nil)
+}
+
+// CaptureWaiting says "{name}, waiting"
+// in the language the app shows.
+//
+// Capture island: accessible name of a page's thumbnail while it waits its
+// turn.
+func CaptureWaiting(name string) string { return In(i18n.Locale()).CaptureWaiting(name) }
+
+// CaptureWaiting says "{name}, waiting"
+// in the language of msgs.
+//
+// Capture island: accessible name of a page's thumbnail while it waits its
+// turn.
+func (msgs Messages) CaptureWaiting(name string) string {
+	return Catalog.Format(msgs.locale, "captureWaiting", map[string]any{"name": name})
+}
+
+// CaptureTaking says "{name}, being captured"
+// in the language the app shows.
+//
+// Capture island: accessible name of a page's thumbnail while it is being
+// taken.
+func CaptureTaking(name string) string { return In(i18n.Locale()).CaptureTaking(name) }
+
+// CaptureTaking says "{name}, being captured"
+// in the language of msgs.
+//
+// Capture island: accessible name of a page's thumbnail while it is being
+// taken.
+func (msgs Messages) CaptureTaking(name string) string {
+	return Catalog.Format(msgs.locale, "captureTaking", map[string]any{"name": name})
+}
+
+// CaptureReady says "{name}, ready"
+// in the language the app shows.
+//
+// Capture island: accessible name of a page's thumbnail once it is
+// captured.
+func CaptureReady(name string) string { return In(i18n.Locale()).CaptureReady(name) }
+
+// CaptureReady says "{name}, ready"
+// in the language of msgs.
+//
+// Capture island: accessible name of a page's thumbnail once it is
+// captured.
+func (msgs Messages) CaptureReady(name string) string {
+	return Catalog.Format(msgs.locale, "captureReady", map[string]any{"name": name})
+}
+
+// CaptureUsed says "{name}, copied"
+// in the language the app shows.
+//
+// Capture island: accessible name of a page's thumbnail just after its
+// brief was copied.
+func CaptureUsed(name string) string { return In(i18n.Locale()).CaptureUsed(name) }
+
+// CaptureUsed says "{name}, copied"
+// in the language of msgs.
+//
+// Capture island: accessible name of a page's thumbnail just after its
+// brief was copied.
+func (msgs Messages) CaptureUsed(name string) string {
+	return Catalog.Format(msgs.locale, "captureUsed", map[string]any{"name": name})
+}
+
+// CaptureNotTaken says "{name}, not captured"
+// in the language the app shows.
+//
+// Capture island: accessible name of a page's thumbnail that could not be
+// taken.
+func CaptureNotTaken(name string) string { return In(i18n.Locale()).CaptureNotTaken(name) }
+
+// CaptureNotTaken says "{name}, not captured"
+// in the language of msgs.
+//
+// Capture island: accessible name of a page's thumbnail that could not be
+// taken.
+func (msgs Messages) CaptureNotTaken(name string) string {
+	return Catalog.Format(msgs.locale, "captureNotTaken", map[string]any{"name": name})
+}
+
+// CaptureScreens says "{count, plural, one {# screen} other {# screens}}"
+// in the language the app shows.
+//
+// Capture card: how many screens of the page were taken, in the line under
+// the site's name.
+func CaptureScreens(count int) string { return In(i18n.Locale()).CaptureScreens(count) }
+
+// CaptureScreens says "{count, plural, one {# screen} other {# screens}}"
+// in the language of msgs.
+//
+// Capture card: how many screens of the page were taken, in the line under
+// the site's name.
+func (msgs Messages) CaptureScreens(count int) string {
+	return Catalog.Format(msgs.locale, "captureScreens", map[string]any{"count": count})
+}
+
+// CaptureImages says "{count, plural, one {# image} other {# images}}"
+// in the language the app shows.
+//
+// Capture card: how many of the page's pictures were saved, in the line
+// under the site's name.
+func CaptureImages(count int) string { return In(i18n.Locale()).CaptureImages(count) }
+
+// CaptureImages says "{count, plural, one {# image} other {# images}}"
+// in the language of msgs.
+//
+// Capture card: how many of the page's pictures were saved, in the line
+// under the site's name.
+func (msgs Messages) CaptureImages(count int) string {
+	return Catalog.Format(msgs.locale, "captureImages", map[string]any{"count": count})
+}
+
+// CaptureFonts says "{count, plural, one {# font} other {# fonts}}"
+// in the language the app shows.
+//
+// Capture card: how many of the page's font files were saved, in the line
+// under the site's name.
+func CaptureFonts(count int) string { return In(i18n.Locale()).CaptureFonts(count) }
+
+// CaptureFonts says "{count, plural, one {# font} other {# fonts}}"
+// in the language of msgs.
+//
+// Capture card: how many of the page's font files were saved, in the line
+// under the site's name.
+func (msgs Messages) CaptureFonts(count int) string {
+	return Catalog.Format(msgs.locale, "captureFonts", map[string]any{"count": count})
+}
+
+// CaptureCopyTip says "Copy a brief for AI with the materials' location"
+// in the language the app shows.
+//
+// Capture card: tooltip of the Copy button, which copies captureBrief: a
+// short brief naming the page and the pack folder.
+func CaptureCopyTip() string { return In(i18n.Locale()).CaptureCopyTip() }
+
+// CaptureCopyTip says "Copy a brief for AI with the materials' location"
+// in the language of msgs.
+//
+// Capture card: tooltip of the Copy button, which copies captureBrief: a
+// short brief naming the page and the pack folder.
+func (msgs Messages) CaptureCopyTip() string {
+	return Catalog.Format(msgs.locale, "captureCopyTip", nil)
+}
+
+// CaptureBrief says "Task: Rebuild the page below from its materials: its layout, type, colour and copy.\n\nPage: {name}\nSource: {url}\nMater…"
+// in the language the app shows.
+//
+// Capture card: what Copy puts on the clipboard, to paste into the reader's
+// own AI (Claude Code, Codex). The task comes first, bounded by the
+// materials; page, source and materials line up; what the folder holds, how
+// to use it and what it lacks are left to its README.
+func CaptureBrief(name string, url string, dir string) string {
+	return In(i18n.Locale()).CaptureBrief(name, url, dir)
+}
+
+// CaptureBrief says "Task: Rebuild the page below from its materials: its layout, type, colour and copy.\n\nPage: {name}\nSource: {url}\nMater…"
+// in the language of msgs.
+//
+// Capture card: what Copy puts on the clipboard, to paste into the reader's
+// own AI (Claude Code, Codex). The task comes first, bounded by the
+// materials; page, source and materials line up; what the folder holds, how
+// to use it and what it lacks are left to its README.
+func (msgs Messages) CaptureBrief(name string, url string, dir string) string {
+	return Catalog.Format(msgs.locale, "captureBrief", map[string]any{"name": name, "url": url, "dir": dir})
+}
+
+// CaptureReveal says "Show in Finder"
+// in the language the app shows.
+//
+// Capture card: button that shows the pack's folder in Finder.
+func CaptureReveal() string { return In(i18n.Locale()).CaptureReveal() }
+
+// CaptureReveal says "Show in Finder"
+// in the language of msgs.
+//
+// Capture card: button that shows the pack's folder in Finder.
+func (msgs Messages) CaptureReveal() string {
+	return Catalog.Format(msgs.locale, "captureReveal", nil)
+}
+
+// CaptureDidNotLoad says "The page did not load. Check the network and try again."
+// in the language the app shows.
+//
+// Capture card: what happened when the page could not be loaded.
+func CaptureDidNotLoad() string { return In(i18n.Locale()).CaptureDidNotLoad() }
+
+// CaptureDidNotLoad says "The page did not load. Check the network and try again."
+// in the language of msgs.
+//
+// Capture card: what happened when the page could not be loaded.
+func (msgs Messages) CaptureDidNotLoad() string {
+	return Catalog.Format(msgs.locale, "captureDidNotLoad", nil)
+}
+
+// CaptureRefused says "The site would not show this page to the app. Try again in a while."
+// in the language the app shows.
+//
+// Capture card: what happened when the site answered with a bot check or an
+// error page.
+func CaptureRefused() string { return In(i18n.Locale()).CaptureRefused() }
+
+// CaptureRefused says "The site would not show this page to the app. Try again in a while."
+// in the language of msgs.
+//
+// Capture card: what happened when the site answered with a bot check or an
+// error page.
+func (msgs Messages) CaptureRefused() string {
+	return Catalog.Format(msgs.locale, "captureRefused", nil)
+}
+
+// CaptureFailed says "This page could not be captured. Try again in a while."
+// in the language the app shows.
+//
+// Capture card: what happened when taking the page failed for another
+// reason.
+func CaptureFailed() string { return In(i18n.Locale()).CaptureFailed() }
+
+// CaptureFailed says "This page could not be captured. Try again in a while."
+// in the language of msgs.
+//
+// Capture card: what happened when taking the page failed for another
+// reason.
+func (msgs Messages) CaptureFailed() string {
+	return Catalog.Format(msgs.locale, "captureFailed", nil)
+}
+
+// CaptureDone says "{name} is captured"
+// in the language the app shows.
+//
+// Announced to screen readers when a page has been taken.
+func CaptureDone(name string) string { return In(i18n.Locale()).CaptureDone(name) }
+
+// CaptureDone says "{name} is captured"
+// in the language of msgs.
+//
+// Announced to screen readers when a page has been taken.
+func (msgs Messages) CaptureDone(name string) string {
+	return Catalog.Format(msgs.locale, "captureDone", map[string]any{"name": name})
+}
+
+// CaptureDidFail says "{name} could not be captured"
+// in the language the app shows.
+//
+// Announced to screen readers when taking a page failed.
+func CaptureDidFail(name string) string { return In(i18n.Locale()).CaptureDidFail(name) }
+
+// CaptureDidFail says "{name} could not be captured"
+// in the language of msgs.
+//
+// Announced to screen readers when taking a page failed.
+func (msgs Messages) CaptureDidFail(name string) string {
+	return Catalog.Format(msgs.locale, "captureDidFail", map[string]any{"name": name})
+}

@@ -1701,5 +1701,185 @@
   "favoritesArticles": "Articles",
   "@favoritesArticles": {
     "description": "Favorites: the name of the map's block of kept articles, shown when it is pointed at, and the accessible name of the writers' sheets inside it."
+  },
+  "favoritesCaptures": "Captures",
+  "@favoritesCaptures": {
+    "description": "Favorites: the name of the map's block of captured pages (see capture), shown when it is pointed at, and the accessible name of the captures inside it."
+  },
+  "favoritesCaptureCount": "{name}, {count, plural, one {# page} other {# pages}}",
+  "@favoritesCaptureCount": {
+    "description": "Favorites: accessible name of the map's block of captured pages, which zooms into it.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Captures"
+      },
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "capture": "Capture",
+  "@capture": {
+    "description": "Reader toolbar: the button that captures the page, a folder of its screens, text, pictures and fonts for one's own AI; and its accessible name. Also the feature's name."
+  },
+  "captureTip": "Capture this page",
+  "@captureTip": {
+    "description": "Reader toolbar: tooltip of the Capture button before the page is captured."
+  },
+  "captureTakingTip": "Capturing this page…",
+  "@captureTakingTip": {
+    "description": "Reader toolbar: tooltip of the Capture button while the page is being captured or waits its turn."
+  },
+  "captureReadyTip": "Captured, open to see",
+  "@captureReadyTip": {
+    "description": "Reader toolbar: tooltip of the Capture button once the page is captured; pressing it opens the capture's card."
+  },
+  "captureIsland": "Captures",
+  "@captureIsland": {
+    "description": "Accessible name of the island at the top of the window holding the pages being captured and those just captured."
+  },
+  "captureHide": "Hide",
+  "@captureHide": {
+    "description": "Capture island: the round button at its top-left corner, shown while it is pointed at, that sends the island away (what is being captured goes on); its accessible name and tooltip."
+  },
+  "captureWaiting": "{name}, waiting",
+  "@captureWaiting": {
+    "description": "Capture island: accessible name of a page's thumbnail while it waits its turn.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Tegra"
+      }
+    }
+  },
+  "captureTaking": "{name}, being captured",
+  "@captureTaking": {
+    "description": "Capture island: accessible name of a page's thumbnail while it is being taken.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Tegra"
+      }
+    }
+  },
+  "captureReady": "{name}, ready",
+  "@captureReady": {
+    "description": "Capture island: accessible name of a page's thumbnail once it is captured.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Tegra"
+      }
+    }
+  },
+  "captureUsed": "{name}, copied",
+  "@captureUsed": {
+    "description": "Capture island: accessible name of a page's thumbnail just after its brief was copied.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Tegra"
+      }
+    }
+  },
+  "captureNotTaken": "{name}, not captured",
+  "@captureNotTaken": {
+    "description": "Capture island: accessible name of a page's thumbnail that could not be taken.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Tegra"
+      }
+    }
+  },
+  "captureScreens": "{count, plural, one {# screen} other {# screens}}",
+  "@captureScreens": {
+    "description": "Capture card: how many screens of the page were taken, in the line under the site's name.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "captureImages": "{count, plural, one {# image} other {# images}}",
+  "@captureImages": {
+    "description": "Capture card: how many of the page's pictures were saved, in the line under the site's name.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "34"
+      }
+    }
+  },
+  "captureFonts": "{count, plural, one {# font} other {# fonts}}",
+  "@captureFonts": {
+    "description": "Capture card: how many of the page's font files were saved, in the line under the site's name.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "captureCopyTip": "Copy a brief for AI with the materials' location",
+  "@captureCopyTip": {
+    "description": "Capture card: tooltip of the Copy button, which copies captureBrief: a short brief naming the page and the pack folder."
+  },
+  "captureBrief": "Task: Rebuild the page below from its materials: its layout, type, colour and copy.\n\nPage: {name}\nSource: {url}\nMaterials: `{dir}`\n\nRead README.md in the materials folder first. It says what the materials hold, how to use them and what they leave out.",
+  "@captureBrief": {
+    "description": "Capture card: what Copy puts on the clipboard, to paste into the reader's own AI (Claude Code, Codex). The task comes first, bounded by the materials; page, source and materials line up; what the folder holds, how to use it and what it lacks are left to its README.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "What is a researcher’s worth?"
+      },
+      "url": {
+        "type": "String",
+        "example": "https://uxdesign.cc/what-is-a-researchers-worth-ea14c95c6d12"
+      },
+      "dir": {
+        "type": "String",
+        "example": "/Users/me/Library/Application Support/Trie/packs/what-is-a-researchers-worth"
+      }
+    }
+  },
+  "captureReveal": "Show in Finder",
+  "@captureReveal": {
+    "description": "Capture card: button that shows the pack's folder in Finder."
+  },
+  "captureDidNotLoad": "The page did not load. Check the network and try again.",
+  "@captureDidNotLoad": {
+    "description": "Capture card: what happened when the page could not be loaded."
+  },
+  "captureRefused": "The site would not show this page to the app. Try again in a while.",
+  "@captureRefused": {
+    "description": "Capture card: what happened when the site answered with a bot check or an error page."
+  },
+  "captureFailed": "This page could not be captured. Try again in a while.",
+  "@captureFailed": {
+    "description": "Capture card: what happened when taking the page failed for another reason."
+  },
+  "captureDone": "{name} is captured",
+  "@captureDone": {
+    "description": "Announced to screen readers when a page has been taken.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Tegra"
+      }
+    }
+  },
+  "captureDidFail": "{name} could not be captured",
+  "@captureDidFail": {
+    "description": "Announced to screen readers when taking a page failed.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Tegra"
+      }
+    }
   }
 }

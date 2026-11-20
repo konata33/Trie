@@ -210,7 +210,8 @@ func (a *App) favoritesPage(c *ui.Context, id string, live bool) {
 			cur = g
 		}
 	}
-	anyKept := a.anyKept()
+	// The pages captured are kept here too.
+	anyKept := a.anyKept() || len(a.shelved("")) > 0
 	cols := 1
 	if min(a.area.W, 1200)-64 >= 704 {
 		cols = 2
@@ -244,7 +245,11 @@ func (a *App) favoritesPage(c *ui.Context, id string, live bool) {
 		st = &fs.keeps
 	}
 	pictured := anyKept && !searching && cur != nil
-	if fs.kind != "" && !slices.ContainsFunc(mapBlocks(groups), func(b mapBlock) bool { return b.key == fs.kind }) {
+	packs := 0
+	if id == "" {
+		packs = len(a.shelved(fs.query))
+	}
+	if fs.kind != "" && !slices.ContainsFunc(a.blocks(groups, fs.query), func(b mapBlock) bool { return b.key == fs.kind }) {
 		fs.kind = ""
 	}
 	sc := ui.Scroll(c.Key("scroll")).TrackScroll(st).Grow(1).FillWidth().Scrollbars(false)
@@ -264,7 +269,7 @@ func (a *App) favoritesPage(c *ui.Context, id string, live bool) {
 						a.zoomTo(c, "")
 					}
 					if searching {
-						ui.Text(c, locales.FavoritesMatches(len(found))).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).
+						ui.Text(c, locales.FavoritesMatches(len(found)+packs)).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).
 							FontFeatures(theme.Numbers).NoWrap().Role(ui.RoleStatus)
 					}
 				}, func() {
@@ -285,7 +290,7 @@ func (a *App) favoritesPage(c *ui.Context, id string, live bool) {
 					band()
 					a.emptyState(c, "favorites", locales.FavoritesEmptyTitle(), locales.FavoritesEmptyText(), nil)
 				})
-			case searching && len(found) == 0:
+			case searching && len(found) == 0 && packs == 0:
 				frame(c).Padding(0, 32, 140, 32).Children(func() {
 					band()
 					a.emptyState(c, "", "", locales.FavoritesNoMatches(), nil)

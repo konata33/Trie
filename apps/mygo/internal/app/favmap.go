@@ -5,8 +5,12 @@ import (
 	"fmt"
 	"image"
 	"math"
+	"net/url"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
@@ -42,14 +46,16 @@ const (
 	wallColumn = 240 // the narrowest a column of sheets is
 	paperRest  = 3   // titles under the newest on a writer's sheet
 	articles   = "articles"
+	captures   = "captures" // the block of pages captured (PAGES.md 拓本)
 )
 
 // mapBlock is one block of the map: a kind's designs or a gallery's (g),
-// or the articles, by writer.
+// the articles, by writer, or the pages captured (packs).
 type mapBlock struct {
 	key     string
 	g       *favGroup
 	writers []*favGroup
+	packs   []*packItem
 	n       int
 }
 
@@ -86,9 +92,38 @@ func mapBlocks(groups []*favGroup) []mapBlock {
 	return out
 }
 
-// blockName is what a block is: its kind, its gallery, or the articles.
+// blocks are the map's blocks as query finds them: mapBlocks, then the
+// pages captured.
+func (a *App) blocks(groups []*favGroup, query string) []mapBlock {
+	out := mapBlocks(groups)
+	if ps := a.shelved(query); len(ps) > 0 {
+		out = append(out, mapBlock{key: captures, packs: ps, n: len(ps)})
+	}
+	return out
+}
+
+// shelved are the pages captured that have come into 收藏, newest first,
+// those whose name or address hold what is typed.
+func (a *App) shelved(query string) []*packItem {
+	q := strings.ToLower(strings.TrimSpace(query))
+	var out []*packItem
+	for _, it := range a.capture.items {
+		if it.state != packTaken || !it.filed || it.gone {
+			continue
+		}
+		if q == "" || strings.Contains(strings.ToLower(it.Name), q) || strings.Contains(strings.ToLower(it.URL), q) {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+// blockName is what a block is: its kind, its gallery, the articles or the
+// pages captured.
 func blockName(b mapBlock) string {
 	switch {
+	case b.packs != nil:
+		return locales.FavoritesCaptures()
 	case b.g == nil:
 		return locales.FavoritesArticles()
 	case b.g.kind != "":
@@ -249,7 +284,7 @@ func (a *App) mapTr(c *ui.Context, match any, quiet bool) ui.ElementTransition {
 // beside the strip.
 func (a *App) favMap(c *ui.Context, p page, groups []*favGroup, h float32, quiet bool, stop string, live bool) {
 	fs := a.favs()
-	blocks := mapBlocks(groups)
+	blocks := a.blocks(groups, fs.query)
 	w := min(a.area.W, 1200) - 64
 	if fs.kind == "" {
 		rects := mapRects(blocks, ui.Rect{W: w, H: h}, mapGap)
@@ -270,11 +305,14 @@ func (a *App) favMap(c *ui.Context, p page, groups []*favGroup, h float32, quiet
 		})
 		mw := w - mapRail - 24
 		ui.Column(c.Key("in:" + in.key)).Width(mw).Shrink(0).Children(func() {
-			if in.g == nil {
+			switch {
+			case in.packs != nil:
+				a.mapPacks(c, in, mw, h, quiet, stop, live)
+			case in.g == nil:
 				a.mapPapers(c, p, in, mw, quiet, stop, live)
-				return
+			default:
+				a.mapPictures(c, p, in, mw, h, quiet, stop, live)
 			}
-			a.mapPictures(c, p, in, mw, h, quiet, stop, live)
 		})
 	})
 }
@@ -287,7 +325,10 @@ func (a *App) mapBlock(c *ui.Context, b mapBlock, r ui.Rect, mini, quiet bool, s
 	key := "m:" + b.key
 	in := fs.kind == b.key
 	label := locales.FavoritesWorkCount(blockName(b), b.n)
-	if b.g == nil {
+	switch {
+	case b.packs != nil:
+		label = locales.FavoritesCaptureCount(blockName(b), b.n)
+	case b.g == nil:
 		label = locales.FavoritesWriterCount(blockName(b), b.n)
 	}
 	radius := float32(12)
@@ -337,11 +378,18 @@ func (a *App) mapBlock(c *ui.Context, b mapBlock, r ui.Rect, mini, quiet bool, s
 	}
 	a.tip(c, btn, blockName(b), mini)
 	btn.Children(func() {
-		if b.g == nil {
+		switch {
+		case b.packs != nil:
+			for i, t := range mosaic(len(b.packs), r.W, r.H, mapTileGap) {
+				it := b.packs[i]
+				a.mapTile(c, b.key, "p:"+it.ID, it.Name, a.packPic(it), t, lit, mini, quiet)
+			}
+		case b.g == nil:
 			a.mapWriters(c, b, r, mini, quiet)
-		} else {
+		default:
 			for i, t := range mosaic(len(b.g.list), r.W, r.H, mapTileGap) {
-				a.mapTile(c, b.key, b.g.list[i], t, lit, mini, quiet)
+				art := b.g.list[i]
+				a.mapTile(c, b.key, "k:"+art.ID, titleOf(art.Title), a.wallPic(art.ID), t, lit, mini, quiet)
 			}
 		}
 		a.mapTab(c, b, mini, lit)
@@ -370,6 +418,8 @@ func (a *App) mapTab(c *ui.Context, b mapBlock, mini, lit bool) {
 	}
 	tab.TextColor(tab.AnimateColor("fg", color, a.ease(motion.Hover))).Children(func() {
 		switch {
+		case b.packs != nil:
+			a.icon(c, "capture", size, lit)
 		case b.g == nil:
 			a.icon(c, kindGlyph(articles), size, lit)
 		case b.g.kind != "":
@@ -390,17 +440,18 @@ func (a *App) mapTab(c *ui.Context, b mapBlock, mini, lit bool) {
 	})
 }
 
-// mapTile is a design on a block: its picture filling its tile, dimmed as
-// pictures are on the wall of a page, whole while its block is pointed at.
-// One with no picture to be had shows its title.
-func (a *App) mapTile(c *ui.Context, block string, art *library.Article, r ui.Rect, lit, mini, quiet bool) {
-	t := ui.Box(c.Key(art.ID)).Absolute().Left(r.X).Top(r.Y).Size(r.W, r.H).ClipX().ClipY().Background(theme.Surface).IgnoreInput(true)
+// mapTile is a design or a page captured on a block, key: its picture pic
+// filling its tile, dimmed as pictures are on the wall of a page, whole while
+// its block is pointed at. One with no picture to be had shows its title.
+func (a *App) mapTile(c *ui.Context, block, key, title string, pic *favPic, r ui.Rect, lit, mini, quiet bool) {
+	t := ui.Box(c.Key(key)).Absolute().Left(r.X).Top(r.Y).Size(r.W, r.H).ClipX().ClipY().Background(theme.Surface).IgnoreInput(true)
 	if !mini {
-		t.Transition(a.mapTr(c, tileMatch{block, "k:" + art.ID}, quiet))
+		t.Transition(a.mapTr(c, tileMatch{block, key}, quiet))
 	}
-	pic := a.wallPic(art.ID)
 	t.Children(func() {
 		switch {
+		case pic == nil:
+			a.breathing(c, theme.Hover)
 		case pic.bmp != nil:
 			img := ui.Image(c, pic.bmp).Fit(ui.Cover).ObjectPosition(0.5, 0).Absolute().Fill()
 			if fade := a.picFade(c, pic); fade < 1 {
@@ -416,7 +467,7 @@ func (a *App) mapTile(c *ui.Context, block string, art *library.Article, r ui.Re
 		case !pic.done:
 			a.breathing(c, theme.Hover)
 		case !mini && r.W >= 72:
-			ui.Text(c, titleOf(art.Title)).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).MaxLines(3).Ellipsis("…").
+			ui.Text(c, title).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Muted).MaxLines(3).Ellipsis("…").
 				Absolute().Left(10).Right(10).Bottom(8)
 		}
 	})
@@ -598,20 +649,44 @@ func (a *App) sheetOpening(art *library.Article) []string {
 // not fill the width, they fill it, as tall as the map at most.
 func (a *App) mapPictures(c *ui.Context, p page, b mapBlock, w, most float32, quiet bool, stop string, live bool) {
 	rs := make([]float32, len(b.g.list))
-	var sum float32
 	for i, art := range b.g.list {
 		rs[i] = a.wallRatio(art.ID)
-		sum += rs[i]
 	}
-	row := clampf((w-mapRowGap*float32(len(rs)-1))/sum, mapRow, max(mapRow, most))
-	rects := mapRows(rs, w, row, mapRowGap)
-	var h float32
-	if n := len(rects); n > 0 {
-		h = rects[n-1].Y + rects[n-1].H
-	}
+	rects, h := wallRects(rs, w, most)
 	ui.Box(c.Key("pictures")).Width(w).Height(h).Role(ui.RoleList).Label(blockName(b)).Children(func() {
 		for i, art := range b.g.list {
 			a.wallPicture(c, p, b.key, art, rects[i], quiet, stop, live)
+		}
+	})
+}
+
+// wallRects lays a zoomed block's pictures of proportions rs in rows w wide,
+// each row about mapRow tall; so few that one row would not fill the width,
+// they fill it, as tall as most at most. h is how tall the rows stand.
+func wallRects(rs []float32, w, most float32) (rects []ui.Rect, h float32) {
+	var sum float32
+	for _, r := range rs {
+		sum += r
+	}
+	row := clampf((w-mapRowGap*float32(len(rs)-1))/sum, mapRow, max(mapRow, most))
+	rects = mapRows(rs, w, row, mapRowGap)
+	if n := len(rects); n > 0 {
+		h = rects[n-1].Y + rects[n-1].H
+	}
+	return rects, h
+}
+
+// mapPacks is the pages captured zoomed into: each its first screen at
+// 16:10, in rows as the designs are, grown out of its tile.
+func (a *App) mapPacks(c *ui.Context, b mapBlock, w, most float32, quiet bool, stop string, live bool) {
+	rs := make([]float32, len(b.packs))
+	for i := range rs {
+		rs[i] = 1.6
+	}
+	rects, h := wallRects(rs, w, most)
+	ui.Box(c.Key("packs")).Width(w).Height(h).Role(ui.RoleList).Label(blockName(b)).Children(func() {
+		for i, it := range b.packs {
+			a.wallPack(c, it, rects[i], quiet, stop, live)
 		}
 	})
 }
@@ -910,6 +985,115 @@ func (a *App) wallPicture(c *ui.Context, p page, block string, art *library.Arti
 		a.moreMenu(c, key, locales.FavoritesArticleActions(titleOf(art.Title)), hover || cell.FocusWithin(), func(m ui.MenuParts) { a.keepMenu(c, m, p, art, false) }).
 			Absolute().Top(10).Right(10).ZIndex(1)
 	})
+}
+
+// wallPack is a page captured, zoomed into: its first screen in r, a little
+// dimmer the lighter it is and whole when pointed at, drifting closer; its
+// name and address rising at its foot. Its card grows out of it and goes
+// back into it; copied there, it says 已复制 at its foot for a while.
+func (a *App) wallPack(c *ui.Context, it *packItem, r ui.Rect, quiet bool, stop string, live bool) {
+	fs, h := a.favs(), &a.capture
+	key := "p:" + it.ID
+	w, ht := r.W, r.H
+	cell := ui.Box(c.Key(key)).Absolute().Left(r.X).Top(r.Y).Size(w, ht).Role(ui.RoleListItem).Transition(a.mapTr(c, tileMatch{captures, key}, quiet))
+	hover := cell.Hovered()
+	pic := a.packPic(it)
+	now := c.Now()
+	said := false
+	if h.copiedHome == homeShelf && h.copiedID == it.ID {
+		from, to := h.copiedNote()
+		said = !now.Before(from) && now.Before(to)
+		switch {
+		case now.Before(from):
+			c.After(from.Sub(now))
+		case said:
+			c.After(to.Sub(now))
+		}
+	}
+	cell.Children(func() {
+		b := ui.ButtonBase(c.Key("open")).Label(it.Name).Absolute().Fill().Radius(10).ClipX().ClipY().Background(theme.Surface).
+			FocusRing(false).KeyShortcuts(0, ui.KeyEnter)
+		a.card(b, key, stop, live)
+		if b.Clicked() && live {
+			fs.cursor = key
+			a.openPack(it, b.LayoutBounds(), homeShelf)
+		}
+		focus := b.FocusVisible()
+		if focus {
+			b.FocusRing(true).FocusRingOffset(2)
+		}
+		a.give(b, 0.99)
+		zoom := a.zoom(c, cell, hover)
+		b.Children(func() {
+			if pic != nil && pic.bmp != nil {
+				img := ui.Image(c, pic.bmp).Fit(ui.Cover).ObjectPosition(0.5, 0).Absolute()
+				if fade := a.picFade(c, pic); fade < 1 {
+					img.Opacity(fade)
+				}
+				grown(img, w, ht, zoom)
+				bright := 1 - (1-pic.rest)*0.4
+				if hover || focus {
+					bright = 1
+				}
+				if v := 1 - b.AnimateTo("bright", bright, a.ease(motion.Lean)); v > 0.001 {
+					ui.Box(c).Absolute().Fill().Background(theme.Darken).Opacity(v)
+				}
+			} else if pic == nil || !pic.done {
+				a.breathing(c, theme.Hover)
+			}
+			// The foot's shade comes with the words, or with 已复制.
+			capH := min(ht, 72)
+			ease := a.ease(motion.Hover)
+			if a.kbd {
+				ease = ui.Animation{Duration: time.Nanosecond}
+			}
+			cap := ui.Box(c.Key("cap")).Absolute().Left(0).Right(0).Bottom(0).Height(capH).IgnoreInput(true)
+			cap.Opacity(cap.AnimateTo("show", map[bool]float32{true: 1}[hover || focus || said], ease)).Children(func() {
+				ui.Box(c).Absolute().Fill().LinearGradient(bandScrim(min(1, 40/capH)))
+				note := locales.CommonCopied()
+				right := float32(14)
+				if said {
+					nw, _ := c.MeasureText(0, ui.Span{Text: note, Size: theme.Body})
+					right += nw + 12
+				}
+				words := ui.Column(c.Key("words")).Absolute().Left(14).Right(right).Bottom(12).Gap(2)
+				words.Opacity(words.AnimateTo("show", map[bool]float32{true: 1}[hover || focus], ease)).Children(func() {
+					wallCaption(c, it.Name)
+					ui.Text(c, hostOf(it.URL)).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Text2).SingleLine().Ellipsis("…")
+				})
+				if o := cap.AnimateTo("said", map[bool]float32{true: 1}[said], ease); o > 0.01 {
+					ui.Text(c.Key("said"), note).FontSize(theme.Body).LineHeight(18.0 / 13).TextColor(theme.Text).NoWrap().
+						Absolute().Right(12).Bottom(12).Opacity(o)
+				}
+			})
+		})
+		edge := theme.LineSoft
+		if hover {
+			edge = theme.EdgeHover
+		}
+		ui.Box(c.Key("edge")).Absolute().Fill().Radius(10).IgnoreInput(true).AccessHidden(true).InsetShadow(0, 0, 0, 1, b.AnimateColor("hairline", edge, a.ease(motion.Hover)))
+	})
+}
+
+// packPic is a page captured's first screen for 收藏, 720 wide.
+func (a *App) packPic(it *packItem) *favPic {
+	file := filepath.Join(a.capture.dir, it.ID, "screens", "00.jpg")
+	return a.favPicture("pack:"+packKey(it), func() image.Image {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			return nil
+		}
+		return screenTop(decodeAny(data), 720)
+	})
+}
+
+// hostOf is the site a page is on, as one reads it: its host without www.
+func hostOf(page string) string {
+	u, err := url.Parse(page)
+	if err != nil || u.Hostname() == "" {
+		return page
+	}
+	return strings.TrimPrefix(u.Hostname(), "www.")
 }
 
 func wallCaption(c *ui.Context, s string) ui.Element {

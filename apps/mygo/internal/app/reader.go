@@ -612,6 +612,7 @@ func (a *App) readerBar(c *ui.Context, rp *readerPage, art *library.Article, fro
 		})
 		a.readProgress(c, rp, art, fresh)
 		ui.Box(c).Grow(1)
+		a.captureButton(c, rp, art)
 		open := a.iconBtn(c, "original", iconOpt{icon: "openOriginal", label: locales.ReaderOpenOriginal(), tip: locales.ReaderOpenOriginalTip()})
 		a.control(open)
 		if open.Clicked() {

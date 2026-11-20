@@ -112,12 +112,14 @@ type App struct {
 	byURL    map[string]string      // the library's articles by every address they are known by (postID)
 	chipAt   map[string]ui.Rect     // the sidebar's faces, as the frame before laid them out
 	flights2 []*faceFlight          // faces flying to and from the sidebar
-	lights   map[string]time.Time   // places a face just landed on
+	lights   map[string]time.Time   // places a face, or a capture, just landed on
+	favTab   ui.Rect                // 收藏's tab's icon, as the frame before laid it out, for captures to fly into
 	parting  map[string]*partingRow // sidebar rows of authors just let go, kept a beat
 	faceLeft map[string]bool        // rows whose face flew off as they were let go
 
-	layers layers
-	toast  toastState
+	layers  layers
+	toast   toastState
+	capture captureState // 拓本 (capture.go)
 	// Faces on their way onto the notice and back (trip), the notice's face
 	// and the authors' faces in 收藏, as the frame before laid them out.
 	trips      []*faceFlight
@@ -162,6 +164,7 @@ func New(opt Options) (*App, error) {
 		parting: map[string]*partingRow{}, faceLeft: map[string]bool{}, shelfFaces: map[string]ui.Rect{},
 		looks: map[string]titleLook{}}
 	a.accept(lib)
+	a.loadPacks()
 	return a, nil
 }
 
@@ -307,6 +310,7 @@ func (a *App) View(c *ui.Context) {
 		a.moonBack = nil // the page gone back to does not show its row
 	}
 	a.dragStrip(c, holes)
+	a.captureLayers(c)
 	a.buildLayers(c)
 	// What Explore says as it changes (a room crossed, a subscription), for screen readers.
 	if a.ex.live != "" {

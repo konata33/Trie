@@ -41,6 +41,15 @@ func (a *App) shortcuts(c *ui.Context) {
 			a.homeSt().search = true
 		}
 	}
+	// The capture card open takes its own keys; with the keys in the island, Esc
+	// sends it away (收起).
+	if a.capture.card != "" {
+		return
+	}
+	if a.capture.focused && c.Shortcut(0, ui.KeyEscape) {
+		a.hideIsland(c.Now())
+		return
+	}
 	if a.layers.dialog != nil || a.layers.menu != "" {
 		return
 	}

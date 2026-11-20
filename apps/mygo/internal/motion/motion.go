@@ -662,6 +662,44 @@ func (d Dissolve) Closing() time.Duration {
 	return time.Duration(settleRate / (2 * math.Pi) * float64(d.Close))
 }
 
+// Capture 拓本 (DESIGN.md Capture): a page's thumbnail flying from the
+// button into the island over CaptureFly along Flight; its dots taking the first
+// screen's colours over CaptureRecolour; once taken, the first screen rising out of
+// them over CaptureRise and one light passing over it over CaptureSweep, then staying
+// CaptureLinger, or that long after the island was last held, before it flies to
+// 收藏. Dots not yet developed breathe, each over CaptureBreathMin to
+// CaptureBreathMax; a pack that failed greys its dots over CaptureGrey and lets them
+// fall on the travel spring over CaptureFall, each up to CaptureFallStagger after the
+// first, and leaves the island CaptureFailedFor later. A card's line of where its
+// page is stays bright CaptureLineHold after the page stops.
+const (
+	CaptureFly                         = 600 * time.Millisecond
+	CaptureRecolour                    = 400 * time.Millisecond
+	CaptureRise                        = 500 * time.Millisecond
+	CaptureSweep                       = 600 * time.Millisecond
+	CaptureLinger                      = 5 * time.Second
+	CaptureBreathMin, CaptureBreathMax = 2 * time.Second, 4 * time.Second
+	CaptureGrey                        = 250 * time.Millisecond
+	CaptureFall, CaptureFallStagger    = 900 * time.Millisecond, 300 * time.Millisecond
+	CaptureFailedFor                   = 10 * time.Minute
+	CaptureLineHold                    = 700 * time.Millisecond
+)
+
+// FlightFor is how long a long flight takes over d px, as a face flies into
+// the sidebar: 600 ms, longer by 0.35 ms a px, 900 at most.
+func FlightFor(d float64) time.Duration {
+	return time.Duration(min(900, 600+d*0.35)) * time.Millisecond
+}
+
+// Island is the capture island growing out of its point at the window's top
+// edge and going back into it, a long way on a spring without bounce
+// (走远路的弹簧).
+var Island = Travel(450 * time.Millisecond)
+
+// Develop is a thumbnail's dots following the pack's progress: the follow
+// spring, kept under less motion, where only colours change by it.
+var Develop = ui.Animation{Spring: Follow.Spring, NonMotion: true}
+
 // Unfold is a kind's wall coming in under its head as its door opens into
 // it (PAGES.md 类别页): its rows come into focus from Rise below over In,
 // the first After the crossing starts, each Row after the one above.
