@@ -141,6 +141,7 @@ type App struct {
 	movedAt       time.Time // when the page last changed
 	pressed       []string  // Press's, for the next build
 	busy          bool      // a library change is being saved
+	saves         []save    // library changes waiting for the one being saved, in the order they were made
 	said          []string  // for screen readers to read out at the next build
 	errText       string
 	booted        bool
@@ -369,31 +370,47 @@ func (a *App) boot(c *ui.Context) {
 // back; after runs once it is saved.
 func (a *App) mutate(action library.LibraryAction, after func()) { a.mutateOr(action, after, nil) }
 
-// mutateOr is mutate, with failed run when the change is not saved.
+// save is a library change and what runs once it is saved, or is not.
+type save struct {
+	action        library.LibraryAction
+	after, failed func()
+}
+
+// mutateOr is mutate, with failed run when the change is not saved. A change
+// made while another is being saved waits for it, so changes save one at a
+// time and in the order they were made.
 func (a *App) mutateOr(action library.LibraryAction, after, failed func()) {
-	if a.busy {
-		if failed != nil {
-			failed()
-		}
+	a.saves = append(a.saves, save{action, after, failed})
+	if !a.busy {
+		a.saveNext()
+	}
+}
+
+// saveNext saves the first waiting change; busy holds until none is left.
+func (a *App) saveNext() {
+	if len(a.saves) == 0 {
+		a.busy = false
 		return
 	}
+	s := a.saves[0]
+	a.saves = a.saves[1:]
 	a.busy = true
 	store := a.opt.Store
 	a.do(func() func() {
-		lib, err := store.Mutate(action)
+		lib, err := store.Mutate(s.action)
 		return func() {
-			a.busy = false
 			if err != nil {
 				a.fail(locales.ErrorNotSaved(err.Error()))
-				if failed != nil {
-					failed()
+				if s.failed != nil {
+					s.failed()
 				}
-				return
+			} else {
+				a.accept(lib)
+				if s.after != nil {
+					s.after()
+				}
 			}
-			a.accept(lib)
-			if after != nil {
-				after()
-			}
+			a.saveNext()
 		}
 	})
 }

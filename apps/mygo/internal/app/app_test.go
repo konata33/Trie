@@ -233,3 +233,51 @@ func TestPairs(t *testing.T) {
 		}
 	}
 }
+
+// A change made while another is being saved waits its turn: every change
+// is saved, in the order it was made, and busy clears after the last.
+func TestSavesWaitTheirTurn(t *testing.T) {
+	a, store := newTestApp(t)
+	var ids []string
+	for _, art := range a.lib.Articles {
+		if !art.Favorite {
+			ids = append(ids, art.ID)
+		}
+		if len(ids) == 3 {
+			break
+		}
+	}
+	if len(ids) < 3 {
+		t.Skip("the library copy has fewer than three articles to keep")
+	}
+	var saved []string
+	for _, id := range ids {
+		a.mutate(library.ToggleFavorite{ID: id}, func() { saved = append(saved, id) })
+	}
+	if !a.busy || len(a.saves) != 2 {
+		t.Fatalf("busy %v, %d waiting; want the first saving and two waiting", a.busy, len(a.saves))
+	}
+	for len(a.waiting) > 0 {
+		fns := a.waiting
+		a.waiting = nil
+		for _, fn := range fns {
+			fn()
+		}
+	}
+	if fmt.Sprint(saved) != fmt.Sprint(ids) || a.busy || len(a.saves) != 0 {
+		t.Fatalf("saved %v (busy %v, %d waiting), want %v", saved, a.busy, len(a.saves), ids)
+	}
+	lib, err := store.Library()
+	if err != nil {
+		t.Fatal(err)
+	}
+	kept := map[string]bool{}
+	for _, art := range lib.Articles {
+		kept[art.ID] = art.Favorite
+	}
+	for _, id := range ids {
+		if !kept[id] {
+			t.Errorf("%s was not kept", id)
+		}
+	}
+}
