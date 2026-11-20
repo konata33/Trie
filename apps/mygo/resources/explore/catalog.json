@@ -7,8 +7,7 @@
     "host": "antfu.me",
     "feedURL": "https://antfu.me/feed.xml",
     "intro": "Vue/Vite/Slidev 核心成员，开源工具与开发体验设计的一手思考",
-    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）",
-    "subscribed": true
+    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）"
   },
   {
     "id": "innei-in",
@@ -18,8 +17,7 @@
     "host": "innei.in",
     "feedURL": "https://innei.in/feed",
     "intro": "前端开发者，站点本身很有设计感；近期写 Claude Code / Codex 驱动的 iOS 工作流",
-    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）",
-    "subscribed": true
+    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）"
   },
   {
     "id": "velasx-com",
@@ -29,8 +27,7 @@
     "host": "velasx.com",
     "feedURL": "https://www.velasx.com/feed",
     "intro": "动画、游戏与设计鉴赏随笔，偏审美而非技术",
-    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）",
-    "subscribed": true
+    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）"
   },
   {
     "id": "ruanyifeng-com",
@@ -40,8 +37,7 @@
     "host": "ruanyifeng.com",
     "feedURL": "https://www.ruanyifeng.com/blog/atom.xml",
     "intro": "《科技爱好者周刊》每周更新，中文技术写作的清晰范本",
-    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）",
-    "subscribed": false
+    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）"
   },
   {
     "id": "zhangxinxu-com",
@@ -51,8 +47,7 @@
     "host": "zhangxinxu.com",
     "feedURL": "https://www.zhangxinxu.com/wordpress/feed/",
     "intro": "CSS 新特性与交互细节的长期深挖，带可运行 demo",
-    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）",
-    "subscribed": false
+    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）"
   },
   {
     "id": "tw93-fun",
@@ -62,8 +57,7 @@
     "host": "tw93.fun",
     "feedURL": "https://tw93.fun/feed.xml",
     "intro": "前端出身的开源作者（Pake、妙言等），工具做得有设计感",
-    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）",
-    "subscribed": false
+    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）"
   },
   {
     "id": "weekly-tw93-fun",
@@ -73,8 +67,7 @@
     "host": "weekly.tw93.fun",
     "feedURL": "https://weekly.tw93.fun/rss.xml",
     "intro": "每周精选工具、设计与好文，适合做参考来源",
-    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）",
-    "subscribed": false
+    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）"
   },
   {
     "id": "blog-zhheo-com",
@@ -84,8 +77,7 @@
     "host": "blog.zhheo.com",
     "feedURL": "https://blog.zhheo.com/rss.xml",
     "intro": "设计师兼开发者：iOS 设计规范与尺寸、图片格式等可直接引用的设计科普",
-    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）",
-    "subscribed": false
+    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）"
   },
   {
     "id": "moonvy-com",
@@ -95,8 +87,7 @@
     "host": "moonvy.com",
     "feedURL": "https://moonvy.com/blog/rss.xml",
     "intro": "设计工具团队的博客，写设计交付流程，附《设计素材周刊》",
-    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）",
-    "subscribed": false
+    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）"
   },
   {
     "id": "cssforest-org",
@@ -106,8 +97,7 @@
     "host": "cssforest.org",
     "feedURL": "https://www.cssforest.org/feed/",
     "intro": "交互体验长文（如人眼机制与交互设计），前端视角谈设计",
-    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）",
-    "subscribed": false
+    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）"
   },
   {
     "id": "baoyu-io",
@@ -117,8 +107,7 @@
     "host": "baoyu.io",
     "feedURL": "https://baoyu.io/feed.xml",
     "intro": "AI 编程与 Prompt 实践的翻译与解读，贴合「交给 coding agent」的场景",
-    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）",
-    "subscribed": false
+    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）"
   },
   {
     "id": "fatbobman-com",
@@ -128,8 +117,7 @@
     "host": "fatbobman.com",
     "feedURL": "https://fatbobman.com/zh/rss.xml",
     "intro": "SwiftUI / Core Data 深度文章与周报，Mac/iOS 原生界面实现参考",
-    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）",
-    "subscribed": false
+    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）"
   },
   {
     "id": "darmau-co",
@@ -139,8 +127,7 @@
     "host": "darmau.co",
     "feedURL": "https://darmau.co/zh/article/rss.xml",
     "intro": "设计师转前端，设计、前端与摄影兼顾，文笔好",
-    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）",
-    "subscribed": false
+    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）"
   },
   {
     "id": "ssshooter-com",
@@ -150,8 +137,7 @@
     "host": "ssshooter.com",
     "feedURL": "https://ssshooter.com/rss.xml",
     "intro": "前端底层细节（CSS Strut 与 IFC 等）讲得透，兼 Tauri 实战",
-    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）",
-    "subscribed": false
+    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）"
   },
   {
     "id": "albertaz-com",
@@ -161,8 +147,7 @@
     "host": "albertaz.com",
     "feedURL": "https://www.albertaz.com/rss.xml",
     "intro": "WebGPU、Canvas 地图等创意前端工程，写清工程取舍",
-    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）",
-    "subscribed": false
+    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）"
   },
   {
     "id": "blog-codingnow-com",
@@ -172,8 +157,7 @@
     "host": "blog.codingnow.com",
     "feedURL": "https://blog.codingnow.com/atom.xml",
     "intro": "资深引擎程序员的工程思考，中文技术写作标杆",
-    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）",
-    "subscribed": false
+    "section": "中文独立博客（前端 / 工程 / 产品 / 设计）"
   },
   {
     "id": "joshwcomeau-com",
@@ -183,8 +167,7 @@
     "host": "joshwcomeau.com",
     "feedURL": "https://www.joshwcomeau.com/rss.xml",
     "intro": "CSS、动效与交互式讲解的标杆，文章本身就是交互设计范例",
-    "section": "英文设计工程师、前端 / UI 工程师与界面设计师",
-    "subscribed": false
+    "section": "英文设计工程师、前端 / UI 工程师与界面设计师"
   },
   {
     "id": "ishadeed-com",
@@ -194,8 +177,7 @@
     "host": "ishadeed.com",
     "feedURL": "https://ishadeed.com/feed.xml",
     "intro": "CSS 布局与 UI 细节的可视化拆解，常拿真实产品界面做案例",
-    "section": "英文设计工程师、前端 / UI 工程师与界面设计师",
-    "subscribed": false
+    "section": "英文设计工程师、前端 / UI 工程师与界面设计师"
   },
   {
     "id": "nerdy-dev",
@@ -205,8 +187,7 @@
     "host": "nerdy.dev",
     "feedURL": "https://nerdy.dev/rss.xml",
     "intro": "CSS 新特性、动效与 Open Props，短小高频",
-    "section": "英文设计工程师、前端 / UI 工程师与界面设计师",
-    "subscribed": false
+    "section": "英文设计工程师、前端 / UI 工程师与界面设计师"
   },
   {
     "id": "blog-jim-nielsen-com",
@@ -216,8 +197,7 @@
     "host": "blog.jim-nielsen.com",
     "feedURL": "https://blog.jim-nielsen.com/feed.xml",
     "intro": "网页设计与工艺的短评，常引用他人观点，摘录价值高",
-    "section": "英文设计工程师、前端 / UI 工程师与界面设计师",
-    "subscribed": false
+    "section": "英文设计工程师、前端 / UI 工程师与界面设计师"
   },
   {
     "id": "robinrendle-com",
@@ -227,8 +207,7 @@
     "host": "robinrendle.com",
     "feedURL": "https://robinrendle.com/feed.xml",
     "intro": "排版、网页设计与写作的随笔，审美判断鲜明",
-    "section": "英文设计工程师、前端 / UI 工程师与界面设计师",
-    "subscribed": false
+    "section": "英文设计工程师、前端 / UI 工程师与界面设计师"
   },
   {
     "id": "frankchimero-com",
@@ -238,8 +217,7 @@
     "host": "frankchimero.com",
     "feedURL": "https://frankchimero.com/feed.xml",
     "intro": "设计师写设计哲学的经典作者，更新少但篇篇值得读",
-    "section": "英文设计工程师、前端 / UI 工程师与界面设计师",
-    "subscribed": false
+    "section": "英文设计工程师、前端 / UI 工程师与界面设计师"
   },
   {
     "id": "maggieappleton-com",
@@ -249,8 +227,7 @@
     "host": "maggieappleton.com",
     "feedURL": "https://maggieappleton.com/rss.xml",
     "intro": "手绘图解 + AI 与界面设计的思考，非常适合做幻灯片与图示素材",
-    "section": "英文设计工程师、前端 / UI 工程师与界面设计师",
-    "subscribed": false
+    "section": "英文设计工程师、前端 / UI 工程师与界面设计师"
   },
   {
     "id": "bradfrost-com",
@@ -260,8 +237,7 @@
     "host": "bradfrost.com",
     "feedURL": "https://bradfrost.com/feed/",
     "intro": "Atomic Design 作者，设计系统与 AI 时代的设计系统",
-    "section": "英文设计工程师、前端 / UI 工程师与界面设计师",
-    "subscribed": false
+    "section": "英文设计工程师、前端 / UI 工程师与界面设计师"
   },
   {
     "id": "daverupert-com",
@@ -271,8 +247,7 @@
     "host": "daverupert.com",
     "feedURL": "https://daverupert.com/atom.xml",
     "intro": "Web 组件、设计工程与行业观察，口语化好读",
-    "section": "英文设计工程师、前端 / UI 工程师与界面设计师",
-    "subscribed": false
+    "section": "英文设计工程师、前端 / UI 工程师与界面设计师"
   },
   {
     "id": "lea-verou-me",
@@ -282,8 +257,7 @@
     "host": "lea.verou.me",
     "feedURL": "https://lea.verou.me/feed.xml",
     "intro": "CSS 规范参与者，写 API 与界面设计的可用性",
-    "section": "英文设计工程师、前端 / UI 工程师与界面设计师",
-    "subscribed": false
+    "section": "英文设计工程师、前端 / UI 工程师与界面设计师"
   },
   {
     "id": "tonsky-me",
@@ -293,8 +267,7 @@
     "host": "tonsky.me",
     "feedURL": "https://tonsky.me/atom.xml",
     "intro": "对 UI 细节（图标、字体、桌面软件）有强烈观点的批评文章",
-    "section": "英文设计工程师、前端 / UI 工程师与界面设计师",
-    "subscribed": false
+    "section": "英文设计工程师、前端 / UI 工程师与界面设计师"
   },
   {
     "id": "sarasoueidan-com",
@@ -304,8 +277,7 @@
     "host": "sarasoueidan.com",
     "feedURL": "https://www.sarasoueidan.com/blog/index.xml",
     "intro": "UI 开发与无障碍（SVG、焦点、可访问组件）的权威长文",
-    "section": "英文设计工程师、前端 / UI 工程师与界面设计师",
-    "subscribed": false
+    "section": "英文设计工程师、前端 / UI 工程师与界面设计师"
   },
   {
     "id": "brianlovin-com",
@@ -315,8 +287,7 @@
     "host": "brianlovin.com",
     "feedURL": "https://brianlovin.com/writing/rss.xml",
     "intro": "设计工程师（曾任 GitHub、Campsite），写产品设计与做工具",
-    "section": "英文设计工程师、前端 / UI 工程师与界面设计师",
-    "subscribed": false
+    "section": "英文设计工程师、前端 / UI 工程师与界面设计师"
   },
   {
     "id": "wattenberger-com",
@@ -326,8 +297,7 @@
     "host": "wattenberger.com",
     "feedURL": "https://wattenberger.com/rss.xml",
     "intro": "数据可视化与 AI 界面设计，交互式文章本身就是参考",
-    "section": "英文设计工程师、前端 / UI 工程师与界面设计师",
-    "subscribed": false
+    "section": "英文设计工程师、前端 / UI 工程师与界面设计师"
   },
   {
     "id": "interconnected-org",
@@ -337,8 +307,7 @@
     "host": "interconnected.org",
     "feedURL": "https://interconnected.org/home/feed",
     "intro": "设计师/创业者写 AI、硬件与交互的新可能，点子密度高",
-    "section": "英文设计工程师、前端 / UI 工程师与界面设计师",
-    "subscribed": false
+    "section": "英文设计工程师、前端 / UI 工程师与界面设计师"
   },
   {
     "id": "ciechanow-ski",
@@ -348,8 +317,7 @@
     "host": "ciechanow.ski",
     "feedURL": "https://ciechanow.ski/atom.xml",
     "intro": "交互式可视化讲解的天花板，更新极少，每篇都是范例",
-    "section": "英文设计工程师、前端 / UI 工程师与界面设计师",
-    "subscribed": false
+    "section": "英文设计工程师、前端 / UI 工程师与界面设计师"
   },
   {
     "id": "thetype-com",
@@ -359,8 +327,7 @@
     "host": "thetype.com",
     "feedURL": "https://www.thetype.com/feed/",
     "intro": "中文字体与排印的专业写作（字体史、地图设计中的文字等）",
-    "section": "设计写作 / Newsletter",
-    "subscribed": false
+    "section": "设计写作 / Newsletter"
   },
   {
     "id": "blog-justfont-com",
@@ -370,8 +337,7 @@
     "host": "blog.justfont.com",
     "feedURL": "https://blog.justfont.com/feed",
     "intro": "台湾字体公司的中文字体与排版科普",
-    "section": "设计写作 / Newsletter",
-    "subscribed": false
+    "section": "设计写作 / Newsletter"
   },
   {
     "id": "sidebar-io",
@@ -381,8 +347,7 @@
     "host": "sidebar.io",
     "feedURL": "https://sidebar.io/feed.xml",
     "intro": "每天 5 条精选设计链接，最省力的设计信息源",
-    "section": "设计写作 / Newsletter",
-    "subscribed": false
+    "section": "设计写作 / Newsletter"
   },
   {
     "id": "smashingmagazine-com",
@@ -392,8 +357,7 @@
     "host": "smashingmagazine.com",
     "feedURL": "https://www.smashingmagazine.com/feed/",
     "intro": "老牌前端与 UX 长文，实操性强",
-    "section": "设计写作 / Newsletter",
-    "subscribed": false
+    "section": "设计写作 / Newsletter"
   },
   {
     "id": "nngroup-com",
@@ -403,8 +367,7 @@
     "host": "nngroup.com",
     "feedURL": "https://www.nngroup.com/feed/rss/",
     "intro": "可用性研究与 UX 原则的权威来源，适合引用",
-    "section": "设计写作 / Newsletter",
-    "subscribed": false
+    "section": "设计写作 / Newsletter"
   },
   {
     "id": "piccalil-li",
@@ -414,8 +377,7 @@
     "host": "piccalil.li",
     "feedURL": "https://piccalil.li/feed.xml",
     "intro": "Andy Bell 主理，CSS 与前端工艺文章，多位作者",
-    "section": "设计写作 / Newsletter",
-    "subscribed": false
+    "section": "设计写作 / Newsletter"
   },
   {
     "id": "fontsinuse-com",
@@ -426,7 +388,6 @@
     "feedURL": "https://fontsinuse.com/main.rss",
     "intro": "真实作品中的字体使用档案，配图丰富，适合找排版参考",
     "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false,
     "kinds": [
       {
         "kind": "type"
@@ -441,8 +402,7 @@
     "host": "densediscovery.com",
     "feedURL": "https://densediscovery.com/feed/",
     "intro": "每周设计、工具与思考的 newsletter，选题有品味",
-    "section": "设计写作 / Newsletter",
-    "subscribed": false
+    "section": "设计写作 / Newsletter"
   },
   {
     "id": "typographica-org",
@@ -452,8 +412,7 @@
     "host": "typographica.org",
     "feedURL": "https://typographica.org/feed/",
     "intro": "字体评论与年度最佳字体评选，更新慢但权威",
-    "section": "设计写作 / Newsletter",
-    "subscribed": false
+    "section": "设计写作 / Newsletter"
   },
   {
     "id": "siteinspire-com",
@@ -463,8 +422,7 @@
     "host": "siteinspire.com",
     "feedURL": "https://www.siteinspire.com/websites/feed",
     "intro": "按风格、类型细分的网页设计收录，品味稳定",
-    "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false
+    "section": "设计灵感画廊（有可用 RSS）"
   },
   {
     "id": "minimal-gallery",
@@ -475,7 +433,6 @@
     "feedURL": "https://minimal.gallery/feed/",
     "intro": "极简风网站精选，适合找克制的排版与留白",
     "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false,
     "kinds": [
       {
         "kind": "portfolio",
@@ -492,7 +449,6 @@
     "feedURL": "https://onepagelove.com/feed",
     "intro": "单页网站与落地页收录，更新频繁",
     "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false,
     "kinds": [
       {
         "kind": "landing",
@@ -520,8 +476,7 @@
     "host": "awwwards.com",
     "feedURL": "https://www.awwwards.com/feed/",
     "intro": "每日获奖网站，偏动效与视觉实验",
-    "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false
+    "section": "设计灵感画廊（有可用 RSS）"
   },
   {
     "id": "typewolf-com",
@@ -532,7 +487,6 @@
     "feedURL": "https://www.typewolf.com/feed",
     "intro": "每日一个网站并标注所用字体，排版参考首选",
     "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false,
     "kinds": [
       {
         "kind": "type"
@@ -548,7 +502,6 @@
     "feedURL": "https://saaslandingpage.com/feed/",
     "intro": "SaaS 落地页收录（Raycast、Incident.io 等），贴近产品界面",
     "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false,
     "kinds": [
       {
         "kind": "landing"
@@ -564,7 +517,6 @@
     "feedURL": "https://io3000.com/feed/",
     "intro": "日本与海外网站精选，排版安静克制",
     "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false,
     "kinds": [
       {
         "kind": "motion",
@@ -585,7 +537,6 @@
     "feedURL": "https://thefwa.com/feed/winners.xml",
     "intro": "老牌网站奖项的获奖作品，完成度高，偏体验与动效",
     "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false,
     "kinds": [
       {
         "kind": "motion"
@@ -601,7 +552,6 @@
     "feedURL": "https://land-book.com/rss.xml",
     "intro": "落地页与产品网站精选，收录严、更新勤",
     "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false,
     "kinds": [
       {
         "kind": "landing"
@@ -616,8 +566,7 @@
     "host": "minimalissimo.com",
     "feedURL": "https://minimalissimo.com/feed/rss",
     "intro": "极简的产品、建筑与空间，画面安静讲究",
-    "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false
+    "section": "设计灵感画廊（有可用 RSS）"
   },
   {
     "id": "bpando-org",
@@ -628,7 +577,6 @@
     "feedURL": "https://bpando.org/feed/",
     "intro": "品牌识别与字体设计，附评论，偏重排版",
     "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false,
     "kinds": [
       {
         "kind": "brand"
@@ -643,8 +591,7 @@
     "host": "itsnicethat.com",
     "feedURL": "http://feeds2.feedburner.com/itsnicethat/SlXC",
     "intro": "平面设计、插画与创意人物专题",
-    "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false
+    "section": "设计灵感画廊（有可用 RSS）"
   },
   {
     "id": "csswinner-com",
@@ -654,8 +601,7 @@
     "host": "csswinner.com",
     "feedURL": "https://www.csswinner.com/feed",
     "intro": "网站设计奖项的获奖作品",
-    "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false
+    "section": "设计灵感画廊（有可用 RSS）"
   },
   {
     "id": "abduzeedo-com",
@@ -666,7 +612,6 @@
     "feedURL": "https://abduzeedo.com/rss.xml",
     "intro": "品牌、平面与界面设计作品，更新量大",
     "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false,
     "kinds": [
       {
         "kind": "brand",
@@ -686,8 +631,7 @@
     "host": "behance.net",
     "feedURL": "https://www.behance.net/feeds/projects",
     "intro": "Behance 编辑精选的设计项目",
-    "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false
+    "section": "设计灵感画廊（有可用 RSS）"
   },
   {
     "id": "mindsparklemag-com",
@@ -698,7 +642,6 @@
     "feedURL": "https://www.mindsparklemag.com/feed/",
     "intro": "品牌识别与包装设计案例，补足网页以外的视觉参考",
     "section": "设计灵感画廊（有可用 RSS）",
-    "subscribed": false,
     "kinds": [
       {
         "kind": "brand"
@@ -713,8 +656,7 @@
     "host": "rauno.me",
     "feedURL": null,
     "intro": "设计工程师（曾任 Vercel），个人站的交互细节是业内常被引用的范例",
-    "section": "设计范例站点（design-site）",
-    "subscribed": false
+    "section": "设计范例站点（design-site）"
   },
   {
     "id": "emilkowal-ski",
@@ -724,8 +666,7 @@
     "host": "emilkowal.ski",
     "feedURL": null,
     "intro": "Sonner、Vaul 作者，动效与组件手感的参考站",
-    "section": "设计范例站点（design-site）",
-    "subscribed": false
+    "section": "设计范例站点（design-site）"
   },
   {
     "id": "linear-app",
@@ -735,8 +676,7 @@
     "host": "linear.app",
     "feedURL": "https://linear.app/rss/now.xml",
     "intro": "Linear 团队博客，产品设计与工程文化，站点本身是 SaaS 设计标杆",
-    "section": "设计范例站点（design-site）",
-    "subscribed": false
+    "section": "设计范例站点（design-site）"
   },
   {
     "id": "paco-me",
@@ -746,8 +686,7 @@
     "host": "paco.me",
     "feedURL": "https://paco.me/feed.xml",
     "intro": "cmdk 作者，个人站极简精致",
-    "section": "设计范例站点（design-site）",
-    "subscribed": false
+    "section": "设计范例站点（design-site）"
   },
   {
     "id": "rsms-me",
@@ -757,8 +696,7 @@
     "host": "rsms.me",
     "feedURL": "https://rsms.me/atom.xml",
     "intro": "Inter 字体作者，站点与字体项目本身是排版参考",
-    "section": "设计范例站点（design-site）",
-    "subscribed": false
+    "section": "设计范例站点（design-site）"
   },
   {
     "id": "panic-com",
@@ -768,7 +706,6 @@
     "host": "panic.com",
     "feedURL": "https://www.panic.com/blog/feed/",
     "intro": "Mac 软件公司 Panic，产品与网站设计向来讲究，贴合 Mac 应用场景",
-    "section": "设计范例站点（design-site）",
-    "subscribed": false
+    "section": "设计范例站点（design-site）"
   }
 ]
