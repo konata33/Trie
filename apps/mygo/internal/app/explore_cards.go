@@ -358,9 +358,9 @@ func (a *App) pips(c *ui.Context, works []exWork, at int) {
 // frame is one of the galleries' new works (Frame): its picture, the
 // gallery's badge, and its title on a band that rises when pointed at.
 func (a *App) frame(c *ui.Context, w exWork, width, height float32) {
-	pic := a.workPic(w)
 	b := ui.ButtonBase(c.Key(w.key())).Label(locales.ExploreWorkCard(w.title, w.entry.Name)).Size(width, height).Radius(10).ClipX().ClipY().
 		Background(theme.Surface).InsetShadow(0, 0, 0, 1, theme.LineSoft).Center().FocusRing(false)
+	pic := a.nearPic(b, w)
 	a.reach(c, b, w.entry.ID, w.url)
 	if b.Clicked() {
 		a.openPost(c, w.entry, w.post(), nil)
@@ -1185,7 +1185,7 @@ func (a *App) cover(c *ui.Context, e *explore.Entry, w, h float32) {
 
 // toc is a cover's next posts at its foot, like a contents list, on the band.
 func (a *App) toc(c *ui.Context, e *explore.Entry, posts []explore.Post, w, h float32) {
-	full := a.ex.pics["shot:"+e.ID]
+	full := a.ex.pics[shotKey(e)]
 	n := float32(len(posts))
 	listH := 20*n + 2*(n-1)
 	ui.Column(c.Key("foot")).Margin(0, -18, -16, -18).Padding(0, 16, 16, 16).Children(func() {

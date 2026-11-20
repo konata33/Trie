@@ -161,11 +161,14 @@ func (a *App) listedPost(id string) *trial {
 // it, else the article's own; nil when it has none.
 func (a *App) entryPic(p page, art *library.Article) (pic *favPic, wants bool) {
 	if who := a.exPersonOf(p.id); who != nil {
-		if i, ok := who.works[art.ID]; ok && a.opt.Explore != nil {
-			svc, eid := a.opt.Explore, who.entry.ID
-			return a.favPicture("work:"+eid+"#"+strconv.Itoa(i), func() image.Image {
-				data, _ := svc.Work(bg, eid, i)
-				return dataImage(data)
+		if i, ok := who.works[art.ID]; ok && a.opt.Explore != nil && i < len(who.entry.Works) {
+			// By the picture's address, as Explore keys it (workKey).
+			svc, src := a.opt.Explore, who.entry.Works[i].Image
+			return a.favPicture("work:"+src, func() image.Image {
+				if src == "" {
+					return nil
+				}
+				return dataImage(svc.Picture(bg, src))
 			}), true
 		}
 	}

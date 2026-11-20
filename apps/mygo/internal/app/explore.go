@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -83,6 +84,9 @@ type exPic struct {
 	dots  []ui.Color // its three main colours (palette)
 	// How bright it rests and comes up to, by how light it is (toneOf); a door's.
 	rest, lit float32
+	// held: a place that shows it wherever it is asked for it (workPic), so it
+	// keeps its turn when a card of it is scrolled away (nearPic).
+	held bool
 }
 
 // roomMove is the rooms on their spring, from where they were toward room
@@ -153,6 +157,7 @@ type exploreState struct {
 	auras    map[auraKey]*ui.Bitmap
 	px       float32       // the screen's pixels a DIP, as the last frame drew the rooms
 	loads    chan struct{} // work pictures come a few at a time
+	away     sync.Map      // work pictures waiting their turn whose card was scrolled away (nearPic)
 	busy     string        // the source being subscribed or let go
 	busyAt   time.Time
 	fresh2   map[string]bool // a pill just pressed: no 取消订阅 hint until the pointer leaves
@@ -191,7 +196,7 @@ type exploreState struct {
 
 func newExploreState() *exploreState {
 	return &exploreState{shown: [2]int{siteBatch, coverBatch}, pics: map[string]*exPic{},
-		fresh2: map[string]bool{}, turns: map[string]*pickTurns{}, faces: map[string]ui.Rect{}, loads: make(chan struct{}, 4),
+		fresh2: map[string]bool{}, turns: map[string]*pickTurns{}, faces: map[string]ui.Rect{}, loads: make(chan struct{}, 8),
 		pills: map[string]*pillState{}}
 }
 
@@ -516,8 +521,11 @@ func decodeData(data string) image.Image {
 
 // picture is a picture Explore loads on first sight (a gallery's work, a
 // site's capture, a writer's latest picture): load gives its data URL, ""
-// for none. Works come four at a time. top keeps only the top of a tall one
-// (topOf), for a picture every box holds by its top.
+// for none. Works come eight at a time, most from sites of their own, as
+// setting up each connection takes longer than the picture; one whose card
+// was scrolled away before its turn (nearPic) gives its place to the next
+// and is asked for again once the card comes near. top keeps only the top
+// of a tall one (topOf), for a picture every box holds by its top.
 func (a *App) picture(key string, queued, top bool, load func() string) *exPic {
 	ex := a.ex
 	if p := ex.pics[key]; p != nil || a.warming {
@@ -529,6 +537,13 @@ func (a *App) picture(key string, queued, top bool, load func() string) *exPic {
 		if queued && !a.opt.Sync {
 			ex.loads <- struct{}{}
 			defer func() { <-ex.loads }()
+			if _, gone := ex.away.LoadAndDelete(key); gone {
+				return func() {
+					if ex.pics[key] == p {
+						delete(ex.pics, key)
+					}
+				}
+			}
 		}
 		got := &exPic{done: true}
 		if data := load(); data != "" {
@@ -543,21 +558,74 @@ func (a *App) picture(key string, queued, top bool, load func() string) *exPic {
 	return p
 }
 
+// workKey is the key of a work's picture: its address, so that a gallery
+// read again, its works in new places, never shows one work's picture on
+// another.
+func workKey(w exWork) string {
+	if w.index < len(w.entry.Works) && w.entry.Works[w.index].Image != "" {
+		return "work:" + w.entry.Works[w.index].Image
+	}
+	return "work:" + w.key()
+}
+
+// workPic is a work's picture for a place that shows it wherever it is (a
+// door, a wall, the lead): held, it keeps its turn while a card of the same
+// work is scrolled away.
 func (a *App) workPic(w exWork) *exPic {
-	svc, id, i := a.opt.Explore, w.entry.ID, w.index
+	p := a.loadWork(w)
+	if p != nil {
+		p.held = true
+	}
+	a.ex.away.Delete(workKey(w))
+	return p
+}
+
+// loadWork asks for a work's picture, by its address (workKey).
+func (a *App) loadWork(w exWork) *exPic {
+	svc, src := a.opt.Explore, ""
+	if w.index < len(w.entry.Works) {
+		src = w.entry.Works[w.index].Image
+	}
 	// Every box holds a work by its top, but a wall holding its kind's by their middle (wallLooks).
 	top := !slices.ContainsFunc(a.ex.kindOf[w.url], func(k string) bool { return wallLooks[k].py != 0 })
-	return a.picture("work:"+w.key(), true, top, func() string {
-		data, _ := svc.Work(bg, id, i)
-		return data
+	return a.picture(workKey(w), true, top, func() string {
+		if src == "" {
+			return ""
+		}
+		return svc.Picture(bg, src)
 	})
+}
+
+// nearPic is the picture of the work card b shows, asked for once the card
+// is within 600 DIPs of the window; one scrolled away while its picture
+// waits its turn lets the pictures on screen go first.
+func (a *App) nearPic(b ui.Element, w exWork) *exPic {
+	key := workKey(w)
+	if b.InViewMargin(600) {
+		a.ex.away.Delete(key)
+		return a.loadWork(w)
+	}
+	p := a.ex.pics[key]
+	if p != nil && !p.done && !p.held {
+		a.ex.away.Store(key, true)
+	}
+	return p
+}
+
+// shotKey is the key of what stands behind an entry: a writer stands on
+// their latest post, so a newer post brings its own picture.
+func shotKey(e *explore.Entry) string {
+	if e.Kind == "blog" && len(e.Posts) > 0 {
+		return "shot:" + e.ID + "|" + e.Posts[0].URL
+	}
+	return "shot:" + e.ID
 }
 
 // fullShot is the site at full size (loadExploreShot): a design site's large
 // capture, a writer's latest post's picture.
 func (a *App) fullShot(e *explore.Entry) *exPic {
 	svc, id := a.opt.Explore, e.ID
-	return a.picture("shot:"+id, false, false, func() string {
+	return a.picture(shotKey(e), false, false, func() string {
 		data, _ := svc.Shot(bg, id)
 		return data
 	})
@@ -569,7 +637,7 @@ func (a *App) fullShot(e *explore.Entry) *exPic {
 func (a *App) ground(e *explore.Entry, kind groundKind, w, h float32) *exPic {
 	ex, svc, id := a.ex, a.opt.Explore, e.ID
 	w, h = float32(math.Ceil(float64(w)/16)*16), float32(math.Ceil(float64(h)/16)*16)
-	key := "ground:" + strconv.Itoa(int(kind)) + ":" + id + ":" + strconv.Itoa(int(w)) + "x" + strconv.Itoa(int(h))
+	key := "ground:" + strconv.Itoa(int(kind)) + ":" + shotKey(e) + ":" + strconv.Itoa(int(w)) + "x" + strconv.Itoa(int(h))
 	if p := ex.pics[key]; p != nil || a.warming {
 		return p
 	}

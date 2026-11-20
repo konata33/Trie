@@ -386,13 +386,13 @@ func (a *App) lastRefreshed() *string {
 
 // showcase is today's design example (show).
 func (a *App) showcase(c *ui.Context, it *homeItem, live bool) {
-	svc, id, index := a.opt.Explore, it.entry.ID, it.index
-	pic := a.favPicture(fmt.Sprintf("work:%s:%d", id, index), func() image.Image {
-		if svc == nil {
+	// By the picture's address, as Explore keys it (workKey).
+	svc, src := a.opt.Explore, it.post.Image
+	pic := a.favPicture("work:"+src, func() image.Image {
+		if svc == nil || src == "" {
 			return nil
 		}
-		data, _ := svc.Work(bg, id, index)
-		return dataImage(data)
+		return dataImage(svc.Picture(bg, src))
 	})
 	a.show(c, pic, false, locales.HomeTodaysExample(), it.post.Title, live, func(b ui.Element) { a.opener(b, it.post.URL) }, func() ui.Element {
 		a.showSource(c, func() {
@@ -653,7 +653,7 @@ func rankTitle(c *ui.Context, s string) ui.Element {
 // leadShot is the lead's picture (loadExploreShot): a writer's latest post's own, a site's first screen.
 func (a *App) leadShot(e *explore.Entry) *favPic {
 	svc, id := a.opt.Explore, e.ID
-	return a.favPicture("shot:"+id, func() image.Image {
+	return a.favPicture(shotKey(e), func() image.Image {
 		if svc == nil {
 			return nil
 		}

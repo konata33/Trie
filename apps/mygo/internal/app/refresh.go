@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -14,6 +15,10 @@ import (
 	"trie/internal/subscription"
 	"trie/internal/theme"
 )
+
+// aheadWait is how long a refresh holds the articles it brought while their
+// pictures come (picturesAhead).
+const aheadWait = 60 * time.Second
 
 // refreshState is the subscriptions' refresh as the sidebar shows it: rows
 // dim while their feed is read and brighten
@@ -126,6 +131,9 @@ func (a *App) refreshFeeds(sourceID string) {
 				}
 			})
 		})
+		if err == nil {
+			a.picturesAhead(res.Library.Articles, before)
+		}
 		return func() {
 			r.busy = false
 			if err != nil {
@@ -175,6 +183,41 @@ func (a *App) refreshFeeds(sourceID string) {
 			}
 		}
 	})
+}
+
+// picturesAhead fetches the pictures of the articles a refresh brought, the
+// ones not in before, four at a time, before the refresh shows them: a new
+// article comes onto the pages with its picture, and the refresh's turn ends
+// once they are in. It waits at most aheadWait; a picture still on its way
+// then comes as pictures do.
+func (a *App) picturesAhead(arts []library.Article, before map[string]bool) {
+	if a.opt.Thumbs != nil || a.opt.Store == nil {
+		return // the tests' thumbnails are bitmaps, without the picture to fetch
+	}
+	next := make(chan string, len(arts))
+	for i := range arts {
+		if pv := arts[i].Preview; !before[arts[i].ID] && pv != nil && pv.HasImage {
+			next <- arts[i].ID
+		}
+	}
+	close(next)
+	done := make(chan struct{})
+	go func() {
+		var wg sync.WaitGroup
+		for range min(4, len(next)) {
+			wg.Go(func() {
+				for id := range next {
+					a.thumbImage(id, 0, 1200, true)
+				}
+			})
+		}
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(aheadWait):
+	}
 }
 
 // arrive flares a refreshed author's face once: light, not movement, so it
