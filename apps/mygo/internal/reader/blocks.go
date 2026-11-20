@@ -223,7 +223,7 @@ type flow struct {
 func (f *flow) open() *block {
 	if f.para == nil {
 		p := f.tmpl
-		f.para, f.space = &p, true
+		f.para = &p
 		f.tmpl.anchor = "" // the anchor goes with the first piece
 	}
 	return f.para

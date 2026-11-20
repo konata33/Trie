@@ -71,6 +71,28 @@ func TestMagicLinks(t *testing.T) {
 	}
 }
 
+// White space beside an inline element shows as one space, also after a paragraph's first piece; none is added
+// where the source has none.
+func TestInlineSpaces(t *testing.T) {
+	for html, want := range map[string]string{
+		`<p><a href="https://devfra.me/"><strong>Devframe</strong></a> is neutral.</p>`: "Devframe is neutral.",
+		`<p><em>a</em>  <code>b</code> c</p>`:                                           "a b c",
+		`<p>see <a href="https://antfu.me/">it</a>.</p>`:                                "see it.",
+		`<p><strong>x </strong> y</p>`:                                                  "x y",
+		`<p>用<a href="https://antfu.me/">链接</a>写</p>`:                                   "用链接写",
+	} {
+		var sb strings.Builder
+		walkBlocks(Prepare(&Content{Status: "ready", HTML: html}).blocks, func(b *block) {
+			for _, rn := range b.runs {
+				sb.WriteString(rn.text)
+			}
+		})
+		if got := sb.String(); got != want {
+			t.Errorf("%s reads %q, want %q", html, got, want)
+		}
+	}
+}
+
 // A link to a site with a mark shows the mark before its words, outside the link; other links, and links that hold
 // only a picture, show none.
 func TestLinkMarks(t *testing.T) {
