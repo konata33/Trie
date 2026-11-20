@@ -547,3 +547,31 @@ func TestWorkRest(t *testing.T) {
 	settle(normal)
 	savePNG(t, filepath.Join(dir, "normal-rest-mygo-"+label+".png"), normal.Image())
 }
+
+// TestWarmUpEnds checks the warm-up's unseen dialog goes with its frames: once the
+// window has settled, nothing of it is left on the page.
+func TestWarmUpEnds(t *testing.T) {
+	a, _ := newTestApp(t)
+	posts := make(chan func(), 256) // jobs' results are left undone: only the frames matter
+	a.opt.Post, a.opt.Sync = func(fn func()) {
+		select {
+		case posts <- fn:
+		default:
+		}
+	}, false
+	tt := ui.NewTester(a.View, 1280, 850)
+	tt.SetScale(2)
+	settle(tt)
+	warm := tt.Image()
+	a.warmed = 1 << 20 // long past the warm-up
+	tt.Frame()
+	cold := tt.Image()
+	b := warm.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			if warm.At(x, y) != cold.At(x, y) {
+				t.Fatalf("the warm-up still draws at (%d, %d) px", x, y)
+			}
+		}
+	}
+}

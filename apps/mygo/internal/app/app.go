@@ -292,10 +292,12 @@ func (a *App) View(c *ui.Context) {
 	}
 	if behind > 0.01 {
 		root.Blur(behind)
-	} else if a.warmed < warmFrames && !a.opt.Sync {
-		a.warmed++
-		root.Blur(warmBlur)
-		c.Invalidate()
+	} else if a.warmed <= warmFrames && !a.opt.Sync {
+		a.warmed++ // past warmFrames once it is over, so the warm dialog goes too
+		if a.warmed <= warmFrames {
+			root.Blur(warmBlur)
+			c.Invalidate()
+		}
 	}
 	root.Children(func() {
 		a.sidebar(c)
