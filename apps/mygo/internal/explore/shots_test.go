@@ -315,6 +315,36 @@ func TestShotWindowIsolated(t *testing.T) {
 	}
 }
 
+// A tracker's host and its subdomains match, as WebKit matches the rule; a host that only ends like one, or the
+// name in a path, does not.
+func TestTrackers(t *testing.T) {
+	match := func(url string) bool {
+		for _, host := range trackers {
+			if regexp.MustCompile(`(?i)^[^:]+://([^/?#]*\.)?` + regexp.QuoteMeta(host) + `[/?#:]`).MatchString(url) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, url := range []string{"https://www.google-analytics.com/analytics.js", "https://region1.google-analytics.com/g/collect?v=2",
+		"https://www.googletagmanager.com/gtm.js?id=GTM-X", "https://us.i.posthog.com/e/", "https://static.hotjar.com/c/hotjar-1.js?sv=6"} {
+		if !match(url) {
+			t.Errorf("%s is let through", url)
+		}
+	}
+	for _, url := range []string{"https://example.com/", "https://notgoogle-analytics.com/", "https://example.com/google-analytics.com.png",
+		"https://framerusercontent.com/images/a.png", "https://fonts.googleapis.com/css2?family=Inter"} {
+		if match(url) {
+			t.Errorf("%s is blocked", url)
+		}
+	}
+	for _, host := range trackers {
+		if strings.ContainsAny(host, "|{}\\") {
+			t.Errorf("%s has what WebKit's url-filter does not take", host)
+		}
+	}
+}
+
 // The requests a captured page may not make are publicURL's refusals (and every IP address), as WebKit matches them.
 func TestPrivateAddresses(t *testing.T) {
 	var rules []*regexp.Regexp

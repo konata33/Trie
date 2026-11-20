@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"image"
 	"image/jpeg"
-	"image/png"
 	"log"
 	"math"
 	"os"
@@ -284,11 +283,7 @@ const (
 // stays so, as a capture that shows nothing of the site is no capture.
 func (s *Shots) firstScreen(win *mygo.Window) image.Image {
 	for try := 0; ; try++ {
-		shot, err := win.CapturePage()
-		if err != nil {
-			return nil
-		}
-		img, err := png.Decode(bytes.NewReader(shot))
+		img, err := snapshot(win)
 		if err != nil || img.Bounds().Empty() {
 			return nil
 		}
@@ -422,8 +417,10 @@ func webOnly(e *mygo.NavigateEvent) {
 // rendering updates and tells it it is hidden, so a first screen that animates in would be taken blank. Animation
 // frames come from a timer, and the page is told it is visible. Its animation timeline stands still too, which
 // leaves every CSS animation and transition at its first frame (rauno.me, catk.de, vendredi-society.fr: their
-// words fade in from nothing): the clock moves them on, by as much as the timeline did not.
+// words fade in from nothing): the clock moves them on, by as much as the timeline did not. It notes up to 5000 of the
+// files the page loads rather than the first 250, which a pack lists (packCollect).
 const quiet = `(() => {
+  try { performance.setResourceTimingBufferSize(5000) } catch {}
   for (const [name, value] of [['alert', () => {}], ['confirm', () => false], ['prompt', () => null], ['print', () => {}]])
     Object.defineProperty(window, name, { value, writable: false, configurable: false })
   window.requestAnimationFrame = callback => setTimeout(() => callback(performance.now()), 16)
@@ -456,11 +453,52 @@ var privatePatterns = []string{
 	`^[^:]+://[^/?#.:]+\.?[/?#:]`,
 }
 
-var privateRules = sync.OnceValues(func() (*mygo.ContentRules, error) {
-	var rules []map[string]map[string]string
-	for _, p := range privatePatterns {
-		rules = append(rules, map[string]map[string]string{"trigger": {"url-filter": p}, "action": {"type": "block"}})
+// consentNotices are the cookie and consent notices, and the shades behind them, of the common consent services: a
+// capture hides them, as they stand in front of the page, which is what is taken. A pack hides the other notices it
+// finds (stepScreen) and leaves them all out of its text and markup.
+const consentNotices = "#onetrust-consent-sdk, #CybotCookiebotDialog, #CybotCookiebotDialogBodyUnderlay, #didomi-host, " +
+	"#usercentrics-root, #usercentrics-cmp-ui, .osano-cm-window, #truste-consent-track, .truste_box_overlay, " +
+	"#consent_blackbar, #qc-cmp2-container, .cky-consent-container, .cky-overlay, #iubenda-cs-banner, " +
+	"#cmplz-cookiebanner-container, #BorlabsCookieBox, #cookie-notice, #cookie-law-info-bar, .cc-window, #cc-main, " +
+	"#shopify-pc__banner"
+
+// trackers are the hosts of the common analytics, advertising, session-recording and chat services. A capture loads
+// nothing from them when they are a third party to the page: they show nothing of it, take the network from its
+// pictures, and keep its load from ending. trackerPaths are such scripts a site serves itself.
+var (
+	trackers = []string{
+		"google-analytics.com", "googletagmanager.com", "analytics.google.com", "doubleclick.net", "googlesyndication.com",
+		"googleadservices.com", "adservice.google.com", "connect.facebook.net", "hotjar.com", "hotjar.io", "clarity.ms",
+		"fullstory.com", "mouseflow.com", "smartlook.com", "logrocket.io", "lr-ingest.io", "heapanalytics.com",
+		"cdn.segment.com", "api.segment.io", "mixpanel.com", "mxpnl.com", "amplitude.com", "posthog.com", "plausible.io",
+		"usefathom.com", "simpleanalyticscdn.com", "cloudflareinsights.com", "js-agent.newrelic.com", "nr-data.net",
+		"datadoghq-browser-agent.com", "browser-intake-datadoghq.com", "sentry-cdn.com", "ingest.sentry.io",
+		"intercom.io", "intercomcdn.com", "driftt.com", "crisp.chat", "zdassets.com", "tawk.to", "hs-scripts.com",
+		"hs-analytics.net", "hsadspixel.net", "hs-banner.com", "usemessages.com", "snap.licdn.com", "ads.linkedin.com",
+		"ads-twitter.com", "analytics.twitter.com", "analytics.tiktok.com", "alb.reddit.com", "bat.bing.com",
+		"ct.pinterest.com", "quantserve.com", "scorecardresearch.com", "adnxs.com", "criteo.com", "criteo.net",
+		"taboola.com", "outbrain.com", "clearbitscripts.com", "6sc.co", "munchkin.marketo.net", "pardot.com",
+		"rudderlabs.com", "hm.baidu.com", "cnzz.com", "51.la", "mc.yandex.ru", "mc.yandex.com",
 	}
+	trackerPaths = []string{"/_vercel/insights/", "/_vercel/speed-insights/"}
+)
+
+// privateRules are the capture's content rules: privatePatterns blocked, trackers and pings not loaded, consentNotices
+// hidden.
+var privateRules = sync.OnceValues(func() (*mygo.ContentRules, error) {
+	type rule = map[string]map[string]any
+	var rules []rule
+	for _, p := range privatePatterns {
+		rules = append(rules, rule{"trigger": {"url-filter": p}, "action": {"type": "block"}})
+	}
+	for _, host := range trackers {
+		rules = append(rules, rule{"trigger": {"url-filter": `^[^:]+://([^/?#]*\.)?` + regexp.QuoteMeta(host) + `[/?#:]`, "load-type": []string{"third-party"}}, "action": {"type": "block"}})
+	}
+	for _, p := range trackerPaths {
+		rules = append(rules, rule{"trigger": {"url-filter": regexp.QuoteMeta(p)}, "action": {"type": "block"}})
+	}
+	rules = append(rules, rule{"trigger": {"url-filter": ".*", "resource-type": []string{"ping"}}, "action": {"type": "block"}})
+	rules = append(rules, rule{"trigger": {"url-filter": ".*"}, "action": {"type": "css-display-none", "selector": consentNotices}})
 	data, err := json.Marshal(rules)
 	if err != nil {
 		return nil, err
