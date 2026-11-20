@@ -113,6 +113,27 @@ func TestGalleryLabel(t *testing.T) {
 	equal(t, []string{f.Articles[0].Title, f.Articles[1].Title}, []string{"Pete Sena", "Inspiration: a post about it"}, "titles")
 }
 
+// a word Behance's feed turned into question marks is dropped from its titles only; real question marks stay
+func TestBehanceLostWords(t *testing.T) {
+	items := func(host string) string {
+		var b strings.Builder
+		for i, title := range []string{"?? Tea BRANDING &amp; PACKAGING", "Why?", "What??", "Is CSS a language?", "???", "The ?? operator"} {
+			b.WriteString(`<item><title>` + title + `</title><link>https://` + host + `/gallery/` + string(rune('a'+i)) + `</link></item>`)
+		}
+		return rss(b.String())
+	}
+	titles := func(f library.ParsedFeed) (out []string) {
+		for _, a := range f.Articles {
+			out = append(out, a.Title)
+		}
+		return out
+	}
+	equal(t, titles(parse(t, items("www.behance.net"), "https://www.behance.net/feeds/projects")),
+		[]string{"Tea BRANDING & PACKAGING", "Why?", "What??", "Is CSS a language?", "???", "The operator"}, "behance")
+	equal(t, titles(parse(t, items("writer.example"), "https://writer.example/feed")),
+		[]string{"?? Tea BRANDING & PACKAGING", "Why?", "What??", "Is CSS a language?", "???", "The ?? operator"}, "elsewhere")
+}
+
 // markup written straight into an RSS description is kept as markup
 func TestDescriptionMarkup(t *testing.T) {
 	f := parse(t, `<rss><channel><title>Gallery</title><link>https://gallery.example/</link><item><title>Town</title><link>https://gallery.example/town</link>

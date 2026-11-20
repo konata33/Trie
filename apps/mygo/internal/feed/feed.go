@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"regexp"
+	"slices"
 	"strings"
 
 	"trie/internal/fetch"
@@ -147,6 +148,23 @@ func units16(s string) string {
 }
 
 var gallery = regexp.MustCompile(`^(?:website|landing page|portfolio|template) inspiration:[` + web.Space + `]+`)
+
+// lostWords drops the words Behance's feed lost: it writes every non-Latin
+// character as "?", so "品牌 Tea" arrives as "?? Tea". Only Behance's, since
+// elsewhere "??" is a word of its own (JavaScript's ?? operator). A title of
+// nothing else stays as it is.
+func lostWords(name, url string) string {
+	u, err := web.ParseURL(url, nil)
+	if err != nil || strings.TrimPrefix(u.Hostname(), "www.") != "behance.net" {
+		return name
+	}
+	words := strings.Fields(name)
+	kept := slices.DeleteFunc(slices.Clone(words), func(w string) bool { return len(w) >= 2 && strings.Trim(w, "?") == "" })
+	if len(kept) == 0 || len(kept) == len(words) {
+		return name
+	}
+	return strings.Join(kept, " ")
+}
 
 var (
 	doctype     = regexp.MustCompile(`<!doctype|<!entity`)
@@ -326,6 +344,7 @@ func Parse(xml, feedURL string) (library.ParsedFeed, error) {
 		if loc := gallery.FindStringIndex(lower(name)); loc != nil {
 			name = name[loc[1]:]
 		}
+		name = lostWords(name, *url)
 		if name == "" {
 			parsed, _ := web.ParseURL(*url, nil)
 			name = parsed.Pathname()
