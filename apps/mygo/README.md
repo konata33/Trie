@@ -1,6 +1,6 @@
 # Trie for macOS
 
-Trie 的桌面应用：Go 写成，界面用 [MyGo](https://github.com/egoist/mygo) 原生绘制。产品范围见 [docs/PRODUCT.md](../../docs/PRODUCT.md)，开发流程见 [CONTRIBUTING.md](../../CONTRIBUTING.md)。
+Trie 的桌面应用：Go 写成，界面用 [MyGo](https://github.com/egoist/mygo) 原生绘制。页面规格见 [docs/PAGES.md](../../docs/PAGES.md)，开发流程见 [CONTRIBUTING.md](../../CONTRIBUTING.md)。
 
 ## 运行与检查
 

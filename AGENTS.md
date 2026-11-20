@@ -9,7 +9,7 @@ Trie 是 macOS 上的博客阅读应用，代码在 `apps/mygo`：Go + MyGo 原�
 ## 文档
 
 - 改界面：先读 `docs/DESIGN.md`（全应用规则）和 `docs/PAGES.md` 里对应的页，交付前逐条对照。
-- 加功能或删功能：先读 `docs/PRODUCT.md`。规范里没有的功能，先和维护者确认该不该存在。
+- 加功能或删功能：`docs/PAGES.md` 里没有的功能，先和维护者确认该不该存在。
 - 正文提取、清理、显示：`docs/READER_ENGINE.md`。
 - 规范写现在的做法：陈述句、具体数值；不写日期、来历、被否的方案、代码名和实现细节。新决定直接改进规范。
 - 以前的取舍和被否掉的做法在 git 历史里：`git log -- docs/decisions` 找到删除它的提交，用 `git show <提交>^:docs/decisions/<文件>` 查看。被否掉的做法不要再做回来。
@@ -51,4 +51,4 @@ Trie 是 macOS 上的博客阅读应用，代码在 `apps/mygo`：Go + MyGo 原�
 - 开工先 `git status`，查清没提交的改动属于谁，只改自己那一块。
 - 共用文件（`docs/DESIGN.md`、`docs/PAGES.md`、`apps/mygo/go.mod`、`apps/mygo/main.go`）改之前重读一遍，只改需要的几行。
 - `.context/` 是本机的临时协作目录，不进版本库；部分测试会读其中的样本，没有时自动跳过。
-- 沟通、项目文档用中文；代码注释用英文。界面文字中英两份，写在 `apps/mygo/internal/locales`，不写进代码；口吻和用词见 `docs/DESIGN.md` 的 Copy 一节。
+- 沟通、项目文档用中文；README.md 用英文，中文版是 README.zh-CN.md，两份一起改；代码注释用英文。界面文字中英两份，写在 `apps/mygo/internal/locales`，不写进代码；口吻和用词见 `docs/DESIGN.md` 的 Copy 一节。

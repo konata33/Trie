@@ -68,11 +68,12 @@ go tool mygo build -skip-dmg
 - 界面文字中英两份，写在 `internal/locales` 的 `en.json` 和 `zh-Hans.json`，改完运行 `go tool mygo generate`；口吻和用词见 `docs/DESIGN.md` 的 Copy 一节。代码注释用英文。
 - MyGo 的界面生命周期、线程和测试写法见 [apps/mygo/.agents/skills/mygo-maintenance/SKILL.md](apps/mygo/.agents/skills/mygo-maintenance/SKILL.md)。
 - 应用的模块划分见 [apps/mygo/README.md](apps/mygo/README.md)。
+- `.tools/` 是本机的开发辅助工具（Ryugi 画板，用于界面方案对比），不进版本库。
 
 ## 文档约定
 
-- 规范（[docs/PRODUCT.md](docs/PRODUCT.md)、[docs/DESIGN.md](docs/DESIGN.md)、[docs/PAGES.md](docs/PAGES.md)、[docs/READER_ENGINE.md](docs/READER_ENGINE.md)）只写现在的做法：陈述句、具体数值，不写日期、来历和被否的方案。
-- 项目文档用中文。
+- 规范（[docs/DESIGN.md](docs/DESIGN.md)、[docs/PAGES.md](docs/PAGES.md)、[docs/READER_ENGINE.md](docs/READER_ENGINE.md)）只写现在的做法：陈述句、具体数值，不写日期、来历和被否的方案。
+- 项目文档用中文。README.md 用英文，中文版是 README.zh-CN.md，两份一起改。
 
 ## 界面改动
 

@@ -25,7 +25,7 @@ import (
 	"trie/internal/explore"
 	"trie/internal/library"
 	// The interface in English and Chinese: English, the app's own, for any
-	// reader whose system is not in Chinese (PRODUCT.md).
+	// reader whose system is not in Chinese (DESIGN.md, Copy).
 	"trie/internal/locales"
 	"trie/internal/reader"
 	"trie/internal/reading"

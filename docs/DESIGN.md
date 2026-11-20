@@ -155,7 +155,7 @@ components:
 
 # Design System: Trie
 
-本文件写全应用通用的设计规则：颜色、字、布局、层次、形状、动效、图标、场景小图形和组件。开头 YAML 里的令牌是规范的数值，正文写用法。各页自己的版面和交互在 [PAGES.md](PAGES.md)，产品定位在 [PRODUCT.md](PRODUCT.md)。
+本文件写全应用通用的设计规则：颜色、字、布局、层次、形状、动效、图标、场景小图形和组件。开头 YAML 里的令牌是规范的数值，正文写用法。各页自己的版面和交互在 [PAGES.md](PAGES.md)。
 
 ## Overview 概述
 
