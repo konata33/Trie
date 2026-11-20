@@ -559,11 +559,14 @@ func (a *App) retryPack(it *packItem, now time.Time) {
 }
 
 // openPack opens it's card out of from, its home (homeIsland…), which it goes
-// back into; at once from the keys.
+// back into; at once from the keys. A pack goes on growing for a minute once
+// taken, so the card reads its screens and counts afresh each time it opens.
 func (a *App) openPack(it *packItem, from ui.Rect, home string) {
 	h := &a.capture
 	h.card, h.home, h.copied = it.ID, home, time.Time{}
 	h.scroll.Y = 0
+	it.pages = nil
+	a.recount(it)
 	a.packFont(it)
 	a.packShot(it)
 	a.layers.opener, a.layers.in, a.layers.out = from, motion.DialogIn, motion.DialogOut
@@ -571,6 +574,39 @@ func (a *App) openPack(it *packItem, from ui.Rect, home string) {
 		a.layers.opener = ui.Rect{}
 	}
 	a.growFrom("pack", motion.DialogGrow, 24, theme.ShadowDialog)
+}
+
+// recount counts, off the window's thread, the screens, pictures and fonts it's
+// folder holds now, those added once it was taken too, and keeps them when they
+// changed.
+func (a *App) recount(it *packItem) {
+	if it.state != packTaken {
+		return
+	}
+	dir := filepath.Join(a.capture.dir, it.ID)
+	a.do(func() func() {
+		screens, images, fonts := filesIn(dir, "screens"), filesIn(dir, "files", "images"), filesIn(dir, "files", "fonts")
+		return func() {
+			if it.gone || screens == 0 || screens == it.Screens && images == it.Images && fonts == it.Fonts {
+				return // a folder gone from under it keeps what it had
+			}
+			it.Screens, it.Images, it.Fonts = screens, images, fonts
+			a.savePacks()
+		}
+	})
+}
+
+// filesIn counts the files in a folder of dir, those being written (hidden)
+// left out.
+func filesIn(dir string, folder ...string) int {
+	entries, _ := os.ReadDir(filepath.Join(append([]string{dir}, folder...)...))
+	n := 0
+	for _, e := range entries {
+		if !e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+			n++
+		}
+	}
+	return n
 }
 
 // hideIsland is 收起: the island goes back into its point with what it
@@ -1201,6 +1237,12 @@ func (a *App) packCard(c *ui.Context) {
 		panel.Width(cardW).Shadow(0, 0, 0, 1, theme.Line).Shadow(0, 24, 64, 0, theme.ShadowDialog).ClipX().ClipY()
 		if it != nil {
 			panel.Label(it.Name)
+		}
+		// One Esc sends it back. Opened from the keys, the card's focus is on 复制,
+		// whose tip, the layer on top, would take the first Esc; the card is around
+		// the focus, so it takes it first.
+		if panel.Shortcut(0, ui.KeyEscape) {
+			open = false
 		}
 	}, func() {
 		if it != nil {

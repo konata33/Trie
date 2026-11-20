@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -61,6 +62,16 @@ func (f *fakePacker) take(ctx context.Context, link, dir string, progress explor
 			}
 			jpeg.Encode(out, stripes(160, 100), nil)
 			out.Close()
+			// The rest of what the pack says it holds: three screens, five pictures, two fonts.
+			for _, name := range strings.Fields("screens/01.jpg screens/02.jpg files/images/0 files/images/1 files/images/2 files/images/3 files/images/4 files/fonts/0 files/fonts/1") {
+				file := filepath.Join(dir, filepath.FromSlash(name))
+				if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+					return nil, err
+				}
+				if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+					return nil, err
+				}
+			}
 			progress(1, nil)
 			return &explore.Pack{URL: link, Screens: make([]explore.PackScreen, 3), Images: 5, Fonts: 2}, nil
 		case <-ctx.Done():
@@ -852,6 +863,75 @@ func TestCaptureShots(t *testing.T) {
 		tt2.Advance(20 * time.Millisecond)
 	}
 	save("button-copied", crop(tt2, bar))
+}
+
+// Opened from the keys, the card's focus is on 复制, whose tip shows: one Esc
+// still sends the card back.
+func TestCaptureCardEscape(t *testing.T) {
+	f := newFakePacker()
+	a, tt, posts := captureTester(t, t.TempDir(), f)
+	it := a.takePage("p1", "https://one.example/", "One", nil, ui.Rect{}, tt.Now())
+	started(t, f)
+	f.steps <- packStep{end: true}
+	await(t, tt, posts, func() bool { return it.state == packTaken })
+	settle(tt)
+	for i := 0; i < 40 && !tt.Focused("One，已拓下"); i++ {
+		tt.Key(0, ui.KeyTab)
+		tt.Frame()
+	}
+	tt.Key(0, ui.KeyEnter)
+	settle(tt)
+	if a.capture.card != it.ID {
+		t.Fatal("Enter on the thumbnail did not open its card")
+	}
+	tt.Key(0, ui.KeyEscape)
+	settle(tt)
+	if a.capture.card != "" {
+		t.Error("one Esc left the card open")
+	}
+}
+
+// A pack goes on growing once taken: its card, opened again, pages through the
+// screens added and counts what the folder holds now, which packs.json keeps.
+func TestCaptureRecount(t *testing.T) {
+	dir := t.TempDir()
+	f := newFakePacker()
+	a, tt, posts := captureTester(t, dir, f)
+	it := a.takePage("p1", "https://one.example/", "One", nil, ui.Rect{}, tt.Now())
+	started(t, f)
+	f.steps <- packStep{end: true}
+	await(t, tt, posts, func() bool { return it.state == packTaken })
+	a.openPack(it, ui.Rect{}, homeIsland)
+	await(t, tt, posts, func() bool { return it.pages != nil }) // its first screen read, the card reads its page
+	if len(it.pages.tops) != 1 {
+		t.Fatalf("the card read %v, want the one screen its index lists", it.pages)
+	}
+	// What the background adds: two screens, the index listing all five, a picture.
+	folder := filepath.Join(dir, "packs", it.ID)
+	var index strings.Builder
+	for i := range 5 {
+		name := fmt.Sprintf("screens/%02d.jpg", i)
+		if i >= 3 {
+			must(t, os.WriteFile(filepath.Join(folder, filepath.FromSlash(name)), []byte("x"), 0o644))
+		}
+		fmt.Fprintf(&index, "- `%s` at scroll %d px\n", name, i*900)
+	}
+	must(t, os.WriteFile(filepath.Join(folder, "README.md"), []byte(index.String()), 0o644))
+	must(t, os.WriteFile(filepath.Join(folder, "files", "images", "5"), []byte("x"), 0o644))
+	a.capture.card = ""
+	settle(tt)
+	a.openPack(it, ui.Rect{}, homeIsland)
+	await(t, tt, posts, func() bool { return it.Screens == 5 })
+	settle(tt)
+	if it.Images != 6 || it.Fonts != 2 {
+		t.Errorf("counted %d pictures and %d fonts, want 6 and 2", it.Images, it.Fonts)
+	}
+	if it.pages == nil || len(it.pages.tops) != 5 {
+		t.Errorf("the card pages through %v, want the five screens", it.pages)
+	}
+	if data, err := os.ReadFile(filepath.Join(dir, "packs.json")); err != nil || !strings.Contains(string(data), `"screens": 5`) {
+		t.Errorf("packs.json keeps %s (%v), want five screens", data, err)
+	}
 }
 
 func TestSlugOf(t *testing.T) {
