@@ -243,7 +243,8 @@ func (a *App) workHero(c *ui.Context, rp *readerPage, art *library.Article, afte
 		}
 		var by []string
 		if w.Designer != nil && *w.Designer != "" {
-			by = append(by, locales.WorkDesignedBy(*w.Designer))
+			// The library keeps several designers joined with 、; they read with the interface's own separator.
+			by = append(by, locales.WorkDesignedBy(strings.ReplaceAll(*w.Designer, "、", locales.CommonListSeparator())))
 		}
 		if w.BuiltWith != nil && *w.BuiltWith != "" {
 			by = append(by, locales.WorkBuiltWith(*w.BuiltWith))
