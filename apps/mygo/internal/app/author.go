@@ -107,7 +107,7 @@ func (a *App) authorPage(c *ui.Context, id string, live bool) {
 						})
 					} else if a.exPersonOf(id) == nil {
 						// Someone only Explore has, with nothing of theirs read yet, has the page end at its head.
-						a.emptyState(c, "mailbox", locales.AuthorEmptyTitle(), locales.AuthorEmptyText(), nil)
+						a.emptyState(c, "mailbox", locales.AuthorEmptyTitle(), "", nil)
 					}
 				}
 			})
@@ -790,7 +790,8 @@ func (a *App) orbitIn(c *ui.Context, key string, size float32, kept bool, b ui.E
 }
 
 // emptyState is ui/states EmptyState centred on the page: the pictogram, a
-// short title, one sentence, and a way on when there is one.
+// short title, a sentence when one is given, and a way on when there is one.
+// Empty pages pass only the title; failures add the sentence.
 func (a *App) emptyState(c *ui.Context, art, title, text string, action func()) {
 	_, h := c.Size()
 	ui.Column(c.Key("empty")).AlignItems(ui.Center).MaxWidth(360).AlignSelf(ui.Center).Margin(h*0.2, 0, 0, 0).Children(func() {
@@ -800,7 +801,10 @@ func (a *App) emptyState(c *ui.Context, art, title, text string, action func()) 
 		if title != "" {
 			ui.Text(c, title).FontSize(theme.Item).LineHeight(22.0/15).FontWeight(600).TextColor(theme.Text).Margin(0, 0, 8, 0).TextAlign(ui.Center)
 		}
-		ui.Text(c, text).FontSize(theme.Body).LineHeight(20.0 / 13).TextColor(theme.Muted).TextAlign(ui.Center).Pretty()
+		if text != "" {
+			// Centred, a sentence of two lines takes two of half its length each.
+			ui.Text(c, text).FontSize(theme.Body).LineHeight(20.0 / 13).TextColor(theme.Muted).TextAlign(ui.Center).Balance()
+		}
 		if action != nil {
 			ui.Row(c).Margin(12, 0, 0, 0).Children(action)
 		}

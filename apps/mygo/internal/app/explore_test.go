@@ -340,10 +340,11 @@ func feedFor(name, home string) fetch.Fetch {
 	}
 }
 
-// Subscribing from an author's page: pressed, the pill becomes 已订阅 and the
-// author's row grows in the sidebar, their face flying into it; pressed
-// again, they are let go, their row staying a beat for the face to leave
-// before it folds. From the keys nothing flies.
+// Subscribing from an author's page: pressed, the pill becomes 已订阅 behind an
+// amber tick and the author's row grows in the sidebar, their face flying into
+// it; its name stays 订阅 <name>, its checked state says it is on. Pointed at
+// again, it offers 取消订阅; pressed, they are let go, their row staying a beat
+// for the face to leave before it folds. From the keys nothing flies.
 func TestExploreSubscribe(t *testing.T) {
 	var target *explore.Entry
 	a, store := newExploreApp(t, func(store *library.Store) *subscription.Service {
@@ -386,8 +387,11 @@ func TestExploreSubscribe(t *testing.T) {
 	if len(a.flights2) != 0 || a.writer(src) == nil {
 		t.Fatal("landed, the row is there")
 	}
-	if _, ok := tt.Find("已订阅 " + target.Name + "，按下取消订阅"); !ok {
-		t.Fatal("the pill says 已订阅")
+	if acc, ok := tt.AccessByRole(ui.RoleToggleButton, pill); !ok || !acc.Checked || !tt.HasText("已订阅") {
+		t.Fatal("the pill says 已订阅, and is on")
+	}
+	if a.ex.pills["head:"+target.ID].litAt.IsZero() {
+		t.Error("no tick gathering")
 	}
 	if lib, _ := store.Library(); !slices.ContainsFunc(lib.Sources, func(s library.Source) bool { return s.ID == src && s.Subscribed }) {
 		t.Fatal("kept in the library")
@@ -395,7 +399,14 @@ func TestExploreSubscribe(t *testing.T) {
 	// Let go: the face flies back onto the pill, the row stays a beat, then folds.
 	tt.Move(640, 400)
 	tt.Advance(time.Second)
-	must(t, tt.Click("已订阅 "+target.Name+"，按下取消订阅"))
+	if acc, ok := tt.AccessByRole(ui.RoleToggleButton, pill); ok {
+		tt.Move(acc.Bounds.X+acc.Bounds.W/2, acc.Bounds.Y+acc.Bounds.H/2)
+	}
+	rest(tt)
+	if !tt.HasText("取消订阅") {
+		t.Error("pointed at, it does not offer 取消订阅")
+	}
+	must(t, tt.Click(pill))
 	if a.subscribedSource(target) != "" || a.parting[src] == nil {
 		t.Fatalf("let go, the row stays a beat: %v", a.parting[src])
 	}
@@ -410,20 +421,57 @@ func TestExploreSubscribe(t *testing.T) {
 	must(t, tt.Click("订阅 "+target.Name))
 	rest(tt)
 	src = a.subscribedSource(target)
-	on := "已订阅 " + target.Name + "，按下取消订阅"
 	for range 40 {
-		if tt.Focused(on) {
+		if tt.Focused(pill) {
 			break
 		}
 		tt.Key(0, ui.KeyTab)
 	}
-	if !tt.Focused(on) {
+	if !tt.Focused(pill) {
 		t.Fatal("Tab reaches the pill")
 	}
 	tt.Key(0, ui.KeySpace)
 	tt.Frame()
 	if a.subscribedSource(target) != "" || len(a.flights2) != 0 || a.parting[src] != nil {
 		t.Fatalf("from the keys: let go at once, nothing flies: %v %v", a.flights2, a.parting[src])
+	}
+}
+
+// Subscribing that fails says of whom, why and what to do, in the service's
+// own words; the pill stays as it was and nothing flies.
+func TestExploreSubscribeFails(t *testing.T) {
+	var target *explore.Entry
+	a, _ := newExploreApp(t, func(store *library.Store) *subscription.Service {
+		return subscription.New(store, func() fetch.Fetch {
+			return func(_ context.Context, url string, _ func(string) bool, _ int) (*fetch.Response, error) {
+				return &fetch.Response{URL: url, Status: 503, Type: "text/html", Body: []byte("down")}, nil
+			}
+		}, nil, nil)
+	})
+	tt := exploreTester(a)
+	toExplore(t, a, tt)
+	ex := a.ex
+	for _, e := range ex.index {
+		if e.FeedURL != nil && a.subscribedSource(e) == "" {
+			target = e
+			break
+		}
+	}
+	ex.focus = "door"
+	tt.Frame()
+	tt.Key(0, ui.KeyEnter)
+	rest(tt)
+	a.Press("card:" + target.ID)
+	tt.Frame()
+	rest(tt)
+	pill := "订阅 " + target.Name
+	must(t, tt.Click(pill))
+	rest(tt)
+	if want := "没能订阅 " + target.Name + "。"; !strings.HasPrefix(a.errText, want) || len(a.errText) <= len(want) {
+		t.Fatalf("the notice says %q: want it to begin %q and say why", a.errText, want)
+	}
+	if acc, ok := tt.AccessByRole(ui.RoleToggleButton, pill); !ok || acc.Checked || acc.Busy || len(a.flights2) != 0 {
+		t.Fatal("failed, the pill is not as it was, or something flew")
 	}
 }
 
@@ -658,7 +706,7 @@ func TestExploreShots(t *testing.T) {
 	still("subscribed")
 	tt.Move(1000, 830)
 	settle(tt)
-	record("unsubscribe", 1100*time.Millisecond, func() { must(t, tt.Click("已订阅 "+target.Name+"，按下取消订阅")) })
+	record("unsubscribe", 1100*time.Millisecond, func() { must(t, tt.Click("订阅 "+target.Name)) })
 	tt.Key(0, ui.KeyEscape)
 	settle(tt)
 	// A swipe from the writing room back to design: the rooms follow the fingers, then the spring carries them over.
@@ -755,7 +803,7 @@ func TestExploreNothingRead(t *testing.T) {
 	if want := a.entryPage(e); a.page != want {
 		t.Fatalf("their page opens: %+v, want %+v", a.page, want)
 	}
-	if tt.HasText("还没有收到文章") {
+	if tt.HasText("这位作者的新文章，会送到这里") {
 		t.Error("their page ends at its head, saying nothing of what is missing")
 	}
 }

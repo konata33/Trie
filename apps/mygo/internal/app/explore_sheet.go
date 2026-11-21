@@ -50,17 +50,22 @@ func exHost(u string) string {
 	return h
 }
 
-// pillState is a pill's own: its width as it changes shape, and whether it
-// was just pressed.
+// pillState is a pill's own: what it showed last (on, working, offering
+// 取消订阅) and since when, as its width runs from the old words to the new;
+// and when it was last subscribed to here, for the tick to gather.
 type pillState struct {
-	on, working bool
-	changedAt   time.Time
+	on, working, alt bool
+	changedAt, litAt time.Time
 }
 
-// follow is the subscribe pill of an entry, at where ("head" of their page,
-// or "home"): amber with the face and 订阅; once subscribed, quiet with a tick
-// and 已订阅, offering 取消订阅 only when pointed at. A request answering
-// within 150 ms shows no spinner.
+// follow is the subscribe pill of an entry on their page's head (DESIGN.md
+// Buttons 订阅胶囊). Amber is what is the reader's own, so it comes only
+// once they are: not yet subscribed, a quiet pill with their face and 订阅;
+// while the request runs, past 150 ms, the words give way to the reading
+// mark; subscribed, the face flies into their new sidebar row, and the dots
+// it leaves behind gather into an amber tick before 已订阅, on no ground;
+// pointed at, or with the keys on it, it is a pill again, offering 取消订阅.
+// Its name stays 订阅 <name>; whether it is on is its checked state.
 func (a *App) follow(c *ui.Context, e *explore.Entry, where string) ui.Element {
 	if e.FeedURL == nil || *e.FeedURL == "" {
 		return ui.Element{}
@@ -74,30 +79,24 @@ func (a *App) follow(c *ui.Context, e *explore.Entry, where string) ui.Element {
 	if busy && !working {
 		c.After(150*time.Millisecond - now.Sub(busyAt))
 	}
+	b := ui.ButtonBase(c.Key("follow-" + key)).Label(locales.ExploreFollowWriter(e.Name)).Role(ui.RoleToggleButton).Checked(on).Busy(working).
+		Height(32).Radius(16).AlignItems(ui.Center).ClipX().FocusRing(false).Shrink(0)
+	pointed := b.Hovered() && !a.kbd
+	if !pointed {
+		delete(ex.fresh2, key) // pressed, it says 已订阅 until the pointer leaves it once
+	}
+	alt := on && (busy || pointed && !ex.fresh2[key] || b.FocusVisible())
 	st := ex.pills[key]
 	if st == nil {
-		st = &pillState{on: on, working: working}
+		st = &pillState{on: on, working: working, alt: alt}
 		ex.pills[key] = st
 	}
-	if st.on != on || st.working != working {
-		st.on, st.working, st.changedAt = on, working, now
+	if st.on != on || st.working != working || st.alt != alt {
+		if on && !st.on {
+			st.litAt = now
+		}
+		st.on, st.working, st.alt, st.changedAt = on, working, alt, now
 	}
-	label := locales.ExploreFollowWriter(e.Name)
-	switch {
-	case working && on:
-		label = locales.ExploreUnfollowingWriter(e.Name)
-	case working:
-		label = locales.ExploreFollowingWriter(e.Name)
-	case on:
-		label = locales.ExploreFollowedWriter(e.Name)
-	}
-	b := ui.ButtonBase(c.Key("follow-" + key)).Label(label).Role(ui.RoleToggleButton).Checked(on).Busy(working).Height(32).Radius(16).
-		AlignItems(ui.Center).ClipX().FocusRing(false).Shrink(0)
-	hover := b.Hovered() && !busy
-	if !hover {
-		delete(ex.fresh2, key)
-	}
-	alt := on && !busy && (hover && !ex.fresh2[key] || b.FocusVisible())
 	// One pill changing shape: its width runs from the old words to the new
 	// while the colours cross and the words come into focus.
 	t := ui.ElementTransition{Duration: motion.State, Ease: motion.Ease, Width: true}
@@ -105,18 +104,20 @@ func (a *App) follow(c *ui.Context, e *explore.Entry, where string) ui.Element {
 		t = motion.Instant(t)
 	}
 	b.Transition(t)
-	ground, fg, weight := theme.Accent, theme.OnAccent, 600
+	ground, fg := theme.Selected, theme.Text
 	padL := float32(4)
-	if on {
-		ground, fg, weight, padL = theme.Selected, theme.Text2, 500, 12
-		if hover {
-			ground, fg = theme.FollowHover, theme.Text
-		}
-	} else if hover {
-		ground = brighten(theme.Accent, 1.06)
-	}
-	if alt {
-		fg = theme.Text
+	switch {
+	case alt && a.pressing(b):
+		ground, padL = theme.Pressed, 12
+	case alt:
+		ground, padL = theme.FollowHover, 12
+	case on:
+		ground, fg, padL = ui.Transparent, theme.Text2, 12
+	case busy:
+	case a.pressing(b):
+		ground = theme.Pressed
+	case pointed:
+		ground = theme.FollowHover
 	}
 	// The padding moves with the width; under less motion, or from the keys, it is simply there.
 	var pad float32
@@ -125,13 +126,20 @@ func (a *App) follow(c *ui.Context, e *explore.Entry, where string) ui.Element {
 	} else {
 		pad = b.AnimateTo("padL", padL, ui.Animation{Duration: motion.State, Ease: motion.Ease})
 	}
-	b.Padding(0, 16, 0, pad).Background(b.AnimateColor("bg", ground, a.ease(motion.State))).
-		TextColor(b.AnimateColor("fg", fg, a.ease(motion.State))).FontSize(theme.Body).FontWeight(weight)
+	b.Padding(0, 16, 0, pad).Background(b.AnimateColor("bg", ground, a.ease(motion.Hover))).
+		TextColor(b.AnimateColor("fg", fg, a.ease(motion.Hover))).FontSize(theme.Body).FontWeight(500)
 	if b.FocusVisible() {
 		b.FocusRing(true)
 	}
+	look := "off"
+	switch {
+	case alt:
+		look = "alt"
+	case on:
+		look = "on"
+	}
 	b.Children(func() {
-		words := ui.Row(c.Key(map[bool]string{true: "on", false: "off"}[on])).Gap(8).AlignItems(ui.Center).Shrink(0)
+		words := ui.Row(c.Key(look)).Gap(8).AlignItems(ui.Center).Shrink(0)
 		if !a.kbd {
 			k := words.Keyframes("in", []ui.Keyframe{{Value: 0}, {At: 200 * time.Millisecond, Value: 1, Ease: motion.Ease}}, ui.KeyframeOptions{NonMotion: true})
 			if k < 1 {
@@ -142,33 +150,33 @@ func (a *App) follow(c *ui.Context, e *explore.Entry, where string) ui.Element {
 			}
 		}
 		words.Children(func() {
-			slot := ui.Box(c.Key("slot")).Size(12, 24).Center().Shrink(0)
-			switch {
-			case on && alt:
-				slot.Children(func() { a.icon(c, "close", 12, false) })
-				ui.Text(c, locales.CommonUnfollow()).NoWrap()
-			case on:
-				slot.Children(func() {
-					if working {
-						a.loading(c, 12)
-					} else {
-						a.icon(c, "check", 12, false)
-					}
-				})
-				ui.Text(c, map[bool]string{true: locales.CommonUnfollow(), false: locales.ExploreFollowed()}[working]).NoWrap()
+			switch look {
+			case "alt":
+				ui.Box(c.Key("slot")).Size(14, 24).Center().Shrink(0).Children(func() { a.icon(c, "close", 12, false) })
+				a.pillWords(c, locales.CommonUnfollow(), working)
+			case "on":
+				// The dots the face left gather into the tick as it flies.
+				k := float32(1)
+				if since := now.Sub(st.litAt); !st.litAt.IsZero() && !a.kbd && !a.still(c) && since < motion.Flow {
+					k = float32(since) / float32(motion.Flow)
+					c.AnimationFrame()
+				}
+				dots := flowed(leftDots(), k)
+				ui.Box(c.Key("tick")).Size(14, 24).Shrink(0).AccessHidden(true).
+					Draw(func(p *ui.Painter, r ui.Rect) {
+						paintDots(p, ui.Rect{X: r.X, Y: r.Y + 5, W: 14, H: 14}, dots, dotLight{}, 0)
+					})
+				ui.Text(c, locales.ExploreFollowed()).NoWrap()
 			default:
-				slot.Width(24).Children(func() {
-					if working {
-						a.loading(c, 16)
-						return
-					}
-					f := a.exFace(c, e, 24, false, 11).Shadow(0, 0, 0, 1, theme.OnAccent.Alpha(0.08))
+				slot := ui.Box(c.Key("slot")).Size(24, 24).Center().Shrink(0)
+				slot.Children(func() {
+					f := a.exFace(c, e, 24, false, 11)
 					ex.faces[key] = f.LayoutBounds()
 					if a.flyingTo("pill:" + key) {
-						f.Opacity(0)
+						f.Opacity(0) // on its way back from the sidebar
 					}
 				})
-				ui.Text(c, locales.CommonFollow()).NoWrap()
+				a.pillWords(c, locales.CommonFollow(), working)
 			}
 		})
 	})
@@ -177,6 +185,34 @@ func (a *App) follow(c *ui.Context, e *explore.Entry, where string) ui.Element {
 		a.toggleFollow(c, e, key)
 	}
 	return b
+}
+
+// pillWords are a pill's words, which give way to the reading mark in their
+// place while it works, the pill keeping its width (DESIGN.md Buttons).
+func (a *App) pillWords(c *ui.Context, text string, working bool) {
+	ui.Box(c.Key("words")).Shrink(0).Children(func() {
+		t := ui.Text(c, text).NoWrap()
+		o := t.AnimateTo("o", map[bool]float32{false: 1}[working], a.ease(motion.SwapOut))
+		if o < 1 {
+			t.Opacity(o)
+		}
+		if working {
+			ui.Box(c.Key("mark")).Absolute().Fill().Center().Opacity(1 - o).Children(func() { a.loading(c, 12) })
+		}
+	})
+}
+
+// leftDots are the dots a face leaves in its place in the subscribe pill as
+// it flies to the sidebar: a faint ring, as wide as the tick they gather into
+// (flowed).
+func leftDots() []inkDot {
+	const n = 7
+	out := make([]inkDot, n)
+	for i := range out {
+		s, c := math.Sincos(math.Pi * (0.75 + 2*float64(i)/n))
+		out[i] = inkDot{x: 0.5 + 0.38*float32(c), y: 0.5 + 0.38*float32(s), r: checkDot, a: 0.5, c: theme.Text2}
+	}
+	return out
 }
 
 // brighten is CSS's brightness(k) on a colour.
@@ -212,7 +248,7 @@ func (a *App) toggleFollow(c *ui.Context, e *explore.Entry, pill string) {
 			return func() {
 				delete(ex.busy, e.ID)
 				if err != nil {
-					a.fail(err.Error())
+					a.fail(locales.ExploreUnfollowFailed(name, err.Error()))
 					return
 				}
 				a.accept(lib)
@@ -240,7 +276,8 @@ func (a *App) toggleFollow(c *ui.Context, e *explore.Entry, pill string) {
 		return func() {
 			delete(ex.busy, e.ID)
 			if err != nil {
-				a.fail(err.Error())
+				// The service's own sentence says why and what to do; the notice says of whom.
+				a.fail(locales.ExploreFollowFailed(name, said(err, locales.SubscribeCantRead())))
 				return
 			}
 			a.accept(res.Library)

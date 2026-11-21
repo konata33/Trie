@@ -1,10 +1,6 @@
 package app
 
-import (
-	"github.com/egoist/mygo/ui"
-
-	"trie/internal/library"
-)
+import "github.com/egoist/mygo/ui"
 
 // shortcuts are the window's keys: what
 // the keyboard does shows at once.
@@ -41,13 +37,8 @@ func (a *App) shortcuts(c *ui.Context) {
 			a.homeSt().search = true
 		}
 	}
-	// The capture card open takes its own keys; with the keys in the island, Esc
-	// sends it away (收起).
+	// The capture card open takes its own keys, and the island its Esc (island).
 	if a.capture.card != "" {
-		return
-	}
-	if a.capture.focused && c.Shortcut(0, ui.KeyEscape) {
-		a.hideIsland(c.Now())
 		return
 	}
 	if a.layers.dialog != nil || a.layers.menu != "" {
@@ -148,5 +139,3 @@ func (a *App) listKeys(c *ui.Context, id string) {
 	l.cursor = items[at].ID
 	l.focus = l.cursor
 }
-
-var _ = library.ToggleFavorite{}

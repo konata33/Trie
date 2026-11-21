@@ -29,6 +29,7 @@ type readerPage struct {
 	work    *library.GalleryWork
 	r       *reader.Reader
 	loading bool
+	mended  bool // a body read again in the background waits for the reader to be left
 	err     string
 	req     int
 	waited  time.Time // the body kept the reader waiting since
@@ -152,9 +153,21 @@ func (a *App) loadReader(rp *readerPage, refresh bool, source string) {
 			old := rp.r
 			rp.r = reader.NewReader(meta, rc, body)
 			rp.r.Size = a.fontSize
-			if old != nil {
+			switch {
+			case old != nil && old.ContentVersion() == rp.r.ContentVersion():
 				rp.r.Scroll = old.Scroll // an updated body keeps the reader's place
-			} else {
+			case old != nil:
+				// A body read anew (mended) stands at the same paragraph, not the same pixel, and its place is
+				// kept for this version, for the next time it opens.
+				pos := old.Position()
+				pos.ContentVersion = rp.r.ContentVersion()
+				rp.r.Scroll = old.Scroll
+				rp.r.RestorePosition(pos)
+				if rp.restored {
+					a.positions[rp.id], rp.measured, rp.saveAt = pos, pos, time.Now()
+					a.savePosition(rp)
+				}
+			default:
 				a.restore(rp)
 			}
 			if !rp.waited.IsZero() && time.Since(rp.waited) > motion.Arrived {
@@ -163,6 +176,28 @@ func (a *App) loadReader(rp *readerPage, refresh bool, source string) {
 			rp.waited = time.Time{}
 		}
 	})
+}
+
+// mendedTop is how far down a reader may be read for a body mended in the
+// background to come in while it shows: what it changes lies below.
+const mendedTop = 240
+
+// mended takes in the body a read in the background put in place of what an
+// article showed: read again from the library, at the same place. A reader
+// already read down the page keeps what it shows until it is left, for the
+// words not to move under the eye.
+func (a *App) mended(id string) {
+	rp := a.readers[id]
+	if rp == nil {
+		return
+	}
+	// Mid-read, or read down the page, it is taken in once the reader is left.
+	if rp.loading || !rp.left && rp.r != nil && rp.r.Scroll.Y > mendedTop {
+		rp.mended = true
+		return
+	}
+	rp.mended = false
+	a.loadReader(rp, false, "")
 }
 
 // restore puts the reader back where it was left: in this session, else
@@ -245,6 +280,9 @@ func (a *App) leaveReader(left, to page) {
 			a.savePosition(rp)
 		}
 		rp.aa, rp.more, rp.left = false, false, true
+		if rp.mended {
+			a.mended(left.id)
+		}
 		// Left by the pointer, the row's moon goes from where it was to
 		// where the reader left it.
 		if !a.kbd {
@@ -272,6 +310,10 @@ func (a *App) readerPage(c *ui.Context, id string, from []page, live bool) {
 	if fresh {
 		rp.left, rp.away, rp.run, rp.focus = false, false, 0, true
 		rp.lit = litOf(art)
+		// Opened, not read ahead: a page kept by older rules is read again behind what shows (mended swaps it in).
+		if svc := a.opt.Reading; svc != nil && a.trials[id] == nil {
+			go svc.ReadBehind(id)
+		}
 	}
 	// Arrived, the reader takes the focus, so that the keys scrolling it
 	// are the keyboard's wherever the pointer is.
@@ -292,6 +334,11 @@ func (a *App) readerPage(c *ui.Context, id string, from []page, live bool) {
 				r.Flow = r.Live
 			}
 			r.Above = func() float32 { return a.readerHead(c, rp, art, src, p) }
+			// An article ends on the way to its own page: a work has its site under its first screen instead.
+			r.Below = nil
+			if rp.work == nil {
+				r.Below = func() { a.readerEnd(c, art, r.EndGap()) }
+			}
 			// A work's facts go before the body's first h2, or after it.
 			r.Insert = nil
 			if w := rp.work; w != nil && hasWorkFacts(w) {
@@ -467,6 +514,18 @@ func (a *App) readerHead(c *ui.Context, rp *readerPage, art *library.Article, sr
 		return gap
 	}
 	return 36
+}
+
+// readerEnd is what an article ends on, gap under its last words: the host of its page, which opens it in the browser,
+// as a work's site shows under its first screen.
+func (a *App) readerEnd(c *ui.Context, art *library.Article, gap float32) {
+	host := exHost(art.URL)
+	if host == "" {
+		return
+	}
+	ui.Row(c.Key("end")).Margin(gap, 0, 0, 0).AlignItems(ui.Center).FontSize(theme.Body).LineHeight(20.0 / 13).TextColor(theme.Muted).Unselectable().Children(func() {
+		a.hostLink(c, "original", host, art.URL, locales.CommonOpenInBrowser())
+	})
 }
 
 func (rp *readerPage) hasBody() bool {
@@ -898,6 +957,9 @@ func (a *App) clip(c *ui.Context, rp *readerPage, art *library.Article) {
 	}
 	rp.clipBusy = true
 	in := library.ClipInput{ID: sel.ID, ArticleID: art.ID, Text: sel.Text, Note: "", UnitID: sel.UnitID, ContentRevision: sel.ContentRevision}
+	for _, p := range sel.Pictures {
+		in.Pictures = append(in.Pictures, library.ClipPicture{Unit: p.Unit, At: p.At})
+	}
 	a.mutateOr(library.AddClip{Clip: in}, func() {
 		rp.clipBusy = false
 		r.SetMarks(a.marksOf(art.ID))
@@ -922,7 +984,7 @@ func (a *App) unclip(rp *readerPage, id string) {
 		return
 	}
 	restore := library.AddClip{Clip: library.ClipInput{ID: cl.ID, ArticleID: cl.ArticleID, Text: cl.Text, Note: cl.Note, UnitID: cl.UnitID,
-		ContentRevision: cl.ContentRevision, CreatedAt: cl.CreatedAt}}
+		ContentRevision: cl.ContentRevision, CreatedAt: cl.CreatedAt, Pictures: cl.Pictures}}
 	a.mutate(library.DeleteClip{ID: id}, func() {
 		rp.r.SetMarks(a.marksOf(rp.id))
 		rp.r.ClearSelection()

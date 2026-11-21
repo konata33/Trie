@@ -2,10 +2,7 @@ package app
 
 import (
 	"embed"
-	"fmt"
 	"math"
-	"strings"
-	"sync"
 
 	"github.com/egoist/mygo/ui"
 
@@ -45,17 +42,3 @@ func (a *App) loading(c *ui.Context, size float32) ui.Element {
 
 // breathe is a slow rise and fall over a loop: 0 → 1 → 0, eased.
 func breathe(t float32) float32 { return float32(0.5 - 0.5*math.Cos(2*math.Pi*float64(t))) }
-
-// The button loops (一笔圈出): short, middle and long, in the
-// colour of the text, stretched to the button.
-var inkLoops = sync.OnceValue(func() [3]*ui.SVG {
-	var out [3]*ui.SVG
-	for i := range out {
-		data, err := artFiles.ReadFile(fmt.Sprintf("art/ink-loop-%d.svg", i+1))
-		if err != nil {
-			panic(err)
-		}
-		out[i] = ui.MustParseSVG([]byte(strings.Replace(string(data), "<g ", `<g fill="currentColor" `, 1)))
-	}
-	return out
-})

@@ -227,6 +227,9 @@ func TestPictureRetry(t *testing.T) {
 	kept, err := store.Content(id)
 	must(t, err)
 	kept.Document = nil
+	// Kept with the current picture rules, so opening it reads nothing.
+	current := 3
+	kept.ImageCacheVersion = &current
 	kept.HTML = strings.Replace(kept.HTML, "<p><span>图片暂未载入：Screenshot of the extension PNPM Catalog Lens</span></p>",
 		`<p><img src="https://antfu.me/images/pnpm-catalog-lens.png" alt="Screenshot" width="800" height="400"></p>`, 1)
 	must(t, store.SaveContent(*kept))
@@ -380,4 +383,25 @@ func TestRestingFetchesNothing(t *testing.T) {
 	if n := fetched.Load(); n != 0 {
 		t.Errorf("resting on rows fetched %d pages", n)
 	}
+}
+
+// An article ends on the host of its page, a button that opens it in the browser.
+func TestArticleEndsOnItsHost(t *testing.T) {
+	a, _ := newTestApp(t)
+	tt := ui.NewTester(a.View, 1280, 850)
+	settle(tt)
+	must(t, tt.Click("Anthony Fu"))
+	settle(tt)
+	tt.Scroll(700, 500, 0, 400)
+	settle(tt)
+	must(t, tt.Click("Categorize Your Dependencies"))
+	settle(tt)
+	for range 30 {
+		if _, ok := tt.AccessByRole(ui.RoleButton, "antfu.me"); ok {
+			return
+		}
+		tt.Scroll(700, 400, 0, 3000)
+		tt.Advance(500 * time.Millisecond)
+	}
+	t.Fatalf("no antfu.me at the article's end: %q", tt.Texts())
 }

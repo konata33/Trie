@@ -3,7 +3,6 @@ package app
 import (
 	"cmp"
 	"encoding/base64"
-	"fmt"
 	"image"
 	"math"
 	"slices"
@@ -23,19 +22,23 @@ import (
 	"trie/internal/web"
 )
 
-// 收藏: kept by author. Each author is
-// a whole picture, their own site's first screen, laid edge to edge down
-// the page, their name and latest keeps written into its lower-left corner.
-// Opening an author, that picture folds up into the head of their page and
-// their keeps follow, two to a row, each its own picture with its words in
-// it, or its own first page. Letting go asks nothing: the notice offers 撤销.
+// 收藏: a map of what is kept, a block for each kind kept under, the
+// writers' articles and the pages captured (favmap.go), each as large as it
+// holds; choosing a block zooms into it, beside the rest as a strip. An
+// author's page lists their keeps, two to a row, each its own picture with
+// its words in it, or its own first page. Letting go asks nothing: the notice
+// offers 撤销.
 
 // favState is what 收藏 keeps between frames.
 type favState struct {
-	shelves, keeps ui.ScrollState // the authors' page; an author's, from its top on each visit
+	shelves, keeps ui.ScrollState // the map's page; an author's, from its top on each visit
+	rail           ui.ScrollState // the strip beside a block zoomed into, when it is taller than the window
+	railFor        string         // the block the strip was last brought to
 	query          string
 	search         bool
 	kind           string    // the block of the map zoomed into, if any (favmap.go)
+	reopen         string    // a block let go of whole and brought back by 撤销: zoomed into again as it shows
+	reopenAt       time.Time // the first frame after 撤销 was pressed for it
 	turned         time.Time // when the map last zoomed in or out
 	place          string    // the author whose page was open last: the tab goes back to it
 	lastQuery      string
@@ -45,15 +48,15 @@ type favState struct {
 	warmed         map[string]bool
 	warming        map[string]bool
 	menu, ctx      string    // the ··· menu and the right-click menu open, by card
-	cursor         string    // the card the keyboard is on: "a:<author>" or "k:<article>"
+	cursor         string    // the card the keyboard is on: "a:<author>", "k:<article>", "m:<block>" or "p:<page captured>"
 	focused        string    // the card that had the focus in the last build
 	focus          string    // the card to take the focus in the next build
 	cards          []favCard // the cards the last build showed, in order
 	leftAt         time.Time // when a card last left: the rest close up once it has faded
 	pending        string    // an author to let go of once the page has folded back to them
 	pendingKbd     bool
-	crossing       uint64                // the run of the last crossing between the shelves and an author
-	shades         map[string]*ui.Bitmap // the shades baked (shade), by box and gradient
+	crossing       uint64                  // the run of the last crossing between the shelves and an author
+	shades         map[shadeKey]*ui.Bitmap // the shades baked (shade), by shape
 }
 
 type favCard struct {
@@ -64,7 +67,7 @@ type favCard struct {
 func (a *App) favs() *favState {
 	if a.fav == nil {
 		a.fav = &favState{pics: map[string]*favPic{}, openings: map[string]*favOpening{}, warmed: map[string]bool{}, warming: map[string]bool{},
-			shades: map[string]*ui.Bitmap{}}
+			shades: map[shadeKey]*ui.Bitmap{}}
 	}
 	return a.fav
 }
@@ -194,7 +197,7 @@ func headHeight(vh float32) float32 { return clampf(0.5*vh, 340, 480) }
 // top, however tall the place showing it: it is only cut.
 func groundHeight(vh float32) float32 { return clampf(vh-96, 480, 900) }
 
-// favoritesPage builds 收藏: the authors (id ""), or an author's keeps.
+// favoritesPage builds 收藏: the map (id ""), or an author's keeps.
 func (a *App) favoritesPage(c *ui.Context, id string, live bool) {
 	fs := a.favs()
 	p := page{"favorites", id}
@@ -249,8 +252,29 @@ func (a *App) favoritesPage(c *ui.Context, id string, live bool) {
 	if id == "" {
 		packs = len(a.shelved(fs.query))
 	}
-	if fs.kind != "" && !slices.ContainsFunc(a.blocks(groups, fs.query), func(b mapBlock) bool { return b.key == fs.kind }) {
-		fs.kind = ""
+	// The block zoomed into: a search that leaves it nothing shows the map, and clearing the search comes back to
+	// it (favMap); gone from what is kept, it is let go.
+	blocks := a.blocks(groups, fs.query)
+	// A block whose last keep was let go and brought back by 撤销 opens again once its keeps are back.
+	if fs.reopen != "" && live {
+		if fs.reopenAt.IsZero() {
+			fs.reopenAt = c.Now()
+		}
+		switch {
+		case c.Now().Sub(fs.reopenAt) > 2*time.Second || fs.kind != "" || id != "":
+			fs.reopen = ""
+		case slices.ContainsFunc(blocks, func(b mapBlock) bool { return b.key == fs.reopen }):
+			fs.kind, fs.turned, fs.reopen = fs.reopen, c.Now(), ""
+		default:
+			c.After(50 * time.Millisecond)
+		}
+	}
+	isKind := func(b mapBlock) bool { return b.key == fs.kind }
+	zoomed := fs.kind != "" && slices.ContainsFunc(blocks, isKind)
+	if fs.kind != "" && !zoomed {
+		if _, all := a.kept(""); !slices.ContainsFunc(a.blocks(all, ""), isKind) {
+			fs.kind = ""
+		}
 	}
 	sc := ui.Scroll(c.Key("scroll")).TrackScroll(st).Grow(1).FillWidth().Scrollbars(false)
 	view := sc.LayoutBounds()
@@ -265,7 +289,7 @@ func (a *App) favoritesPage(c *ui.Context, id string, live bool) {
 					if id != "" {
 						a.backLink(c, locales.TabFavorites())
 					}
-					if id == "" && fs.kind != "" && a.backButton(c, locales.TabFavorites()) {
+					if id == "" && zoomed && a.backButton(c, locales.TabFavorites()) {
 						a.zoomTo(c, "")
 					}
 					if searching {
@@ -288,7 +312,7 @@ func (a *App) favoritesPage(c *ui.Context, id string, live bool) {
 			case !anyKept:
 				frame(c).Padding(0, 32, 140, 32).Children(func() {
 					band()
-					a.emptyState(c, "favorites", locales.FavoritesEmptyTitle(), locales.FavoritesEmptyText(), nil)
+					a.emptyState(c, "favorites", locales.FavoritesEmptyTitle(), "", nil)
 				})
 			case searching && len(found) == 0 && packs == 0:
 				frame(c).Padding(0, 32, 140, 32).Children(func() {
@@ -319,7 +343,7 @@ func (a *App) favoritesPage(c *ui.Context, id string, live bool) {
 				// where it stands.
 				frame(c).Children(func() {
 					band()
-					a.favMap(c, p, groups, max(360, view.H-52-32-32), quiet, stop, live)
+					a.favMap(c, p, groups, blocks, max(360, view.H-52-32-32), quiet, stop, live)
 				})
 			}
 		})
@@ -648,7 +672,9 @@ func (a *App) keepMenu(c *ui.Context, m ui.MenuParts, p page, art *library.Artic
 // ponytail: kept for the life of the app; a few per window size.
 func (a *App) shade(c *ui.Context, w, h, rx, ry float32, stops [][2]float32) ui.Element {
 	fs := a.favs()
-	key := fmt.Sprint(w, h, rx, ry, stops)
+	// The picture depends only on the box's reach over the ellipse's and the stops: one for every size of a shape.
+	key := shadeKey{x: w / rx, y: h / ry, n: len(stops)}
+	copy(key.stops[:], stops)
 	b := fs.shades[key]
 	if b == nil {
 		const pw, ph = 192, 144
@@ -674,6 +700,22 @@ func (a *App) shade(c *ui.Context, w, h, rx, ry float32, stops [][2]float32) ui.
 		fs.shades[key] = b
 	}
 	return ui.Image(c, b).Fit(ui.FillBox).IgnoreInput(true).AccessHidden(true)
+}
+
+// shadeKey is a shade's shape: the box's reach over the ellipse's, across and
+// up, and its stops (four at most).
+type shadeKey struct {
+	x, y  float32
+	n     int
+	stops [4][2]float32
+}
+
+// pick is yes when on, else no.
+func pick(on bool, yes, no float32) float32 {
+	if on {
+		return yes
+	}
+	return no
 }
 
 // --- Pictures.
@@ -792,6 +834,10 @@ func (p *favPic) pool(w, h, posY, cx, cy, rx, ry, inner, outer float32) *ui.Bitm
 	key := [9]float32{w, h, posY, cx, cy, rx, ry, inner, outer}
 	if b := p.pools[key]; b != nil {
 		return b
+	}
+	// A window resized back and forth bakes one for each size it passes: a picture keeps the last few.
+	if len(p.pools) >= 4 {
+		clear(p.pools)
 	}
 	src := p.soft
 	iw, ih := float32(src.Bounds().Dx()), float32(src.Bounds().Dy())
@@ -1092,7 +1138,7 @@ func (a *App) tile(c *ui.Context, p page, art *library.Article, byline, wide boo
 					style := tileTitle(wide)
 					t := style(c, titleOf(art.Title))
 					a.end(t, p, "title:"+art.ID)
-					a.looks[art.ID] = titleLook{style, map[bool]float32{true: 32, false: 20}[wide]}
+					a.looks[art.ID] = titleLook{style, pick(wide, 32, 20)}
 				})
 			} else {
 				pad := float32(32)
@@ -1107,7 +1153,7 @@ func (a *App) tile(c *ui.Context, p page, art *library.Article, byline, wide boo
 					style := paperTitle(wide)
 					t := style(c, titleOf(art.Title)).Margin(4, 0, 8, 0).Shrink(0)
 					a.end(t, p, "title:"+art.ID)
-					a.looks[art.ID] = titleLook{style, map[bool]float32{true: 32, false: 24}[wide]}
+					a.looks[art.ID] = titleLook{style, pick(wide, 32, 24)}
 					for i, said := range words {
 						e := ui.Text(c.Key(i), said).FontSize(theme.Item).LineHeight(1.8).TextColor(theme.Text2).Pretty().Shrink(0)
 						if wide {
@@ -1316,7 +1362,15 @@ func (a *App) letGo(c *ui.Context, p page, art *library.Article) {
 		}
 	}
 	if a.kbd {
-		fs.handOn("k:" + art.ID)
+		// A writer's last keep takes their sheet with it.
+		var gone []string
+		_, groups := a.kept("")
+		for _, g := range groups {
+			if len(g.list) == 1 && g.list[0].ID == art.ID {
+				gone = append(gone, "a:"+g.src.ID)
+			}
+		}
+		fs.handOn("k:"+art.ID, gone...)
 	}
 	a.unkeep(c, []*library.Article{art}, nil)
 }
@@ -1331,9 +1385,18 @@ func (a *App) letGoShelf(c *ui.Context, g *favGroup) {
 		return
 	}
 	if a.kbd {
-		fs.handOn("a:" + g.src.ID)
+		fs.handOn("a:"+g.src.ID, keepKeys(g)...)
 	}
 	a.unkeep(c, g.list, g)
+}
+
+// keepKeys are the cards of g's keeps, which leave with their writer.
+func keepKeys(g *favGroup) []string {
+	keys := make([]string, len(g.list))
+	for i, art := range g.list {
+		keys[i] = "k:" + art.ID
+	}
+	return keys
 }
 
 // letGoPending lets go of the author asked for once the page has folded
@@ -1352,23 +1415,32 @@ func (a *App) letGoPending(c *ui.Context, groups []*favGroup) {
 	for _, g := range groups {
 		if g.src.ID == id {
 			if fs.pendingKbd {
-				fs.handOn("a:" + id)
+				fs.handOn("a:"+id, keepKeys(g)...)
 			}
 			a.unkeep(c, g.list, g)
 		}
 	}
 }
 
-// handOn says where the keyboard goes once card key has left: the next card,
-// else the one before.
-func (fs *favState) handOn(key string) {
+// handOn says where the keyboard goes once card key has left, and the cards
+// gone with it: the next card that stays, else the one before.
+func (fs *favState) handOn(key string, gone ...string) {
 	at := slices.IndexFunc(fs.cards, func(c favCard) bool { return c.key == key })
-	switch {
-	case at < 0:
-	case at+1 < len(fs.cards):
-		fs.focus, fs.cursor = fs.cards[at+1].key, fs.cards[at+1].key
-	case at > 0:
-		fs.focus, fs.cursor = fs.cards[at-1].key, fs.cards[at-1].key
+	if at < 0 {
+		return
+	}
+	stays := func(i int) bool { return !slices.Contains(gone, fs.cards[i].key) }
+	for i := at + 1; i < len(fs.cards); i++ {
+		if stays(i) {
+			fs.focus, fs.cursor = fs.cards[i].key, fs.cards[i].key
+			return
+		}
+	}
+	for i := at - 1; i >= 0; i-- {
+		if stays(i) {
+			fs.focus, fs.cursor = fs.cards[i].key, fs.cards[i].key
+			return
+		}
 	}
 }
 
@@ -1402,14 +1474,19 @@ func (a *App) unkeep(c *ui.Context, list []*library.Article, g *favGroup) {
 		}
 		text = locales.FavoritesRemoved(string(t))
 	}
-	now := web.Now()
 	off := library.SetFavorites{}
 	back := library.SetFavorites{}
 	for _, art := range list {
 		off.Items = append(off.Items, library.FavoriteTime{ID: art.ID})
 		at := art.FavoritedAt
 		if at == nil {
-			at = &now
+			// Kept before the time was recorded: dated as the list ordered it, so that it goes back to its place;
+			// with no date at all, now.
+			t := web.Now()
+			if k := keptAt(art); k > 0 {
+				t = web.ISOTime(k)
+			}
+			at = &t
 		}
 		back.Items = append(back.Items, library.FavoriteTime{ID: art.ID, FavoritedAt: at})
 	}
@@ -1423,15 +1500,20 @@ func (a *App) unkeep(c *ui.Context, list []*library.Article, g *favGroup) {
 	if whose != nil {
 		id = whose.ID
 	}
+	// The block zoomed into as they leave: were they its last, 撤销 opens it again (favoritesPage).
+	kind := fs.kind
 	a.mutate(off, func() {
 		fs.leftAt = time.Now()
 		it := toastItem{text: text, face: ic, undo: back}
 		if moving {
 			a.trip(ic.toned, from, "notice")
-			it.onUndo = func() {
-				if r := a.noticeFace; r.W > 0 {
-					a.trip(ic.toned, r, "shelf:"+id)
-				}
+		}
+		it.onUndo = func() {
+			if r := a.noticeFace; moving && r.W > 0 {
+				a.trip(ic.toned, r, "shelf:"+id)
+			}
+			if kind != "" && fs.kind == "" {
+				fs.reopen, fs.reopenAt = kind, time.Time{}
 			}
 		}
 		a.toast.add(it)
@@ -1441,7 +1523,7 @@ func (a *App) unkeep(c *ui.Context, list []*library.Article, g *favGroup) {
 // favKeys are 收藏's keys: J and K, ← and →, the
 // next and last card; ↓ and ↑ the nearest card in the row below or above;
 // ⌫, Delete or S let go of a keep, ⌘⌫ of an author's whole shelf; Esc
-// leaves an author.
+// clears the search, else zooms out of a block, else leaves an author.
 func (a *App) favKeys(c *ui.Context) {
 	fs := a.favs()
 	if c.Shortcut(0, ui.KeyEscape) {

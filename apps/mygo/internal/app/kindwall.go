@@ -10,10 +10,9 @@ import (
 	"trie/internal/theme"
 )
 
-// A kind's page (PAGES.md 类别页): its door opened, the work the door stands
-// on as wide as the wall, the kind's name over its foot; under it the wall
-// of the kind's works, laid out as the kind is looked at, the galleries
-// taking turns.
+// A kind's page (PAGES.md 类别页): the wall of the kind's works under the
+// band, laid out as the kind is looked at, the galleries taking turns, and
+// nothing written over it; its door opens into its ground.
 
 // kindWall is what a kind's page keeps: its scroll, its works as the wall
 // lays them out, and how many it shows so far.
@@ -23,38 +22,86 @@ type kindWall struct {
 	endY   float32
 	order  []exWork // the works as the wall lays them out (takeTurns)
 	of     []exWork // the kind's works order was spread from
-	run    uint64   // the crossing the door's picture flies in (kindShare)
-	// The door and the head as last built, for the picture flying between them (between).
-	door, head hold
-	doorAt     ui.Rect   // where the door was last shown, in the window (doorGround)
-	back       time.Time // when the pointer came onto the way back, zero when it is elsewhere (stage lays Explore out unseen)
+	doorAt ui.Rect  // where the door was last shown, in the window (doorGround)
+	art    ui.Rect  // where its drawing lay on it (doorArtBox)
+	// How far the door was lit, its amber lit and its drawing acted, as it was last shown live: the ground
+	// opening out of it starts as it was.
+	lit, amber, look float32
+	acting           doorActing
+	// When the pointer came onto the door, and onto the way back from the page; zero when it is elsewhere (stage
+	// lays the page coming out unseen).
+	held, back time.Time
+	heldY      float32 // where Explore was scrolled to as the pointer rested on the door
+	// How far the door had opened by its last frame (doorGround): the ground grown, its picture gone into the
+	// window's colour, the shade under its name; and the crossing it opened in, which the wall unfolds in. Gone
+	// back before it has opened, the ground draws back from there and the wall goes on from where it was.
+	reach, veil, shade float32
+	run                uint64
 }
 
-// doorGround is the ground of a kind's page as its door opens into it
-// (open) or closes back: the window's own colour, growing out of the door
-// over the page left, or drawing back into it over Explore come back, along
-// the travel spring the door's picture flies on. What lies under it is
-// covered rather than dissolving, and nothing between the two pages shows.
+// doorGround is the door spreading into the ground of its kind's page
+// (open), or the ground drawing back into the door (closing over Explore
+// come back): one box, along the travel spring, from the door to the whole
+// content area. The door's drawing and its name stay where the door was,
+// as the door was pressed, and go into the window's colour as it opens
+// (DoorDim), so that what lies under it is covered rather than
+// dissolving and nothing between the two pages shows; closing, they show
+// again, at rest, as the box nears the door, which it lands on exactly.
 func (a *App) doorGround(c *ui.Context, m *move, open bool) {
-	d := a.wall(m.door).doorAt
+	kw := a.wall(m.door)
+	d := kw.doorAt
 	x := m.depth.Crossing()
 	gone := c.Now().Sub(a.movedAt)
 	if d.W <= 0 || m.kbd || a.still(c) || gone >= x.Travel {
+		if open {
+			kw.reach, kw.veil, kw.shade = 1, 1, 0
+		}
 		return
 	}
 	c.After(x.Travel - gone) // drawn back into the door, it goes as the door shows again
-	g := ui.Box(c.Key("door-ground")).Absolute().ZIndex(1).Background(theme.Window).IgnoreInput(true).AccessHidden(true)
-	// Closing, it covers Explore whole while the page's works go (motion.DoorLeave), then draws back.
+	dim := motion.DoorDim
+	g := ui.Box(c.Key("door-ground")).Absolute().ZIndex(1).ClipX().ClipY().Background(theme.Window).IgnoreInput(true).AccessHidden(true)
+	opt := ui.KeyframeOptions{Run: m.run}
+	// Closing, it covers Explore whole while the page's works go (motion.DoorLeave), drawing back as they are nearly gone.
 	frames := []ui.Keyframe{{Value: 0}, {At: x.Travel, Value: 1, Ease: motion.TravelEase}}
+	veil := []ui.Keyframe{{Value: 0}, {At: dim.Dim, Value: 1, Ease: motion.Ease}}
+	shade := []ui.Keyframe{{Value: 1}, {At: dim.Shade, Value: 0, Ease: motion.Ease}}
 	if !open {
-		frames = []ui.Keyframe{{Value: 0}, {At: motion.DoorLeave, Value: 0}, {At: x.Travel, Value: 1, Ease: motion.TravelEase}}
+		frames = []ui.Keyframe{{Value: 0}, {At: dim.Hold, Value: 0}, {At: x.Travel, Value: 1, Ease: motion.TravelEase}}
+		veil = []ui.Keyframe{{Value: kw.veil}, {At: dim.Show, Value: kw.veil}, {At: dim.Shown, Value: 0, Ease: motion.Ease}}
+		shade = []ui.Keyframe{{Value: kw.shade}, {At: x.Travel - dim.Shade, Value: kw.shade}, {At: x.Travel, Value: 1, Ease: motion.Ease}}
 	}
-	t := g.Keyframes("t", frames, ui.KeyframeOptions{Run: m.run})
+	t := g.Keyframes("t", frames, opt)
 	if !open {
-		t = 1 - t
+		t = kw.reach * (1 - t) // from as far as it had opened
 	}
 	r := a.area
-	g.Left(lerpf(d.X-r.X, 0, t)).Top(lerpf(d.Y-r.Y, 0, t)).Width(lerpf(d.W, r.W, t)).Height(lerpf(d.H, r.H, t)).Radius(10 * (1 - t))
+	w, h := lerpf(d.W, r.W, t), lerpf(d.H, r.H, t)
+	g.Left(lerpf(d.X-r.X, 0, t)).Top(lerpf(d.Y-r.Y, 0, t)).Width(w).Height(h).Radius(10 * (1 - t))
+	v, sh := g.Keyframes("veil", veil, opt), g.Keyframes("shade", shade, opt)
+	if open {
+		kw.reach, kw.veil, kw.shade = t, v, sh
+	}
+	// Opening, as the door was when it was pressed; closing, as it rests, the pointer away on the way back.
+	var l doorLit
+	if open {
+		l = doorLit{kw.lit, kw.amber, kw.look, kw.acting.beat}
+	}
+	g.Children(func() {
+		if v < 1 {
+			ui.Box(c).Absolute().Left(t*(d.X-r.X)).Top(t*(d.Y-r.Y)).Size(d.W, d.H).Children(func() {
+				ui.Box(c).Absolute().Left(kw.art.X).Top(kw.art.Y).Size(kw.art.W, kw.art.H).Children(func() {
+					a.doorDrawing(c, m.door, kw.art.W, kw.art.H, l)
+				})
+				if sh > 0.001 {
+					doorCaption(c, kindName(m.door), l.light).Opacity(sh)
+				}
+			})
+		}
+		if v > 0.001 && v < 1 {
+			ui.Box(c).Absolute().Fill().Background(theme.Window).Opacity(v)
+		}
+	})
 }
 
 // doorLeave is the page left as a door opens (Explore, under the door's
@@ -75,46 +122,6 @@ func (a *App) doorLeave(e ui.Element, m *move) {
 	if s := lerpf(1, m.depth.Crossing().To, k); s != 1 {
 		e.TransformOrigin(0.5, 0.5).Scale(s, s)
 	}
-}
-
-// hold is a box and where a picture covering it is held (ObjectPosition).
-type hold struct{ w, h, x, y float32 }
-
-// between is where a frame flying from box a to box b, t of the way, holds
-// p: what it shows at its middle goes from what a showed to what b shows,
-// rather than its hold sliding across boxes of other shapes.
-func between(p *exPic, a, b hold, t float32) (x, y float32) {
-	iw, ih := p.bmp.Size()
-	fw, fh := float32(iw), float32(ih)
-	if a.w <= 0 || b.w <= 0 || fw <= 0 || fh <= 0 {
-		return lerpf(a.x, b.x, t), lerpf(a.y, b.y, t)
-	}
-	ax, ay := seen(fw, fh, a)
-	bx, by := seen(fw, fh, b)
-	return holdFor(fw, fh, lerpf(a.w, b.w, t), lerpf(a.h, b.h, t), lerpf(ax, bx, t), lerpf(ay, by, t))
-}
-
-// seen is the middle of what box o shows of a picture iw×ih covering it,
-// in shares of the picture.
-func seen(iw, ih float32, o hold) (cx, cy float32) {
-	s := max(o.w/iw, o.h/ih)
-	dw, dh := iw*s, ih*s
-	return ((dw-o.w)*o.x + o.w/2) / dw, ((dh-o.h)*o.y + o.h/2) / dh
-}
-
-// holdFor is the hold of a box bw×bh covered by a picture iw×ih that shows
-// cx, cy at its middle, as near as it can.
-func holdFor(iw, ih, bw, bh, cx, cy float32) (x, y float32) {
-	s := max(bw/iw, bh/ih)
-	dw, dh := iw*s, ih*s
-	x, y = 0.5, 0.5
-	if dw > bw {
-		x = min(1, max(0, (cx*dw-bw/2)/(dw-bw)))
-	}
-	if dh > bh {
-		y = min(1, max(0, (cy*dh-bh/2)/(dh-bh)))
-	}
-	return x, y
 }
 
 // wall is kind k's page's state.
@@ -158,52 +165,8 @@ var wallLooks = map[string]wallLook{
 // heights.
 const wallScroll = 0.3
 
-// kindMatch is a kind's picture: the same on its door and at the head of
-// its page.
-type kindMatch struct{ kind string }
-
-// kindShare gives e, the picture of kind k's door or of its page's head,
-// shown on page p, the picture's identity. In a crossing between Explore
-// and the kind's page the one coming flies out of the one going: the frame
-// grows out of the door into the head, or closes back into it, the picture
-// laid out anew at each size on the way; the one going stays with its page
-// as it goes (doorLeave). Otherwise it says where it is, for the other to
-// come from. It gives the crossing when e is the one coming, for its
-// picture to go from the other's hold to its own (opening).
-func (a *App) kindShare(c *ui.Context, e ui.Element, k string, p page, live bool) *move {
-	if a.warming {
-		return nil // laid out unseen, it is not where the picture is: the head flies to it as it shows
-	}
-	kw, m := a.wall(k), a.came
-	door, head := page{kind: "explore"}, page{"kind", k}
-	// Noted in the crossing's first frame, while the page left is still built, and kept for the whole flight.
-	if m != nil && a.left != nil && a.left.move == m && (a.left.page == door && m.to == head || a.left.page == head && m.to == door) {
-		kw.run = m.run
-	}
-	match := kindMatch{k}
-	if m != nil && !m.kbd && m.run == kw.run && c.Now().Sub(a.movedAt) < crossingTime &&
-		(live && m.to == p || !live && a.left != nil && a.left.page == p) {
-		if !live && c.Now().After(a.movedAt) {
-			return nil // the other took off from it in the crossing's first frame
-		}
-		e.Transition(a.tr(c, m.depth.Crossing().Shared(match)))
-		if live && !a.still(c) {
-			return m
-		}
-		return nil
-	}
-	e.Transition(ui.ElementTransition{Match: match})
-	return nil
-}
-
-// opening is how far the frame flying in crossing m has come, along the
-// travel spring that carries it.
-func opening(e ui.Element, m *move) float32 {
-	return e.Keyframes("open", []ui.Keyframe{{Value: 0}, {At: m.depth.Crossing().Travel, Value: 1, Ease: motion.TravelEase}}, ui.KeyframeOptions{Run: m.run})
-}
-
-// kindPage is a kind's page: the way back, the head, then the wall, the
-// next batch coming as its end nears.
+// kindPage is a kind's page: the way back, then the wall, the next batch
+// coming as its end nears.
 func (a *App) kindPage(c *ui.Context, k string, live bool) {
 	ex := a.ex
 	kw := a.wall(k)
@@ -215,7 +178,9 @@ func (a *App) kindPage(c *ui.Context, k string, live bool) {
 	if !ok {
 		l = wallLooks["portfolio"]
 	}
-	batch := l.cols * 4
+	w := min(1200, a.area.W) - 64
+	cols := l.cols
+	batch := cols * 4
 	if kw.shown == 0 {
 		kw.shown = batch
 	}
@@ -229,12 +194,25 @@ func (a *App) kindPage(c *ui.Context, k string, live bool) {
 	if live {
 		a.scrolling = &kw.scroll
 	}
-	w := min(1200, a.area.W) - 64
-	tw := (w - float32(l.cols-1)*16) / float32(l.cols)
+	tw := (w - float32(cols-1)*16) / float32(cols)
 	th := tw * l.aspect
-	// Come in through the door, the wall unfolds under the head, a row after the one above.
-	m := a.came
-	unfold := live && m != nil && m.to == (page{"kind", k}) && m.depth == motion.Deep && !m.kbd && !a.still(c)
+	// Come in through the door, the wall unfolds under the band from the door's side: a row later for each row
+	// down, half a row for each column away from the door. Gone back through it before the wall is in, the wall
+	// goes on from where it was as it leaves; come in any other way, it is there.
+	run := uint64(0)
+	switch m, l := a.came, a.left; {
+	case live && m != nil && m.to == (page{"kind", k}) && m.door == k && m.depth == motion.Deep:
+		run = m.run
+	case live:
+		kw.run = 0
+	case l != nil && l.page == (page{"kind", k}) && l.move.door == k:
+		run = kw.run
+	}
+	doorCol := float32(0)
+	if d := kw.doorAt; d.W > 0 {
+		left := a.area.X + (a.area.W-w)/2
+		doorCol = min(float32(cols-1), max(0, (d.X+d.W/2-left)/(tw+16)-0.5))
+	}
 	sc.Children(func() {
 		frame(c).Padding(0, 32, 140, 32).Children(func() {
 			a.band(c, func() {
@@ -244,26 +222,17 @@ func (a *App) kindPage(c *ui.Context, k string, live bool) {
 				} else if live && !on {
 					kw.back = time.Time{}
 				}
-				way.Children(func() { a.backLink(c, backLabel(a, back)) })
-			}, func() {})
-			a.kindHead(c, k, w, works, live, unfold)
-			ui.Column(c.Key("wall")).Gap(16).Role(ui.RoleList).Label(kindName(k)).Children(func() {
-				for row := 0; row*l.cols < n; row++ {
-					r := ui.Row(c.Key(row)).Gap(16)
-					if unfold && row < 4 {
-						unfoldIn(c, r, m.run, motion.Unfold.After+time.Duration(row)*motion.Unfold.Row)
+				// Come in through the door, the way back comes in with the wall, not before it over the door's ground.
+				if run != 0 {
+					if in := unfolding(way, run, motion.Unfold.After); in < 1 {
+						way.Opacity(in)
 					}
-					r.Children(func() {
-						for col := range l.cols {
-							if i := row*l.cols + col; i < n {
-								cell := ui.Box(c.Key(kw.order[i].key())).Role(ui.RoleListItem)
-								a.intoView(cell, 0)
-								cell.Children(func() { a.kindTile(c, k, kw.order[i], l, tw, th) })
-							}
-						}
-					})
 				}
-			})
+				way.Children(func() { a.backLink(c, backLabel(a, back)) })
+				// The page's name, for a screen reader only: on the screen the works say what kind they are.
+				ui.Box(c.Key("name")).Size(0, 0).Role(ui.RoleHeading).Level(1).Label(kindName(k))
+			}, func() {})
+			ui.Column(c.Key("wall")).Gap(16).Role(ui.RoleList).Label(kindName(k)).Children(func() { a.wallRows(c, k, kw, l, n, cols, tw, th, run, doorCol) })
 			if n < len(kw.order) {
 				end := ui.Box(c.Key("end")).Height(1).FillWidth().AccessHidden(true)
 				if live && !a.warming {
@@ -278,71 +247,68 @@ func (a *App) kindPage(c *ui.Context, k string, live bool) {
 	})
 }
 
-// unfoldIn brings e into focus from motion.Unfold.Rise below, after delay into
-// crossing run.
-func unfoldIn(c *ui.Context, e ui.Element, run uint64, delay time.Duration) {
-	u := motion.Unfold
-	k := e.Keyframes("unfold", []ui.Keyframe{{Value: 0}, {At: delay, Value: 0}, {At: delay + u.In, Value: 1, Ease: motion.Ease}},
-		ui.KeyframeOptions{Run: run, NonMotion: true})
-	if k >= 1 {
-		return
+// wallRows is the first n of the wall's works, cols across, each tw×th;
+// come in through the door in crossing run, they unfold from its side,
+// doorCol. A work whose picture cannot be had is left off the wall, as a site
+// whose first screen cannot be taken is left out of Explore's stream; unless
+// none can be (offline, none kept), when the tiles wait for them.
+func (a *App) wallRows(c *ui.Context, k string, kw *kindWall, l wallLook, n, cols int, tw, th float32, run uint64, doorCol float32) {
+	works, seen := make([]exWork, 0, n), false
+	for _, w := range kw.order[:n] {
+		p := a.workPic(w)
+		if p != nil && p.done && p.bmp == nil {
+			continue
+		}
+		works, seen = append(works, w), seen || p != nil && p.bmp != nil
 	}
-	e.Opacity(k).Translate(0, u.Rise*(1-k))
-	if b := motion.Defocus * (1 - k); b > 0.05 {
-		e.Blur(b)
+	if !seen {
+		works = kw.order[:n]
+	}
+	n = len(works)
+	for row := 0; row*cols < n; row++ {
+		ui.Row(c.Key(row)).Gap(16).Children(func() {
+			for col := range cols {
+				if i := row*cols + col; i < n {
+					cell := ui.Box(c.Key(works[i].key())).Role(ui.RoleListItem)
+					in := float32(1)
+					if run != 0 && row < 4 {
+						away := float32(row) + 0.5*max(float32(col)-doorCol, doorCol-float32(col))
+						in = unfolding(cell, run, motion.Unfold.After+time.Duration(away*float32(motion.Unfold.Row)))
+					}
+					a.cellIn(cell, in)
+					cell.Children(func() { a.kindTile(c, k, works[i], l, tw, th) })
+				}
+			}
+		})
 	}
 }
 
-// kindHead is the head of a kind's page: its door opened, the work the door
-// stands on as wide as the wall and lit, the kind's name over its foot on
-// the words' band, the galleries its works come from at the other end.
-func (a *App) kindHead(c *ui.Context, k string, w float32, works []exWork, live, unfold bool) {
-	cov, pic := a.doorPic(k)
-	_, vh := c.Size()
-	h := clampf(0.32*vh, 240, 320)
-	p := page{"kind", k}
-	ui.Box(c.Key("head")).Size(w, h).Margin(0, 0, 24, 0).Children(func() {
-		frm := ui.Box(c.Key("pic")).Absolute().Fill().Radius(10).ClipX().ClipY().Background(theme.Surface).IgnoreInput(true).AccessHidden(true)
-		fly := a.kindShare(c, frm, k, p, live)
-		frm.Children(func() {
-			if pic != nil && pic.bmp != nil {
-				// Opening out of the door, held at first as the lit door held it, coming to the head's own hold.
-				x, y, z := cov.headX, cov.headY, float32(1)
-				kw := a.wall(k)
-				kw.head = hold{w, h, x, y}
-				if fly != nil {
-					t := opening(frm, fly)
-					x, y = between(pic, hold{kw.door.w, kw.door.h, cov.litX, cov.litY}, kw.head, t)
-					z = lerpf(cov.litZoom, z, t)
-				}
-				ui.Image(c, pic.bmp).Fit(ui.Cover).ObjectPosition(x, y).Absolute().
-					LeftPercent(-100 * (z - 1) * cov.fx).TopPercent(-100 * (z - 1) * cov.fy).WidthPercent(100 * z).HeightPercent(100 * z).Opacity(a.arrived(c, pic, motion.SwapIn))
-				if v := 1 - pic.lit; pic.lit > 0 && v > 0.001 {
-					ui.Box(c).Absolute().Fill().Background(theme.Darken).Opacity(v)
-				}
-			}
-			// The words' band goes with the picture as it flies (kindDoor).
-			bandAtFoot(c, bandKey{w: w, h: 152, top: h - 152, rise: 96, ph: h, pw: w, px: cov.headX, py: cov.headY}, pic, 10)
-		})
-		if pic == nil || !pic.done {
-			a.breathing(c, theme.Hover)
-		}
-		ui.Box(c.Key("cap")).Absolute().Fill().IgnoreInput(true).ZIndex(1).Children(func() {
-			name := kindTitle(c, kindName(k)).Role(ui.RoleHeading).Level(1).Absolute().Left(32).Bottom(28)
-			a.end(name, p, "kind:"+k)
-		})
-		ui.Row(c.Key("from")).Absolute().Right(28).Bottom(36).Gap(8).ZIndex(2).Children(func() {
-			for i, e := range kindSources(works) {
-				f := a.exFace(c, e, 24, false, 11)
-				a.tip(c, f, e.Name, false)
-				if unfold {
-					unfoldIn(c, f, a.came.run, motion.Unfold.After+time.Duration(i+1)*motion.Unfold.Row)
-				}
-			}
-		})
-		// The edge drawn over the picture, as on the door.
-		ui.Box(c).Absolute().Fill().Radius(10).InsetShadow(0, 0, 0, 1, theme.LineSoft).IgnoreInput(true).ZIndex(3)
-	})
+// unfolding is how far e has come in, come in through the door: from 0
+// until delay into crossing run, to 1 over motion.Unfold.In.
+func unfolding(e ui.Element, run uint64, delay time.Duration) float32 {
+	u := motion.Unfold
+	return e.Keyframes("unfold", []ui.Keyframe{{Value: 0}, {At: delay, Value: 0}, {At: delay + u.In, Value: 1, Ease: motion.Ease}},
+		ui.KeyframeOptions{Run: run, NonMotion: true})
+}
+
+// cellIn is a work on the wall coming into focus as it scrolls in
+// (intoView) and as it comes in through the door, in of the way, rising from
+// Unfold.Rise below: one opacity and one blur for both, on the work itself,
+// so that no blur is drawn inside another's layer (a blur in a layer that
+// stops showing jumps to the window's top for a few frames).
+func (a *App) cellIn(e ui.Element, in float32) {
+	seen := a.seenOf(e, 0)
+	if seen >= 1 && in >= 1 {
+		return
+	}
+	opacity, blur := seenLook(seen)
+	e.Opacity(opacity * in)
+	if b := max(blur, motion.Defocus*(1-in)); b > 0.05 {
+		e.Blur(b)
+	}
+	if in < 1 {
+		e.Translate(0, motion.Unfold.Rise*(1-in))
+	}
 }
 
 // kindTile is a work on its kind's wall: its picture fills it, resting as

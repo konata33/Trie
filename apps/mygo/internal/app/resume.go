@@ -93,15 +93,17 @@ func stoppedAt(doc json.RawMessage, unit string) string {
 func (a *App) resumeView(c *ui.Context, arts []*library.Article, live bool) {
 	hs := a.homeSt()
 	p := page{kind: "home"}
-	ui.Grid(c.Key("resume")).ColumnTracks(ui.Fr(1), ui.Fr(1), ui.Fr(1)).GapX(48).Margin(0, 0, 64, 0).Role(ui.RoleRegion).Label(locales.HomeResumeRegion()).
+	ui.Grid(c.Key("resume")).ColumnTracks(ui.Fr(1), ui.Fr(1), ui.Fr(1)).GapX(48).AlignItems(ui.Stretch).Margin(0, 0, 64, 0).Role(ui.RoleRegion).
+		Label(locales.HomeResumeRegion()).
 		Children(func() {
 			for _, art := range arts {
 				cell := ui.Box(c.Key(art.ID)).MinWidth(0).BorderWidth(1, 0, 0, 0).BorderColor(theme.Line)
 				cell.Children(func() {
 					b := ui.ButtonBase(c.Key("open")).Label(locales.HomeResume(titleOf(art.Title), percentOf(art))).Column().Gap(12).AlignItems(ui.Start).
-						Padding(24, 0, 0, 0).Radius(6).FocusRing(false).FillWidth()
+						Padding(24, 0, 0, 0).Radius(6).FocusRing(false).FillWidth().FillHeight()
 					r := b.LayoutBounds()
 					a.layInto(p, art.ID, r)
+					a.homeOther(b)
 					if b.Clicked() && live {
 						hs.resumed, hs.shown = art.ID, ""
 						a.openAs(c, art.ID, r, resumeTitle, theme.Label)
@@ -134,11 +136,14 @@ func (a *App) resumeView(c *ui.Context, arts []*library.Article, live bool) {
 								TextColor(b.AnimateColor("words", color, a.ease(motion.Hover)))
 						}
 						src := a.sourceOf(art)
-						ui.Row(c).Gap(8).AlignItems(ui.Center).MinWidth(0).MaxWidthPercent(100).TextColor(theme.Muted).Children(func() {
-							a.avatar(c, nameOf(src), a.iconOf(src), 16)
-							ui.Text(c, nameOf(src)).FontSize(theme.Label).LineHeight(16.0 / 12).FontWeight(500).TextColor(theme.Text2).SingleLine().Shrink(0)
-							t := resumeTitle(c, titleOf(art.Title)).Shrink(1).MinWidth(0)
-							a.homeTitle(t, art.ID, titleLook{resumeTitle, theme.Label}, "resume")
+						// The line of whose and which stands level across the columns, however many lines the words above take.
+						ui.Column(c.Key("foot")).Grow(1).Justify(ui.End).MinWidth(0).MaxWidthPercent(100).Children(func() {
+							ui.Row(c).Gap(8).AlignItems(ui.Center).MinWidth(0).MaxWidthPercent(100).TextColor(theme.Muted).Children(func() {
+								a.avatar(c, nameOf(src), a.iconOf(src), 16)
+								ui.Text(c, nameOf(src)).FontSize(theme.Label).LineHeight(16.0 / 12).FontWeight(500).TextColor(theme.Text2).SingleLine().Shrink(0)
+								t := resumeTitle(c, titleOf(art.Title)).Shrink(1).MinWidth(0)
+								a.homeTitle(t, art.ID, titleLook{resumeTitle, theme.Label}, "resume")
+							})
 						})
 					})
 				})

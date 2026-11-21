@@ -18,7 +18,9 @@ import (
 	"trie/internal/explore"
 	"trie/internal/library"
 	"trie/internal/motion"
+	"trie/internal/reader"
 	"trie/internal/reading"
+	"trie/internal/theme"
 )
 
 // packStep is what the stand-in packer does next: hear progress, or end.
@@ -323,7 +325,7 @@ func TestCaptureCopyUses(t *testing.T) {
 }
 
 // Taken, a pack stays in the island while it is pointed at, then flies into
-// 收藏's tab and the island goes back into its point; 收起 sends the island
+// 收藏's tab and the island goes back into its point; 收进收藏 sends the island
 // away, and what is taken while it is away goes straight into 收藏.
 func TestCaptureLingerAndHide(t *testing.T) {
 	dir := t.TempDir()
@@ -361,7 +363,10 @@ func TestCaptureLingerAndHide(t *testing.T) {
 		t.Error("it did not land, or the island stayed")
 	}
 
-	// 收起 while one is being taken: it goes on out of sight, and into 收藏.
+	// 收进收藏 while one is being taken: the island itself sets off for 收藏's tab
+	// and goes into it, which then tells how far the page has come, under its
+	// icon, and nothing lies over the sidebar; it goes on there. Pressed, the tab
+	// opens 收藏's captures.
 	two := a.takePage("p2", "https://two.example/", "Two", nil, ui.Rect{}, tt.Now())
 	started(t, f)
 	settle(tt)
@@ -371,12 +376,45 @@ func TestCaptureLingerAndHide(t *testing.T) {
 	}
 	tt.Move(acc.Bounds.X+acc.Bounds.W/2, acc.Bounds.Y+acc.Bounds.H/2)
 	settle(tt)
-	clickAccess(t, tt, "收起")
+	clickAccess(t, tt, "收进收藏")
+	tt.Move(600, 600)
+	tt.Frame()
+	hm := a.capture.homing
+	if hm == nil || a.capture.up || !a.capture.away {
+		t.Fatal("the island did not set off for 收藏")
+	}
+	tt.Advance(150 * time.Millisecond)
+	if hm.landed {
+		t.Fatal("the tab took over at once: want the island on its way")
+	}
+	for range 12 {
+		tt.Advance(100 * time.Millisecond)
+	}
+	if a.capture.homing != nil || a.capture.post != nil {
+		t.Fatalf("on its way %v, note %v: want it home in the tab, no note", a.capture.homing != nil, a.capture.post != nil)
+	}
+	if a.capture.tabPct != two.pct || a.capture.tabFill == 0 || !tt.HasText(percentText(two.pct)) {
+		t.Fatalf("the tab does not tell how far it has come (%d%%, its %d%%)", two.pct, a.capture.tabPct)
+	}
+	clickAccess(t, tt, "收藏")
+	tt.Move(600, 600) // off the tab, which holds what it says while pointed at
+	settle(tt)
+	settle(tt)
+	if a.page != (page{kind: "favorites"}) || a.favs().kind != captures {
+		t.Fatalf("the tab went to %+v, block %q: want 收藏's captures", a.page, a.favs().kind)
+	}
+	if _, ok := tt.Access("Two"); !ok || !tt.HasText(percentText(two.pct)) {
+		t.Errorf("the page being taken is not in 收藏's captures with how far it has come (%s)", percentText(two.pct))
+	}
+	if a.capture.tabFill != 0 {
+		t.Error("the tab still tells it over 收藏's captures, which tell it themselves")
+	}
+	// Taken out of sight: into 收藏, whose tab closes its orbit and says so a while.
+	clickAccess(t, tt, "首页")
 	tt.Move(600, 600)
 	settle(tt)
-	settle(tt)
-	if a.capture.up || !a.capture.away {
-		t.Fatal("收起 did not send the island away")
+	if a.capture.tabFill == 0 {
+		t.Fatal("away from 收藏's captures, the tab does not tell it again")
 	}
 	f.steps <- packStep{end: true}
 	await(t, tt, posts, func() bool { return two.state == packTaken })
@@ -384,8 +422,17 @@ func TestCaptureLingerAndHide(t *testing.T) {
 	if !two.filed || a.capture.up {
 		t.Errorf("taken while away: filed %v, island up %v", two.filed, a.capture.up)
 	}
+	if a.capture.told != two || a.capture.tabFill != 1 || !tt.HasText("已拓下") || a.capture.post != nil {
+		t.Error("the tab does not say it was taken out of sight, or a note came")
+	}
 	if a.capture.away {
 		t.Error("away stayed with nothing being taken")
+	}
+	for range 40 {
+		tt.Advance(100 * time.Millisecond)
+	}
+	if a.capture.told != nil || a.capture.tabFill != 0 || tt.HasText("已拓下") {
+		t.Errorf("the tab did not go back to rest: told %v, orbit %v, says %v", a.capture.told != nil, a.capture.tabFill, tt.HasText("已拓下"))
 	}
 	// The next capture brings the island back.
 	a.takePage("p3", "https://three.example/", "Three", nil, ui.Rect{}, tt.Now())
@@ -395,6 +442,177 @@ func TestCaptureLingerAndHide(t *testing.T) {
 		t.Error("the island did not come back for the next capture")
 	}
 	a.StopPacks()
+}
+
+// Past five, the island keeps the page being taken and the one just taken in
+// sight, and stacks behind the earliest taken first, then the last waiting.
+func TestIslandFront(t *testing.T) {
+	pack := func(name string, st packState) *packItem { return &packItem{Name: name, state: st} }
+	names := func(its []*packItem) string {
+		var s []string
+		for _, it := range its {
+			s = append(s, it.Name)
+		}
+		return strings.Join(s, " ")
+	}
+	// As islandItems lays them out: taken and failed, waiting, being taken; newest first.
+	taken := []*packItem{pack("t6", packTaken), pack("t5", packFailed), pack("t4", packTaken), pack("t3", packTaken),
+		pack("t2", packTaken), pack("t1", packTaken), pack("k", packTaking)}
+	if got := names(islandFront(taken)); got != "t6 t5 t4 t3 k" {
+		t.Errorf("six taken and one being taken show %q, want the newest taken and the one being taken", got)
+	}
+	waiting := []*packItem{pack("t1", packTaken), pack("w6", packWaiting), pack("w5", packWaiting), pack("w4", packWaiting),
+		pack("w3", packWaiting), pack("w2", packWaiting), pack("w1", packWaiting), pack("k", packTaking)}
+	if got := names(islandFront(waiting)); got != "t1 w3 w2 w1 k" {
+		t.Errorf("one taken, six waiting show %q, want the one just taken and the next to be taken", got)
+	}
+}
+
+// The island's figures: from 0% at once, creeping on while the page opens and
+// nothing is told, never back, in steps no closer than CapturePercent, 99% at
+// most until it is taken; then 100%, which gives way to the lit mark.
+func TestCaptureFigures(t *testing.T) {
+	f := newFakePacker()
+	a, tt, posts := captureTester(t, t.TempDir(), f)
+	it := a.takePage("p1", "https://one.example/", "One", nil, ui.Rect{}, tt.Now())
+	started(t, f)
+	tt.Frame()
+	if !tt.HasText("0%") {
+		t.Fatal("no figures as it starts")
+	}
+	last, steps, lastAt := 0, 0, tt.Now()
+	for range 60 { // 6 s of the page opening, nothing told
+		tt.Advance(100 * time.Millisecond)
+		switch {
+		case a.capture.pct < last:
+			t.Fatalf("went back from %d%% to %d%%", last, a.capture.pct)
+		case a.capture.pct > last:
+			if gap := tt.Now().Sub(lastAt); steps > 0 && gap < motion.CapturePercent {
+				t.Fatalf("moved on after %v", gap)
+			}
+			last, lastAt, steps = a.capture.pct, tt.Now(), steps+1
+		}
+	}
+	if last < 5 || last >= 10 {
+		t.Fatalf("after 6 s of opening, %d%%: want it creeping toward a tenth", last)
+	}
+	go func() { f.steps <- packStep{done: 1} }()
+	await(t, tt, posts, func() bool { return it.progress == 1 })
+	settle(tt)
+	if !tt.HasText("99%") || tt.HasText("100%") {
+		t.Fatal("told it is all there but not yet taken: want 99%")
+	}
+	go func() { f.steps <- packStep{end: true} }()
+	await(t, tt, posts, func() bool { return it.state == packTaken })
+	tt.Frame()
+	if !tt.HasText("100%") {
+		t.Fatal("no 100% as it is taken")
+	}
+	for range 20 {
+		tt.Advance(100 * time.Millisecond)
+	}
+	if tt.HasText("100%") {
+		t.Error("100% stayed past the first screen rising")
+	}
+}
+
+// A pack that fails while the island is away says so in the note under 收藏's
+// tab, whose 重试 takes it again, the island coming back for it.
+func TestCaptureFailedAway(t *testing.T) {
+	f := newFakePacker()
+	a, tt, posts := captureTester(t, t.TempDir(), f)
+	it := a.takePage("p1", "https://one.example/", "One", nil, ui.Rect{}, tt.Now())
+	started(t, f)
+	settle(tt)
+	a.capture.away = true
+	go func() { f.steps <- packStep{end: true, err: errors.New("explore: the page did not load")} }()
+	await(t, tt, posts, func() bool { return it.state == packFailed })
+	settle(tt)
+	if p := a.capture.post; p == nil || p.it != it || !tt.HasText("没拓成") {
+		t.Fatal("no note that it failed out of sight")
+	}
+	was := a.page
+	if err := tt.Click("重试"); err != nil {
+		t.Fatal(err)
+	}
+	settle(tt)
+	if it.state != packTaking || a.capture.away || a.capture.post != nil {
+		t.Fatalf("重试: state %v, away %v, note left %v", it.state, a.capture.away, a.capture.post != nil)
+	}
+	if a.page != was {
+		t.Errorf("重试 also opened %+v: want only the page taken again", a.page)
+	}
+	// It fails again, and is deleted in 收藏 while the note says so: the note
+	// goes into the tab, its 重试 gone with it.
+	a.capture.away = true
+	go func() { f.steps <- packStep{end: true, err: errors.New("explore: the page did not load")} }()
+	await(t, tt, posts, func() bool { return it.state == packFailed })
+	settle(tt)
+	if a.capture.post == nil {
+		t.Fatal("no note the second time")
+	}
+	a.dropPack(it)
+	settle(tt)
+	if a.capture.post != nil || tt.HasText("没拓成") {
+		t.Error("the note stayed for a page deleted")
+	}
+	// Two failing at once: VoiceOver hears of both, the note shows the later.
+	one, two := &packItem{Name: "One", state: packFailed}, &packItem{Name: "Two", state: packFailed}
+	a.said = nil
+	a.postFailed(one, tt.Now())
+	a.postFailed(two, tt.Now())
+	if len(a.said) != 2 || a.capture.post.it != two {
+		t.Errorf("said %q, note of %q: want both said and the note of Two", a.said, a.capture.post.it.Name)
+	}
+	a.StopPacks()
+}
+
+// From the keys (one Esc in the island, though the thumbnail the keys are on
+// shows its tip) or under less motion the island does not travel home: it is
+// gone at once, and 收藏's tab tells how far the page has come straight away.
+func TestCapturePutAwayAtOnce(t *testing.T) {
+	for _, still := range []bool{false, true} {
+		f := newFakePacker()
+		a, tt, _ := captureTester(t, t.TempDir(), f)
+		if still {
+			tt = ui.NewTesterWith(a.View, 1280, 850, ui.TesterOptions{Preferences: ui.Preferences{ReduceMotion: true}})
+			settle(tt)
+		}
+		it := a.takePage("p1", "https://one.example/", "One", nil, ui.Rect{}, tt.Now())
+		started(t, f)
+		settle(tt)
+		if still {
+			acc, ok := tt.Access("One，正在拓")
+			if !ok {
+				t.Fatal("not in the island")
+			}
+			tt.Move(acc.Bounds.X+acc.Bounds.W/2, acc.Bounds.Y+acc.Bounds.H/2)
+			settle(tt)
+			clickAccess(t, tt, "收进收藏")
+			tt.Move(600, 600)
+		} else {
+			for i := 0; !tt.Focused("One，正在拓") && i < 80; i++ {
+				tt.Key(0, ui.KeyTab)
+			}
+			if !tt.Focused("One，正在拓") {
+				t.Fatal("the keys did not reach the island")
+			}
+			settle(tt)
+			if !tt.HasText("One，正在拓") {
+				t.Fatal("the thumbnail the keys are on shows no tip")
+			}
+			tt.Key(0, ui.KeyEscape) // one: the tip does not take it
+		}
+		tt.Frame()
+		if !a.capture.away || a.capture.homing != nil || a.capture.up {
+			t.Fatalf("still %v: away %v, travelling %v, island up %v: want it home at once", still, a.capture.away, a.capture.homing != nil, a.capture.up)
+		}
+		settle(tt)
+		if a.capture.tabFill == 0 || !tt.HasText(percentText(it.pct)) {
+			t.Errorf("still %v: the tab does not tell how far it has come", still)
+		}
+		a.StopPacks()
+	}
 }
 
 // Under less motion a pack let go of fades where it was rather than fly, and
@@ -608,8 +826,14 @@ func TestCaptureShots(t *testing.T) {
 		add(a, "tegra", packTaking, c.p, c.base, c.first)
 		settle(tt)
 		save(c.name, crop(tt, islandArea(a, 200)))
+		// Its card while it is being taken: the same picture, developing.
+		clickAccess(t, tt, "tegra，正在拓")
+		settle(tt)
+		if d, ok := tt.Access("tegra"); ok {
+			save("card-"+strings.TrimPrefix(c.name, "island-"), crop(tt, ui.Rect{X: d.Bounds.X - 40, Y: d.Bounds.Y - 40, W: d.Bounds.W + 80, H: d.Bounds.H + 80}))
+		}
 	}
-	// Taken: the first screen up, the amber edge on.
+	// Taken: the first screen up.
 	a, tt := shots(ui.Preferences{})
 	it := add(a, "tegra", packTaking, 0.9, tegra, tegra)
 	// CAPTURE_FONT, a font file, stands in for the face the page's largest words are set in.
@@ -751,6 +975,23 @@ func TestCaptureShots(t *testing.T) {
 		save("card-failed", crop(tt, ui.Rect{X: d.Bounds.X - 40, Y: d.Bounds.Y - 40, W: d.Bounds.W + 80, H: d.Bounds.H + 80}))
 	}
 
+	// An article with no picture: its proof, waiting and half developed, in the island and on its card.
+	proof := proofPic(proofPage{title: "Categorize Your Dependencies", source: "Anthony Fu", date: "10月2日", mark: ui.Hex("#C8C8C8"),
+		blocks: reader.Prepare(&reader.Content{Status: "ready", HTML: proofHTML}).Sketch(32)})
+	for _, p := range []float32{0.06, 0.5} {
+		a, tt := shots(ui.Preferences{})
+		it := add(a, "proof", packTaking, p, nil, nil)
+		it.base, it.basing = proof, true
+		settle(tt)
+		name := fmt.Sprintf("proof-p%02d", int(p*100))
+		save("island-"+name, crop(tt, islandArea(a, 200)))
+		clickAccess(t, tt, "proof，正在拓")
+		settle(tt)
+		if d, ok := tt.Access("proof"); ok {
+			save("card-"+name, crop(tt, ui.Rect{X: d.Bounds.X - 40, Y: d.Bounds.Y - 40, W: d.Bounds.W + 80, H: d.Bounds.H + 80}))
+		}
+	}
+
 	// Less motion: developing, and taken.
 	a, tt = shots(ui.Preferences{ReduceMotion: true})
 	it = add(a, "tegra", packTaking, 0.5, tegra, tegra)
@@ -760,7 +1001,7 @@ func TestCaptureShots(t *testing.T) {
 	settle(tt)
 	save("still-taken", crop(tt, islandArea(a, 200)))
 
-	// 收起 on the island pointed at; let go of, the thumbnail flies into 收藏's tab.
+	// 收进收藏 on the island pointed at; let go of, the thumbnail flies into 收藏's tab.
 	a, tt = shots(ui.Preferences{})
 	it = add(a, "tegra", packTaken, 1, tegra, tegra)
 	settle(tt)
@@ -827,6 +1068,67 @@ func TestCaptureShots(t *testing.T) {
 	tt.Move(5, 600)
 	tt.Advance(100 * time.Millisecond)
 	save("favorites-copied", tt.Image())
+
+	// The loop out of sight: the island pointed at, put away into 收藏 (its way
+	// into the tab frame by frame, the tab's orbit filling), the tab pointed at
+	// and further on, 收藏's captures it opens with the page still being taken,
+	// then the tab saying a page was taken, and the note of one that failed.
+	a, tt = shots(ui.Preferences{})
+	add(a, "codrops", packTaken, 1, codrops, codrops)
+	it = add(a, "tegra", packTaking, 0.42, tegra, tegra)
+	settle(tt)
+	if acc, ok := tt.Access("tegra，正在拓"); ok {
+		tt.Move(acc.Bounds.X+acc.Bounds.W/2, acc.Bounds.Y+acc.Bounds.H/2)
+	}
+	settle(tt)
+	save("loop-1-pointed", crop(tt, islandArea(a, 320)))
+	clickAccess(t, tt, "收进收藏")
+	tt.Move(900, 600)
+	must(t, os.MkdirAll(filepath.Join(out, "away"), 0o755))
+	for i := range 24 {
+		tt.Advance(40 * time.Millisecond)
+		save(fmt.Sprintf("away/%02d", i), crop(tt, ui.Rect{W: 1280, H: 260}))
+	}
+	settle(tt)
+	tabArea := ui.Rect{W: 320, H: 150}
+	save("loop-2-tab", crop(tt, tabArea))
+	save("loop-2-tab-window", tt.Image())
+	tab := a.favTab
+	tt.Move(tab.X+tab.W/2, tab.Y+tab.H/2)
+	settle(tt)
+	save("loop-3-tab-pointed", crop(tt, ui.Rect{W: 640, H: 150}))
+	tt.Move(900, 600)
+	it.progress = 0.8
+	settle(tt)
+	save("loop-3-tab-80", crop(tt, tabArea))
+	clickAccess(t, tt, "收藏")
+	settle(tt)
+	settle(tt)
+	save("loop-4-shelf", tt.Image())
+	clickAccess(t, tt, "首页")
+	settle(tt)
+	settle(tt)
+	it.state, it.progress = packTaken, 1
+	a.capture.told, a.capture.away = it, true
+	tt.Frame()
+	must(t, os.MkdirAll(filepath.Join(out, "taken"), 0o755))
+	for i := range 10 {
+		tt.Advance(40 * time.Millisecond)
+		save(fmt.Sprintf("taken/%02d", i), crop(tt, tabArea))
+	}
+	settle(tt)
+	save("loop-5-taken", crop(tt, tabArea))
+	for range 40 {
+		tt.Advance(100 * time.Millisecond)
+	}
+	save("loop-5-rest", crop(tt, tabArea))
+	failing := add(a, "obys", packTaking, 0.3, obys, obys)
+	failing.filed, a.capture.away = true, true
+	settle(tt)
+	failing.state, failing.failed = packFailed, packFailure(errors.New("explore: the page did not load"))
+	settle(tt)
+	settle(tt)
+	save("loop-6-failed", crop(tt, ui.Rect{W: 640, H: 200}))
 
 	// The button, idle, developing and lit, in the reader's bar.
 	b, tt2, _ := openLobehub(t)
@@ -944,5 +1246,43 @@ func TestSlugOf(t *testing.T) {
 		if got := slugOf(in); got != want {
 			t.Errorf("slugOf(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// proofHTML is an article's start, as the proofs in the tests set it.
+const proofHTML = `<p>The dependencies of a package are of <a href="https://example.com/">different kinds</a>: some
+ship with it, some only build it, and some are there for the tests alone.</p><p>Keeping them apart in the manifest
+makes each easier to update, and tells a reader at a glance what the package needs to run.</p>
+<h2>In practice</h2><pre><code>{
+  "dependencies": {},
+  "devDependencies": {}
+}</code></pre><p>The rest of this note walks through each kind in turn.</p>`
+
+// An article's proof sets its title from the title's row in the column and
+// nothing above it or past the column; a long title wraps; Chinese is told apart.
+func TestCaptureProof(t *testing.T) {
+	p := proofPage{title: strings.Repeat("Accessibility Testing ", 5), source: "Smashing Magazine", date: "11月18日",
+		blocks: []reader.Sketch{{Kind: reader.Paragraph, Runs: []reader.SketchRun{{Text: strings.Repeat("word ", 300)}}}}}
+	img := proofOf(p, cardCols, cardRows, cardProof)
+	ink := func(x, y int) bool {
+		r, _, _, _ := img.At(x, y).RGBA()
+		return r>>8 > uint32(theme.Window.R)+8
+	}
+	top := cardProof.titleTop * proofDot
+	for y := range img.Rect.Dy() {
+		for x := range img.Rect.Dx() {
+			if ink(x, y) && (x < 204 || x >= 852 || y < top) {
+				t.Fatalf("ink at %d, %d: outside the column or above the title", x, y)
+			}
+		}
+	}
+	if !ink(205, top+1) || !ink(205, top+cardProof.titleLine*proofDot+1) {
+		t.Error("the title's first or second line is not set")
+	}
+	if !cjkText("我的 AI Native iOS 开发验证工作流", nil) || cjkText("Categorize Your Dependencies", nil) {
+		t.Error("Chinese not told from English")
+	}
+	if pic := proofPic(p); len(pic.thumb.c) != thumbCols*thumbRows || len(pic.card.c) != cardCols*cardRows {
+		t.Error("the proof's dots are not the thumbnail's and the card's")
 	}
 }

@@ -204,13 +204,29 @@ func tabIcon(kind string) string {
 // label opens and comes into focus out of 1.6px of blur, inside its own
 // tab, as the light comes (cr), and closes as it leaves; the icons' amber
 // stays icon-fill while the light is on its way. It returns where the frame
-// before laid the tab and its icon out.
+// before laid the tab and its icon out. 收藏's tells of the captures put away
+// into it (favIcon), and pressed then, opens them.
 func (a *App) tabButton(c *ui.Context, kind, label, icon string, on bool, cr tabCarry) (tab, at ui.Rect) {
 	b := ui.ButtonBase(c.Key("tab-"+kind)).Label(label).Height(32).Padding(0, 8).Radius(6).AlignItems(ui.Center).FocusRing(false)
 	if on {
 		b.Current(ui.CurrentPage)
 	}
-	if b.Clicked() {
+	var news *packItem
+	var done bool
+	if kind == "favorites" {
+		news, done = a.tabNews(c, c.Now())
+		switch {
+		case done && b.Hovered():
+			a.capture.toldAt = c.Now() // it holds while pointed at
+		case news != nil && !done:
+			a.capture.tabPct = news.percent(c, c.Now())
+		}
+	}
+	switch {
+	case !b.Clicked():
+	case news != nil:
+		a.showShelf(c)
+	default:
 		a.tab(c, kind)
 	}
 	hover := b.Hovered() && !on
@@ -226,7 +242,16 @@ func (a *App) tabButton(c *ui.Context, kind, label, icon string, on bool, cr tab
 	if b.FocusVisible() {
 		b.FocusRing(true).FocusRingOffset(-2)
 	}
-	if !on {
+	// What 收藏's tells, its tip and VoiceOver read after its name.
+	switch says := ""; {
+	case news != nil:
+		says = locales.CaptureTabTaking(news.Name, a.capture.tabPct)
+		if done {
+			says = locales.CaptureDone(news.Name)
+		}
+		b.Value(says)
+		a.tip(c, b, label+" · "+says, true)
+	case !on:
 		a.tip(c, b, label, true)
 	}
 	open := float32(0)
@@ -239,10 +264,13 @@ func (a *App) tabButton(c *ui.Context, kind, label, icon string, on bool, cr tab
 		open = 1
 	}
 	b.Children(func() {
+		lit, jump := on && cr.from == "", !a.still(c)
 		if kind == "favorites" {
 			a.landedLight(c, favLight, 6) // a capture just landed in it
+			at = a.favIcon(c, b, news, done, lit, jump, fg).LayoutBounds()
+		} else {
+			at = a.dotIcon(c, b, icon, 16, iconLook{lit: lit, jump: jump, ink: fg}).LayoutBounds()
 		}
-		at = a.dotIcon(c, b, icon, 16, iconLook{lit: on && cr.from == "", jump: !a.still(c), ink: fg}).LayoutBounds()
 		if open > 0.001 {
 			w := textWidth(label, theme.Body)
 			ui.Box(c).Width((w + 7) * open).Height(19.5).ClipX().Children(func() {

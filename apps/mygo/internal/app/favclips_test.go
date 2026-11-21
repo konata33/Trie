@@ -499,12 +499,13 @@ func TestClipsPage(t *testing.T) {
 	must(t, tt.Click(leadText))
 	settle(tt)
 	cs := a.clips
-	if cs.open != leadClip || !tt.HasText("摘于 11月11日") || !tt.HasText("1 / 14") {
+	dial := func(name string) bool { _, ok := tt.Find(name); return ok }
+	if cs.open != leadClip || !tt.HasText("摘于 11月11日") || !dial("第 1 段，共 14 段") {
 		t.Fatalf("the card: open %q, %q", cs.open, tt.Texts())
 	}
 	tt.Key(0, ui.KeyRight)
 	tt.Frame()
-	if cs.open == leadClip || !tt.HasText("2 / 14") {
+	if cs.open == leadClip || !dial("第 2 段，共 14 段") {
 		t.Fatalf("→: still on %q", cs.open)
 	}
 	tt.Key(0, ui.KeyLeft)
@@ -593,7 +594,7 @@ func TestClipStage(t *testing.T) {
 	// The pointer resting in the dark lifts the card it came from.
 	tt.Move(1110, 650)
 	tt.Advance(300 * time.Millisecond)
-	if !tt.HasText("1 / 14") || a.clips.cardBox.W <= 0 {
+	if _, ok := tt.Find("第 1 段，共 14 段"); !ok || a.clips.cardBox.W <= 0 {
 		t.Fatalf("the stage: %q", tt.Texts())
 	}
 	tt.Key(0, ui.KeyEscape)
@@ -795,12 +796,12 @@ func TestFavClipsSearchAndEmpty(t *testing.T) {
 	must(t, err)
 	a.accept(lib)
 	settle(tt)
-	if !tt.HasText("留住一句好文字") || !tt.HasText("摘下的段落连同出处，都收在这里。") {
+	if !tt.HasText("摘下的段落，都会放在这里") {
 		t.Errorf("摘录 empty: %q", tt.Texts())
 	}
 	tt.Key(ui.Cmd, ui.Key2)
 	settle(tt)
-	if !tt.HasText("留一篇，慢慢读") || !tt.HasText("收藏的文章按作者收在这里。") {
+	if !tt.HasText("收藏过的，都会放在这里") {
 		t.Errorf("收藏 empty: %q", tt.Texts())
 	}
 }

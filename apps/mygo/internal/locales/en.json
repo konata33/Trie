@@ -504,13 +504,9 @@
   "@favoritesSearchPlaceholder": {
     "description": "Favorites: placeholder of the search field."
   },
-  "favoritesEmptyTitle": "Keep one, read it slowly",
+  "favoritesEmptyTitle": "Your favorites will appear here",
   "@favoritesEmptyTitle": {
-    "description": "Favorites: title of the empty page."
-  },
-  "favoritesEmptyText": "Articles you favorite are kept here, by writer.",
-  "@favoritesEmptyText": {
-    "description": "Favorites: the sentence under the empty page's title."
+    "description": "Favorites: the one line on the empty page, under its picture. Says what the page will hold (articles, works and captures alike), not that it is empty."
   },
   "favoritesNoMatches": "No matching favorites",
   "@favoritesNoMatches": {
@@ -652,13 +648,9 @@
   "@clipsSearchPlaceholder": {
     "description": "Clips: placeholder of the search field."
   },
-  "clipsEmptyTitle": "Keep a line you liked",
+  "clipsEmptyTitle": "Passages you clip will appear here",
   "@clipsEmptyTitle": {
-    "description": "Clips: title of the empty page."
-  },
-  "clipsEmptyText": "Passages you clip are kept here, with their sources.",
-  "@clipsEmptyText": {
-    "description": "Clips: the sentence under the empty page's title."
+    "description": "Clips: the one line on the empty page, under its picture. Says what the page will hold, not that it is empty."
   },
   "clipsNoResults": "No results for “{query}”",
   "@clipsNoResults": {
@@ -706,6 +698,20 @@
   "@clipsNextTip": {
     "description": "Tooltip of the clip card's Next Clip button, with its key."
   },
+  "clipsPosition": "Clip {at} of {total}",
+  "@clipsPosition": {
+    "description": "Accessible name of the scale under the clip card: which clip of how many is shown.",
+    "placeholders": {
+      "at": {
+        "type": "int",
+        "example": "3"
+      },
+      "total": {
+        "type": "int",
+        "example": "14"
+      }
+    }
+  },
   "clipsShowInArticle": "Show this passage in the article",
   "@clipsShowInArticle": {
     "description": "Tooltip of a clip's article title, which opens the article at the passage."
@@ -724,7 +730,7 @@
   "@clipsNote": {
     "description": "Accessible name of a clip's note and of the field that edits it."
   },
-  "clipsNotePlaceholder": "Why you clipped it, and where you'll use it",
+  "clipsNotePlaceholder": "Why you clipped it",
   "@clipsNotePlaceholder": {
     "description": "Placeholder of the field for a clip's note."
   },
@@ -738,17 +744,37 @@
       }
     }
   },
-  "clipsAddNote": "Add a Note…",
+  "clipsAddNote": "Add Note",
   "@clipsAddNote": {
-    "description": "Clip card button that starts writing a note on the clip."
+    "description": "Clip card pen button (icon only, this is its name and tooltip) that opens a field for a note on the clip."
   },
-  "clipsCopyTip": "Copy as Markdown, with source and link",
+  "clipsEditNote": "Edit Note",
+  "@clipsEditNote": {
+    "description": "Clip card pen button (icon only, this is its name and tooltip) when the clip has a note: edits it."
+  },
+  "clipsCopyTip": "Copy as Markdown with source and link",
   "@clipsCopyTip": {
     "description": "Tooltip of Copy Quote on a clip without a note."
   },
-  "clipsCopyTipWithNote": "Copy as Markdown, with source, link, and note",
+  "clipsCopyTipWithNote": "Copy as Markdown with source, link, and note",
   "@clipsCopyTipWithNote": {
     "description": "Tooltip of Copy Quote on a clip with a note."
+  },
+  "clipsCopyTipWithPictures": "Copy as Markdown with images, source, and link",
+  "@clipsCopyTipWithPictures": {
+    "description": "Tooltip of Copy Quote on a clip whose passage holds images and has no note. The images are saved as files; the Markdown links to them where they stood, and the rich text for notes holds them."
+  },
+  "clipsCopyTipWithPicturesAndNote": "Copy as Markdown with images, source, link, and note",
+  "@clipsCopyTipWithPicturesAndNote": {
+    "description": "Tooltip of Copy Quote on a clip whose passage holds images and has a note."
+  },
+  "clipsCopyFailed": "Couldn't Copy",
+  "@clipsCopyFailed": {
+    "description": "Copy Quote's label for two seconds after the clipboard refused the copy."
+  },
+  "clipsCopyFailedTip": "Couldn't copy to the clipboard. Try again.",
+  "@clipsCopyFailedTip": {
+    "description": "Tooltip of Copy Quote after the clipboard refused the copy."
   },
   "clipsArticleGone": "The article for this clip is no longer in the library.",
   "@clipsArticleGone": {
@@ -1094,13 +1120,9 @@
       }
     }
   },
-  "authorEmptyTitle": "No articles yet",
+  "authorEmptyTitle": "New articles will appear here",
   "@authorEmptyTitle": {
-    "description": "Empty state title on a writer's page with no articles."
-  },
-  "authorEmptyText": "New articles from this writer will arrive here.",
-  "@authorEmptyText": {
-    "description": "Empty state sentence on a writer's page with no articles."
+    "description": "The one line on a followed writer's page that has no articles yet, under its picture. Says what will arrive, not that the page is empty."
   },
   "exploreUnavailable": "Explore isn't available right now.",
   "@exploreUnavailable": {
@@ -1192,37 +1214,7 @@
   },
   "exploreFollowWriter": "Follow {name}",
   "@exploreFollowWriter": {
-    "description": "Accessible name of the Follow pill for a writer not followed yet.",
-    "placeholders": {
-      "name": {
-        "type": "String",
-        "example": "Josh Comeau"
-      }
-    }
-  },
-  "exploreUnfollowingWriter": "Unfollowing {name}…",
-  "@exploreUnfollowingWriter": {
-    "description": "Accessible name of the Follow pill while the writer is being unfollowed.",
-    "placeholders": {
-      "name": {
-        "type": "String",
-        "example": "Josh Comeau"
-      }
-    }
-  },
-  "exploreFollowingWriter": "Following {name}…",
-  "@exploreFollowingWriter": {
-    "description": "Accessible name of the Follow pill while the writer is being followed.",
-    "placeholders": {
-      "name": {
-        "type": "String",
-        "example": "Josh Comeau"
-      }
-    }
-  },
-  "exploreFollowedWriter": "Following {name}. Press to unfollow.",
-  "@exploreFollowedWriter": {
-    "description": "Accessible name of the Follow pill for a writer already followed.",
+    "description": "Subscribe pill on an author's page: its accessible name in every state; whether it is on is its toggle state, so the name does not change.",
     "placeholders": {
       "name": {
         "type": "String",
@@ -1232,7 +1224,35 @@
   },
   "exploreFollowed": "Following",
   "@exploreFollowed": {
-    "description": "Text of the Follow pill once the writer is followed."
+    "description": "Subscribe pill on an author's page, once subscribed: its visible words after an amber tick."
+  },
+  "exploreFollowFailed": "Couldn't follow {name}. {reason}",
+  "@exploreFollowFailed": {
+    "description": "Error notice when subscribing from an author's page failed; reason is the subscription service's own sentence, which says why and what to do.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "One Page Love"
+      },
+      "reason": {
+        "type": "String",
+        "example": "The connection was lost. Try again later."
+      }
+    }
+  },
+  "exploreUnfollowFailed": "Couldn't unfollow {name}. Your library is unchanged. {detail}",
+  "@exploreUnfollowFailed": {
+    "description": "Error notice when unsubscribing from an author's page could not be saved; detail is the library's reason.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "One Page Love"
+      },
+      "detail": {
+        "type": "String",
+        "example": "disk full"
+      }
+    }
   },
   "subscribeTitle": "Follow a Blog",
   "@subscribeTitle": {
@@ -1736,13 +1756,67 @@
   "@captureReadyTip": {
     "description": "Reader toolbar: tooltip of the Capture button once the page is captured; pressing it opens the capture's card."
   },
+  "captureFailedTip": "Not captured, open to see why",
+  "@captureFailedTip": {
+    "description": "Reader toolbar: tooltip of the Capture button once capturing the page failed; pressing it opens the capture's card, which says what happened and offers Try Again."
+  },
   "captureIsland": "Captures",
   "@captureIsland": {
     "description": "Accessible name of the island at the top of the window holding the pages being captured and those just captured."
   },
-  "captureHide": "Hide",
+  "captureHide": "Move to Favorites",
   "@captureHide": {
-    "description": "Capture island: the round button at its top-left corner, shown while it is pointed at, that sends the island away (what is being captured goes on); its accessible name and tooltip."
+    "description": "Capture island: the button at its right end, shown while it is pointed at, that sends the island away and what it holds into Favorites (what is being captured goes on there); its accessible name and tooltip."
+  },
+  "captureMovedOne": "Moved to Favorites",
+  "@captureMovedOne": {
+    "description": "Announced to screen readers as the capture island, holding one page, goes into the Favorites tab. Echoes the button that did it."
+  },
+  "captureMovedMany": "{count, plural, one {# page} other {# pages}} moved to Favorites",
+  "@captureMovedMany": {
+    "description": "Announced to screen readers as the capture island, holding several pages, goes into the Favorites tab.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "captureTakingAt": "Capturing · {percent}%",
+  "@captureTakingAt": {
+    "description": "Announced after captureMovedOne or captureMovedMany while a page the island held is still being captured: how far it has come.",
+    "placeholders": {
+      "percent": {
+        "type": "int",
+        "example": "37"
+      }
+    }
+  },
+  "captureTabTaking": "Capturing {name} · {percent}%",
+  "@captureTabTaking": {
+    "description": "Tooltip of the Favorites tab after the Favorites tab name and a middle dot, while a page moved there with the capture island is being captured: which page, and how far it has come, as under the tab.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Tegra"
+      },
+      "percent": {
+        "type": "int",
+        "example": "37"
+      }
+    }
+  },
+  "captureTakenNote": "Captured",
+  "@captureTakenNote": {
+    "description": "Under the Favorites tab's icon for a few seconds when a page finished while the island was in Favorites. Kept short: it sits under a 32 px tab."
+  },
+  "captureQueued": "Waiting",
+  "@captureQueued": {
+    "description": "A capture's card and its place in Favorites: in place of how far it has come while it waits its turn. Kept short."
+  },
+  "captureNotTakenShort": "Not captured",
+  "@captureNotTakenShort": {
+    "description": "A capture's place in Favorites, at its foot, and the first line of the note under the Favorites tab when a page could not be taken while the island was in Favorites. Kept short."
   },
   "captureWaiting": "{name}, waiting",
   "@captureWaiting": {

@@ -1,10 +1,9 @@
 package app
 
 import (
-	"fmt"
 	"image"
-	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -43,14 +42,19 @@ type homeState struct {
 	stopped  map[string]string    // the words articles were left at, by article and unit (stopped)
 	shown    string               // and from the first screen, when it shows a followed article
 	onRow    bool                 // the focus was on a column or a line, the build before
+	onOther  bool                 // and on another of the page's controls (the first screen, 接着读, 流行): S keeps nothing
 
 	// What the page draws from, kept until the library or the catalog changes.
-	lib      [3]any             // the library they were read from: its revision, articles and sources
-	all      []*library.Article // the subscribed articles, newest first
-	subs     map[string]string  // which source subscribes to a catalog entry
-	cat      [3]any             // the catalog and the day they were read from
-	example  *homeItem
-	trending []homeItem
+	lib    [3]any             // the library they were read from: its revision, articles and sources
+	all    []*library.Article // the subscribed articles, newest first
+	newest []*library.Article // and each writer's newest of them (followsOf)
+	// What a search found in them, and each writer's newest of that, for the query searched (q, "\x00" for none).
+	q              string
+	found, foundBy []*library.Article
+	subs           map[string]string // which source subscribes to a catalog entry
+	cat            [3]any            // the catalog and the day they were read from
+	example        *homeItem
+	trending       []homeItem
 }
 
 func (a *App) homeSt() *homeState {
@@ -63,10 +67,6 @@ func (a *App) homeSt() *homeState {
 
 // Where 流行 comes from: the link aggregators and publications Explore reads, in the order their feeds rank them.
 var trendingFrom = []string{"Hacker News", "Lobsters", "UX Collective", "Latent Space"}
-
-var (
-	galleryShelf = regexp.MustCompile(`画廊`)
-)
 
 // homeItem is a post from the catalog the page shows, with its writer.
 type homeItem struct {
@@ -83,25 +83,38 @@ func (a *App) homeItems(query string) []*library.Article {
 		first = &a.lib.Articles[0]
 	}
 	if key := [3]any{a.lib.Revision, first, len(a.lib.Sources)}; hs.lib != key {
-		hs.lib, hs.all, hs.subs = key, nil, map[string]string{}
+		hs.lib, hs.all, hs.subs, hs.q = key, nil, map[string]string{}, "\x00"
 		for i := range a.lib.Articles {
 			if art := &a.lib.Articles[i]; slices.ContainsFunc(memberships(art), func(id string) bool { return a.writer(id) != nil }) {
 				hs.all = append(hs.all, art)
 			}
 		}
 		slices.SortStableFunc(hs.all, byDate)
+		hs.newest = followsOf(hs.all)
 	}
 	q := strings.ToLower(strings.TrimSpace(query))
 	if q == "" {
 		return hs.all
 	}
-	var out []*library.Article
-	for _, art := range hs.all {
-		if a.favMatches(art, q) {
-			out = append(out, art)
+	if q != hs.q {
+		hs.q, hs.found = q, nil
+		for _, art := range hs.all {
+			if a.favMatches(art, q) {
+				hs.found = append(hs.found, art)
+			}
 		}
+		hs.foundBy = followsOf(hs.found)
 	}
-	return out
+	return hs.found
+}
+
+// homeFollows is each writer's newest of homeItems(query).
+func (a *App) homeFollows(query string) []*library.Article {
+	hs := a.homeSt()
+	if a.homeItems(query); strings.TrimSpace(query) == "" {
+		return hs.newest
+	}
+	return hs.foundBy
 }
 
 // catalog reads today's example and the ranking from Explore's entries,
@@ -137,7 +150,7 @@ func exampleOf(entries []explore.Entry) *homeItem {
 	var best *homeItem
 	for i := range entries {
 		e := &entries[i]
-		if !galleryShelf.MatchString(e.Section) {
+		if !strings.Contains(e.Section, "画廊") {
 			continue
 		}
 		for j, w := range e.Works {
@@ -213,17 +226,22 @@ func (a *App) homePage(c *ui.Context, live bool) {
 		a.loadExplore()
 	}
 	now := c.Now()
+	searching := strings.TrimSpace(hs.query) != ""
 	if live {
 		clear(hs.shows)
-		hs.onRow = false
+		clear(hs.columns)
+		hs.onRow, hs.onOther = false, false
+		if searching {
+			clear(hs.resuming) // a search lists every match as a line, whose title is its own
+		}
 	}
-	searching := strings.TrimSpace(hs.query) != ""
 	items := a.homeItems(hs.query)
-	follows := followsOf(items)
+	follows := a.homeFollows(hs.query)
 	if live && (hs.seen == nil || hs.came != a.came) {
-		// Whoever is followed as the page comes is not new; who joins while it shows comes into focus.
+		// Whoever is followed as the page comes is not new; who joins while it shows comes into focus. All of them,
+		// whatever a search shows now: cleared, the rest are not new either.
 		hs.seen, hs.came = map[string]bool{}, a.came
-		for _, art := range follows {
+		for _, art := range a.homeFollows("") {
 			hs.seen[art.SourceID] = true
 		}
 	}
@@ -360,6 +378,16 @@ func (a *App) opener(b ui.Element, url string) {
 		hs.focus = ""
 		b.Focus()
 	}
+	a.homeOther(b)
+}
+
+// homeOther notes that the focus is on b, one of 首页's controls that is not
+// a column of the people followed: S, which keeps the article the columns'
+// cursor is on, then keeps nothing.
+func (a *App) homeOther(b ui.Element) {
+	if b.Focused() {
+		a.homeSt().onOther = true
+	}
 }
 
 // openFrom opens post it from its button b on 首页, its title t travelling
@@ -489,6 +517,7 @@ func (a *App) show(c *ui.Context, pic *favPic, site bool, region, label string, 
 	ui.Box(c.Key("show")).FillWidth().Height(h).Role(ui.RoleRegion).Label(region).Children(func() {
 		b := ui.ButtonBase(c.Key("open")).Label(label).Absolute().Fill().ClipX().ClipY().FocusRing(false)
 		each(b)
+		a.homeOther(b)
 		hover := b.Hovered()
 		if b.FocusVisible() {
 			b.FocusRing(true).FocusRingOffset(-4)
@@ -623,7 +652,7 @@ func (a *App) trending(c *ui.Context, items []homeItem, live bool) {
 					}
 					var t ui.Element
 					r.Children(func() {
-						ui.Text(c, fmt.Sprint(i+2)).Absolute().Left(-32).Top(24).Width(16).TextAlign(ui.End).FontSize(theme.Body).LineHeight(25.0 / 13).FontWeight(500).
+						ui.Text(c, strconv.Itoa(i+2)).Absolute().Left(-32).Top(24).Width(16).TextAlign(ui.End).FontSize(theme.Body).LineHeight(25.0 / 13).FontWeight(500).
 							TextColor(theme.Muted).FontFeatures(theme.Numbers).AccessHidden(true)
 						color := theme.Mag2
 						if r.Hovered() {
@@ -717,10 +746,14 @@ func (a *App) followsView(c *ui.Context, follows []*library.Article, view ui.Rec
 				cell := ui.Box(c.Key(art.ID)).MinWidth(0).BorderWidth(1, 0, 0, 0).BorderColor(theme.Line)
 				cell.Transition(a.tr(c, ui.ElementTransition{Animation: &motion.Follow, Position: true}))
 				if live && !hs.seen[art.SourceID] {
-					if !a.still(c) && !a.kbd {
-						k := cell.Keyframes("fresh", ramp(motion.State, motion.TravelIn), ui.KeyframeOptions{})
+					// Under less motion it only comes into focus where it stands.
+					if !a.kbd {
+						k := cell.Keyframes("fresh", ramp(motion.State, motion.TravelIn), ui.KeyframeOptions{NonMotion: true})
 						if k < 1 {
-							cell.Opacity(k).Translate(0, 8*(1-k))
+							cell.Opacity(k)
+							if !a.still(c) {
+								cell.Translate(0, 8*(1-k))
+							}
 							if bl := 3 * (1 - k); bl > 0.05 {
 								cell.Blur(bl)
 							}
@@ -849,7 +882,8 @@ func lineTitle(c *ui.Context, s string) ui.Element {
 // homeKeys are 首页's keys: J, K and the arrows walk
 // the people followed (a search, its matches), the first press from outside
 // them only bringing the focus to where it was; Enter opens and S keeps what
-// it is on, the first of them before any; Esc clears the search.
+// it is on, the first of them before any (S nothing while the focus is on
+// another of the page's controls); Esc clears the search.
 func (a *App) homeKeys(c *ui.Context) {
 	hs := a.homeSt()
 	if c.Shortcut(0, ui.KeyEscape) {
@@ -858,9 +892,10 @@ func (a *App) homeKeys(c *ui.Context) {
 		}
 		return
 	}
+	searching := strings.TrimSpace(hs.query) != ""
 	items := a.homeItems(hs.query)
-	if strings.TrimSpace(hs.query) == "" {
-		items = followsOf(items)
+	if !searching {
+		items = a.homeFollows("")
 	}
 	if len(items) == 0 {
 		return
@@ -873,11 +908,17 @@ func (a *App) homeKeys(c *ui.Context) {
 	case c.Shortcut(0, ui.KeyK), c.Shortcut(0, ui.KeyUp):
 		step = -1
 	case c.Shortcut(0, ui.KeyS):
-		a.toggleFav(items[at])
+		if !hs.onOther {
+			a.toggleFav(items[at])
+		}
 		return
 	case c.Shortcut(0, ui.KeyEnter):
 		hs.cursor, hs.resumed, hs.shown = items[at].ID, "", ""
-		a.openAs(c, items[at].ID, ui.Rect{}, followTitle, theme.Subtitle)
+		style, size := followTitle, float32(theme.Subtitle)
+		if searching {
+			style, size = lineTitle, theme.Item
+		}
+		a.openAs(c, items[at].ID, ui.Rect{}, style, size)
 		return
 	default:
 		return

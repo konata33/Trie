@@ -238,10 +238,9 @@ func (a *App) back(c *ui.Context) {
 		// the row is laid out; without one, it melts where it is.
 		a.lay, a.layRow = &motion.Lay{Ground: motion.Gather, From: a.paper(), Run: a.run, Still: still}, left.id
 	case "kind":
-		// Back to Explore the name goes home to its door, as the head closes back into it (kindShare).
+		// Back to Explore the door goes home (doorGround).
 		if !still && to.kind == "explore" {
 			m.door = left.id
-			a.fly("kind:"+left.id, kindName(left.id), left, to, kindTitle, doorNameAtRest, float32(theme.Item)/theme.Headline, motion.Back)
 		}
 	case "author":
 		// Back to the sidebar the name goes home to its row; elsewhere the page just crosses.
@@ -422,6 +421,29 @@ func (a *App) stage(c *ui.Context) {
 					Children(func() { a.unseen(func() { a.pageView(c, page{"author", id}, nil, false) }) })
 			}
 		}
+		// And a kind's page, the pointer resting on its door: rested on, not passed over as Explore scrolls under the
+		// pointer, whose wait starts again each time the page moves.
+		if p := a.page; p.kind == "explore" && a.next == nil && a.left == nil {
+			for _, k := range kindOrder {
+				kw := a.wall(k)
+				at := kw.held
+				if at.IsZero() {
+					continue
+				}
+				if y := a.ex.scroll.Y; y != kw.heldY {
+					kw.heldY, kw.held = y, c.Now()
+					c.After(hoverWarm)
+					continue
+				}
+				if wait := max(hoverWarm-c.Now().Sub(at), crossingTime-c.Now().Sub(a.movedAt)); wait > 0 {
+					c.After(wait)
+				} else {
+					from := append(a.from[:len(a.from):len(a.from)], p)
+					ui.Column(c.Key("kind:" + k)).Absolute().Fill().ZIndex(1).Invisible().AccessHidden(true).
+						Children(func() { a.unseen(func() { a.pageView(c, page{"kind", k}, from, false) }) })
+				}
+			}
+		}
 		// And Explore under a kind's way back to it, the pointer on it.
 		if p := a.page; p.kind == "kind" && a.next == nil && a.left == nil && a.backTo() == (page{kind: "explore"}) {
 			if at := a.wall(p.id).back; !at.IsZero() {
@@ -441,8 +463,9 @@ func (a *App) stage(c *ui.Context) {
 		}
 		pg := ui.Column(c.Key(p.kind + ":" + p.id)).Absolute().Fill().ZIndex(1)
 		pg.Children(func() { a.pageView(c, p, a.from, true) })
-		// Through a door the page comes in on the ground the door opens, or Explore lies under the ground closing.
-		if m != nil && !m.kbd && !(door && !a.still(c)) {
+		// Through a door the page comes in on the ground the door opens (its wall unfolds); closing, Explore comes into
+		// focus under the ground as it draws back.
+		if m != nil && !m.kbd && !(door && m.depth == motion.Deep && !a.still(c)) {
 			a.comeIn(c, pg, m)
 		}
 		if door && m.depth == motion.Back {

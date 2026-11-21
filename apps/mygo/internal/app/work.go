@@ -263,27 +263,32 @@ func (a *App) workHero(c *ui.Context, rp *readerPage, art *library.Article, afte
 				if w.Host != nil {
 					host = *w.Host
 				}
-				// The way to the real site: its underline a hairline, then the arrow.
-				b := ui.ButtonBase(c.Key("site")).Label(host).Gap(4).AlignItems(ui.Center).Radius(6).FocusRing(false)
-				color, line := theme.Text2, theme.Line
-				if b.Hovered() {
-					color, line = theme.Text, theme.Faint
-				}
-				if b.FocusVisible() {
-					b.FocusRing(true)
-				}
-				if b.Clicked() {
-					a.openExternal(c, *w.Site)
-				}
-				b.TextColor(b.AnimateColor("fg", color, a.ease(motion.LinkHover))).Children(func() {
-					ui.Text(c, host).Underline().UnderlineOffset(3).DecorationColor(b.AnimateColor("line", line, a.ease(motion.LinkHover)))
-					a.icon(c, "openArrow", 16, false)
-				})
-				a.tip(c, b, locales.WorkOpenInBrowserTip(), false)
+				a.hostLink(c, "site", host, *w.Site, locales.WorkOpenInBrowserTip())
 			}
 		})
 	})
 	return gap
+}
+
+// hostLink is the way to a page on its own site, under key: its host, underlined with a hairline, then the arrow;
+// pressed, the page opens in the browser.
+func (a *App) hostLink(c *ui.Context, key, host, href, tip string) {
+	b := ui.ButtonBase(c.Key(key)).Label(host).Gap(4).AlignItems(ui.Center).Radius(6).FocusRing(false)
+	color, line := theme.Text2, theme.Line
+	if b.Hovered() {
+		color, line = theme.Text, theme.Faint
+	}
+	if b.FocusVisible() {
+		b.FocusRing(true)
+	}
+	if b.Clicked() {
+		a.openExternal(c, href)
+	}
+	b.TextColor(b.AnimateColor("fg", color, a.ease(motion.LinkHover))).Children(func() {
+		ui.Text(c, host).Underline().UnderlineOffset(3).DecorationColor(b.AnimateColor("line", line, a.ease(motion.LinkHover)))
+		a.icon(c, "openArrow", 16, false)
+	})
+	a.tip(c, b, tip, false)
 }
 
 // workStage is the work's first screen: picture s on the screenshot ground and shadow, or its place breathing while it

@@ -144,7 +144,7 @@ func (a *App) subscribeView(c *ui.Context, f *subscribeForm) {
 			})
 		}
 		ui.Row(c).Justify(ui.End).Gap(8).Margin(24, 0, 0, 0).Children(func() {
-			if a.button(c, locales.CommonCancel(), btnOpt{inset: true, disabled: f.working == "save"}).Clicked() {
+			if a.button(c, locales.CommonCancel(), btnOpt{disabled: f.working == "save"}).Clicked() {
 				a.layers.dialog = nil
 			}
 			if f.preview != nil {
@@ -152,7 +152,7 @@ func (a *App) subscribeView(c *ui.Context, f *subscribeForm) {
 				if existing != nil && existing.Subscribed {
 					label = locales.SubscribeUpdate()
 				}
-				if a.button(c, label, btnOpt{kind: primary, inset: true, loading: f.working == "save", disabled: f.working == "preview"}).Clicked() {
+				if a.button(c, label, btnOpt{kind: primary, loading: f.working == "save", disabled: f.working == "preview"}).Clicked() {
 					confirm()
 				}
 			}

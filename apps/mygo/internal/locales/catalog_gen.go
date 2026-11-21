@@ -1404,32 +1404,22 @@ func (msgs Messages) FavoritesSearchPlaceholder() string {
 	return Catalog.Format(msgs.locale, "favoritesSearchPlaceholder", nil)
 }
 
-// FavoritesEmptyTitle says "Keep one, read it slowly"
+// FavoritesEmptyTitle says "Your favorites will appear here"
 // in the language the app shows.
 //
-// Favorites: title of the empty page.
+// Favorites: the one line on the empty page, under its picture. Says what
+// the page will hold (articles, works and captures alike), not that it is
+// empty.
 func FavoritesEmptyTitle() string { return In(i18n.Locale()).FavoritesEmptyTitle() }
 
-// FavoritesEmptyTitle says "Keep one, read it slowly"
+// FavoritesEmptyTitle says "Your favorites will appear here"
 // in the language of msgs.
 //
-// Favorites: title of the empty page.
+// Favorites: the one line on the empty page, under its picture. Says what
+// the page will hold (articles, works and captures alike), not that it is
+// empty.
 func (msgs Messages) FavoritesEmptyTitle() string {
 	return Catalog.Format(msgs.locale, "favoritesEmptyTitle", nil)
-}
-
-// FavoritesEmptyText says "Articles you favorite are kept here, by writer."
-// in the language the app shows.
-//
-// Favorites: the sentence under the empty page's title.
-func FavoritesEmptyText() string { return In(i18n.Locale()).FavoritesEmptyText() }
-
-// FavoritesEmptyText says "Articles you favorite are kept here, by writer."
-// in the language of msgs.
-//
-// Favorites: the sentence under the empty page's title.
-func (msgs Messages) FavoritesEmptyText() string {
-	return Catalog.Format(msgs.locale, "favoritesEmptyText", nil)
 }
 
 // FavoritesNoMatches says "No matching favorites"
@@ -1688,32 +1678,20 @@ func (msgs Messages) ClipsSearchPlaceholder() string {
 	return Catalog.Format(msgs.locale, "clipsSearchPlaceholder", nil)
 }
 
-// ClipsEmptyTitle says "Keep a line you liked"
+// ClipsEmptyTitle says "Passages you clip will appear here"
 // in the language the app shows.
 //
-// Clips: title of the empty page.
+// Clips: the one line on the empty page, under its picture. Says what the
+// page will hold, not that it is empty.
 func ClipsEmptyTitle() string { return In(i18n.Locale()).ClipsEmptyTitle() }
 
-// ClipsEmptyTitle says "Keep a line you liked"
+// ClipsEmptyTitle says "Passages you clip will appear here"
 // in the language of msgs.
 //
-// Clips: title of the empty page.
+// Clips: the one line on the empty page, under its picture. Says what the
+// page will hold, not that it is empty.
 func (msgs Messages) ClipsEmptyTitle() string {
 	return Catalog.Format(msgs.locale, "clipsEmptyTitle", nil)
-}
-
-// ClipsEmptyText says "Passages you clip are kept here, with their sources."
-// in the language the app shows.
-//
-// Clips: the sentence under the empty page's title.
-func ClipsEmptyText() string { return In(i18n.Locale()).ClipsEmptyText() }
-
-// ClipsEmptyText says "Passages you clip are kept here, with their sources."
-// in the language of msgs.
-//
-// Clips: the sentence under the empty page's title.
-func (msgs Messages) ClipsEmptyText() string {
-	return Catalog.Format(msgs.locale, "clipsEmptyText", nil)
 }
 
 // ClipsNoResults says "No results for “{query}”"
@@ -1856,6 +1834,22 @@ func (msgs Messages) ClipsNextTip() string {
 	return Catalog.Format(msgs.locale, "clipsNextTip", nil)
 }
 
+// ClipsPosition says "Clip {at} of {total}"
+// in the language the app shows.
+//
+// Accessible name of the scale under the clip card: which clip of how many
+// is shown.
+func ClipsPosition(at int, total int) string { return In(i18n.Locale()).ClipsPosition(at, total) }
+
+// ClipsPosition says "Clip {at} of {total}"
+// in the language of msgs.
+//
+// Accessible name of the scale under the clip card: which clip of how many
+// is shown.
+func (msgs Messages) ClipsPosition(at int, total int) string {
+	return Catalog.Format(msgs.locale, "clipsPosition", map[string]any{"at": at, "total": total})
+}
+
 // ClipsShowInArticle says "Show this passage in the article"
 // in the language the app shows.
 //
@@ -1900,13 +1894,13 @@ func (msgs Messages) ClipsNote() string {
 	return Catalog.Format(msgs.locale, "clipsNote", nil)
 }
 
-// ClipsNotePlaceholder says "Why you clipped it, and where you'll use it"
+// ClipsNotePlaceholder says "Why you clipped it"
 // in the language the app shows.
 //
 // Placeholder of the field for a clip's note.
 func ClipsNotePlaceholder() string { return In(i18n.Locale()).ClipsNotePlaceholder() }
 
-// ClipsNotePlaceholder says "Why you clipped it, and where you'll use it"
+// ClipsNotePlaceholder says "Why you clipped it"
 // in the language of msgs.
 //
 // Placeholder of the field for a clip's note.
@@ -1928,27 +1922,45 @@ func (msgs Messages) ClipsNoteLabel(note string) string {
 	return Catalog.Format(msgs.locale, "clipsNoteLabel", map[string]any{"note": note})
 }
 
-// ClipsAddNote says "Add a Note…"
+// ClipsAddNote says "Add Note"
 // in the language the app shows.
 //
-// Clip card button that starts writing a note on the clip.
+// Clip card pen button (icon only, this is its name and tooltip) that opens
+// a field for a note on the clip.
 func ClipsAddNote() string { return In(i18n.Locale()).ClipsAddNote() }
 
-// ClipsAddNote says "Add a Note…"
+// ClipsAddNote says "Add Note"
 // in the language of msgs.
 //
-// Clip card button that starts writing a note on the clip.
+// Clip card pen button (icon only, this is its name and tooltip) that opens
+// a field for a note on the clip.
 func (msgs Messages) ClipsAddNote() string {
 	return Catalog.Format(msgs.locale, "clipsAddNote", nil)
 }
 
-// ClipsCopyTip says "Copy as Markdown, with source and link"
+// ClipsEditNote says "Edit Note"
+// in the language the app shows.
+//
+// Clip card pen button (icon only, this is its name and tooltip) when the
+// clip has a note: edits it.
+func ClipsEditNote() string { return In(i18n.Locale()).ClipsEditNote() }
+
+// ClipsEditNote says "Edit Note"
+// in the language of msgs.
+//
+// Clip card pen button (icon only, this is its name and tooltip) when the
+// clip has a note: edits it.
+func (msgs Messages) ClipsEditNote() string {
+	return Catalog.Format(msgs.locale, "clipsEditNote", nil)
+}
+
+// ClipsCopyTip says "Copy as Markdown with source and link"
 // in the language the app shows.
 //
 // Tooltip of Copy Quote on a clip without a note.
 func ClipsCopyTip() string { return In(i18n.Locale()).ClipsCopyTip() }
 
-// ClipsCopyTip says "Copy as Markdown, with source and link"
+// ClipsCopyTip says "Copy as Markdown with source and link"
 // in the language of msgs.
 //
 // Tooltip of Copy Quote on a clip without a note.
@@ -1956,18 +1968,82 @@ func (msgs Messages) ClipsCopyTip() string {
 	return Catalog.Format(msgs.locale, "clipsCopyTip", nil)
 }
 
-// ClipsCopyTipWithNote says "Copy as Markdown, with source, link, and note"
+// ClipsCopyTipWithNote says "Copy as Markdown with source, link, and note"
 // in the language the app shows.
 //
 // Tooltip of Copy Quote on a clip with a note.
 func ClipsCopyTipWithNote() string { return In(i18n.Locale()).ClipsCopyTipWithNote() }
 
-// ClipsCopyTipWithNote says "Copy as Markdown, with source, link, and note"
+// ClipsCopyTipWithNote says "Copy as Markdown with source, link, and note"
 // in the language of msgs.
 //
 // Tooltip of Copy Quote on a clip with a note.
 func (msgs Messages) ClipsCopyTipWithNote() string {
 	return Catalog.Format(msgs.locale, "clipsCopyTipWithNote", nil)
+}
+
+// ClipsCopyTipWithPictures says "Copy as Markdown with images, source, and link"
+// in the language the app shows.
+//
+// Tooltip of Copy Quote on a clip whose passage holds images and has no
+// note. The images are saved as files; the Markdown links to them where
+// they stood, and the rich text for notes holds them.
+func ClipsCopyTipWithPictures() string { return In(i18n.Locale()).ClipsCopyTipWithPictures() }
+
+// ClipsCopyTipWithPictures says "Copy as Markdown with images, source, and link"
+// in the language of msgs.
+//
+// Tooltip of Copy Quote on a clip whose passage holds images and has no
+// note. The images are saved as files; the Markdown links to them where
+// they stood, and the rich text for notes holds them.
+func (msgs Messages) ClipsCopyTipWithPictures() string {
+	return Catalog.Format(msgs.locale, "clipsCopyTipWithPictures", nil)
+}
+
+// ClipsCopyTipWithPicturesAndNote says "Copy as Markdown with images, source, link, and note"
+// in the language the app shows.
+//
+// Tooltip of Copy Quote on a clip whose passage holds images and has a
+// note.
+func ClipsCopyTipWithPicturesAndNote() string {
+	return In(i18n.Locale()).ClipsCopyTipWithPicturesAndNote()
+}
+
+// ClipsCopyTipWithPicturesAndNote says "Copy as Markdown with images, source, link, and note"
+// in the language of msgs.
+//
+// Tooltip of Copy Quote on a clip whose passage holds images and has a
+// note.
+func (msgs Messages) ClipsCopyTipWithPicturesAndNote() string {
+	return Catalog.Format(msgs.locale, "clipsCopyTipWithPicturesAndNote", nil)
+}
+
+// ClipsCopyFailed says "Couldn't Copy"
+// in the language the app shows.
+//
+// Copy Quote's label for two seconds after the clipboard refused the copy.
+func ClipsCopyFailed() string { return In(i18n.Locale()).ClipsCopyFailed() }
+
+// ClipsCopyFailed says "Couldn't Copy"
+// in the language of msgs.
+//
+// Copy Quote's label for two seconds after the clipboard refused the copy.
+func (msgs Messages) ClipsCopyFailed() string {
+	return Catalog.Format(msgs.locale, "clipsCopyFailed", nil)
+}
+
+// ClipsCopyFailedTip says "Couldn't copy to the clipboard. Try again."
+// in the language the app shows.
+//
+// Tooltip of Copy Quote after the clipboard refused the copy.
+func ClipsCopyFailedTip() string { return In(i18n.Locale()).ClipsCopyFailedTip() }
+
+// ClipsCopyFailedTip says "Couldn't copy to the clipboard. Try again."
+// in the language of msgs.
+//
+// Tooltip of Copy Quote after the clipboard refused the copy.
+func (msgs Messages) ClipsCopyFailedTip() string {
+	return Catalog.Format(msgs.locale, "clipsCopyFailedTip", nil)
 }
 
 // ClipsArticleGone says "The article for this clip is no longer in the library."
@@ -2790,32 +2866,20 @@ func (msgs Messages) AuthorArticles(name string) string {
 	return Catalog.Format(msgs.locale, "authorArticles", map[string]any{"name": name})
 }
 
-// AuthorEmptyTitle says "No articles yet"
+// AuthorEmptyTitle says "New articles will appear here"
 // in the language the app shows.
 //
-// Empty state title on a writer's page with no articles.
+// The one line on a followed writer's page that has no articles yet, under
+// its picture. Says what will arrive, not that the page is empty.
 func AuthorEmptyTitle() string { return In(i18n.Locale()).AuthorEmptyTitle() }
 
-// AuthorEmptyTitle says "No articles yet"
+// AuthorEmptyTitle says "New articles will appear here"
 // in the language of msgs.
 //
-// Empty state title on a writer's page with no articles.
+// The one line on a followed writer's page that has no articles yet, under
+// its picture. Says what will arrive, not that the page is empty.
 func (msgs Messages) AuthorEmptyTitle() string {
 	return Catalog.Format(msgs.locale, "authorEmptyTitle", nil)
-}
-
-// AuthorEmptyText says "New articles from this writer will arrive here."
-// in the language the app shows.
-//
-// Empty state sentence on a writer's page with no articles.
-func AuthorEmptyText() string { return In(i18n.Locale()).AuthorEmptyText() }
-
-// AuthorEmptyText says "New articles from this writer will arrive here."
-// in the language of msgs.
-//
-// Empty state sentence on a writer's page with no articles.
-func (msgs Messages) AuthorEmptyText() string {
-	return Catalog.Format(msgs.locale, "authorEmptyText", nil)
 }
 
 // ExploreUnavailable says "Explore isn't available right now."
@@ -3073,75 +3137,69 @@ func (msgs Messages) ExploreDesignSites() string {
 // ExploreFollowWriter says "Follow {name}"
 // in the language the app shows.
 //
-// Accessible name of the Follow pill for a writer not followed yet.
+// Subscribe pill on an author's page: its accessible name in every state;
+// whether it is on is its toggle state, so the name does not change.
 func ExploreFollowWriter(name string) string { return In(i18n.Locale()).ExploreFollowWriter(name) }
 
 // ExploreFollowWriter says "Follow {name}"
 // in the language of msgs.
 //
-// Accessible name of the Follow pill for a writer not followed yet.
+// Subscribe pill on an author's page: its accessible name in every state;
+// whether it is on is its toggle state, so the name does not change.
 func (msgs Messages) ExploreFollowWriter(name string) string {
 	return Catalog.Format(msgs.locale, "exploreFollowWriter", map[string]any{"name": name})
-}
-
-// ExploreUnfollowingWriter says "Unfollowing {name}…"
-// in the language the app shows.
-//
-// Accessible name of the Follow pill while the writer is being unfollowed.
-func ExploreUnfollowingWriter(name string) string {
-	return In(i18n.Locale()).ExploreUnfollowingWriter(name)
-}
-
-// ExploreUnfollowingWriter says "Unfollowing {name}…"
-// in the language of msgs.
-//
-// Accessible name of the Follow pill while the writer is being unfollowed.
-func (msgs Messages) ExploreUnfollowingWriter(name string) string {
-	return Catalog.Format(msgs.locale, "exploreUnfollowingWriter", map[string]any{"name": name})
-}
-
-// ExploreFollowingWriter says "Following {name}…"
-// in the language the app shows.
-//
-// Accessible name of the Follow pill while the writer is being followed.
-func ExploreFollowingWriter(name string) string {
-	return In(i18n.Locale()).ExploreFollowingWriter(name)
-}
-
-// ExploreFollowingWriter says "Following {name}…"
-// in the language of msgs.
-//
-// Accessible name of the Follow pill while the writer is being followed.
-func (msgs Messages) ExploreFollowingWriter(name string) string {
-	return Catalog.Format(msgs.locale, "exploreFollowingWriter", map[string]any{"name": name})
-}
-
-// ExploreFollowedWriter says "Following {name}. Press to unfollow."
-// in the language the app shows.
-//
-// Accessible name of the Follow pill for a writer already followed.
-func ExploreFollowedWriter(name string) string { return In(i18n.Locale()).ExploreFollowedWriter(name) }
-
-// ExploreFollowedWriter says "Following {name}. Press to unfollow."
-// in the language of msgs.
-//
-// Accessible name of the Follow pill for a writer already followed.
-func (msgs Messages) ExploreFollowedWriter(name string) string {
-	return Catalog.Format(msgs.locale, "exploreFollowedWriter", map[string]any{"name": name})
 }
 
 // ExploreFollowed says "Following"
 // in the language the app shows.
 //
-// Text of the Follow pill once the writer is followed.
+// Subscribe pill on an author's page, once subscribed: its visible words
+// after an amber tick.
 func ExploreFollowed() string { return In(i18n.Locale()).ExploreFollowed() }
 
 // ExploreFollowed says "Following"
 // in the language of msgs.
 //
-// Text of the Follow pill once the writer is followed.
+// Subscribe pill on an author's page, once subscribed: its visible words
+// after an amber tick.
 func (msgs Messages) ExploreFollowed() string {
 	return Catalog.Format(msgs.locale, "exploreFollowed", nil)
+}
+
+// ExploreFollowFailed says "Couldn't follow {name}. {reason}"
+// in the language the app shows.
+//
+// Error notice when subscribing from an author's page failed; reason is the
+// subscription service's own sentence, which says why and what to do.
+func ExploreFollowFailed(name string, reason string) string {
+	return In(i18n.Locale()).ExploreFollowFailed(name, reason)
+}
+
+// ExploreFollowFailed says "Couldn't follow {name}. {reason}"
+// in the language of msgs.
+//
+// Error notice when subscribing from an author's page failed; reason is the
+// subscription service's own sentence, which says why and what to do.
+func (msgs Messages) ExploreFollowFailed(name string, reason string) string {
+	return Catalog.Format(msgs.locale, "exploreFollowFailed", map[string]any{"name": name, "reason": reason})
+}
+
+// ExploreUnfollowFailed says "Couldn't unfollow {name}. Your library is unchanged. {detail}"
+// in the language the app shows.
+//
+// Error notice when unsubscribing from an author's page could not be saved;
+// detail is the library's reason.
+func ExploreUnfollowFailed(name string, detail string) string {
+	return In(i18n.Locale()).ExploreUnfollowFailed(name, detail)
+}
+
+// ExploreUnfollowFailed says "Couldn't unfollow {name}. Your library is unchanged. {detail}"
+// in the language of msgs.
+//
+// Error notice when unsubscribing from an author's page could not be saved;
+// detail is the library's reason.
+func (msgs Messages) ExploreUnfollowFailed(name string, detail string) string {
+	return Catalog.Format(msgs.locale, "exploreUnfollowFailed", map[string]any{"name": name, "detail": detail})
 }
 
 // SubscribeTitle says "Follow a Blog"
@@ -4746,6 +4804,24 @@ func (msgs Messages) CaptureReadyTip() string {
 	return Catalog.Format(msgs.locale, "captureReadyTip", nil)
 }
 
+// CaptureFailedTip says "Not captured, open to see why"
+// in the language the app shows.
+//
+// Reader toolbar: tooltip of the Capture button once capturing the page
+// failed; pressing it opens the capture's card, which says what happened
+// and offers Try Again.
+func CaptureFailedTip() string { return In(i18n.Locale()).CaptureFailedTip() }
+
+// CaptureFailedTip says "Not captured, open to see why"
+// in the language of msgs.
+//
+// Reader toolbar: tooltip of the Capture button once capturing the page
+// failed; pressing it opens the capture's card, which says what happened
+// and offers Try Again.
+func (msgs Messages) CaptureFailedTip() string {
+	return Catalog.Format(msgs.locale, "captureFailedTip", nil)
+}
+
 // CaptureIsland says "Captures"
 // in the language the app shows.
 //
@@ -4762,22 +4838,140 @@ func (msgs Messages) CaptureIsland() string {
 	return Catalog.Format(msgs.locale, "captureIsland", nil)
 }
 
-// CaptureHide says "Hide"
+// CaptureHide says "Move to Favorites"
 // in the language the app shows.
 //
-// Capture island: the round button at its top-left corner, shown while it
-// is pointed at, that sends the island away (what is being captured goes
-// on); its accessible name and tooltip.
+// Capture island: the button at its right end, shown while it is pointed
+// at, that sends the island away and what it holds into Favorites (what is
+// being captured goes on there); its accessible name and tooltip.
 func CaptureHide() string { return In(i18n.Locale()).CaptureHide() }
 
-// CaptureHide says "Hide"
+// CaptureHide says "Move to Favorites"
 // in the language of msgs.
 //
-// Capture island: the round button at its top-left corner, shown while it
-// is pointed at, that sends the island away (what is being captured goes
-// on); its accessible name and tooltip.
+// Capture island: the button at its right end, shown while it is pointed
+// at, that sends the island away and what it holds into Favorites (what is
+// being captured goes on there); its accessible name and tooltip.
 func (msgs Messages) CaptureHide() string {
 	return Catalog.Format(msgs.locale, "captureHide", nil)
+}
+
+// CaptureMovedOne says "Moved to Favorites"
+// in the language the app shows.
+//
+// Announced to screen readers as the capture island, holding one page, goes
+// into the Favorites tab. Echoes the button that did it.
+func CaptureMovedOne() string { return In(i18n.Locale()).CaptureMovedOne() }
+
+// CaptureMovedOne says "Moved to Favorites"
+// in the language of msgs.
+//
+// Announced to screen readers as the capture island, holding one page, goes
+// into the Favorites tab. Echoes the button that did it.
+func (msgs Messages) CaptureMovedOne() string {
+	return Catalog.Format(msgs.locale, "captureMovedOne", nil)
+}
+
+// CaptureMovedMany says "{count, plural, one {# page} other {# pages}} moved to Favorites"
+// in the language the app shows.
+//
+// Announced to screen readers as the capture island, holding several pages,
+// goes into the Favorites tab.
+func CaptureMovedMany(count int) string { return In(i18n.Locale()).CaptureMovedMany(count) }
+
+// CaptureMovedMany says "{count, plural, one {# page} other {# pages}} moved to Favorites"
+// in the language of msgs.
+//
+// Announced to screen readers as the capture island, holding several pages,
+// goes into the Favorites tab.
+func (msgs Messages) CaptureMovedMany(count int) string {
+	return Catalog.Format(msgs.locale, "captureMovedMany", map[string]any{"count": count})
+}
+
+// CaptureTakingAt says "Capturing · {percent}%"
+// in the language the app shows.
+//
+// Announced after captureMovedOne or captureMovedMany while a page the
+// island held is still being captured: how far it has come.
+func CaptureTakingAt(percent int) string { return In(i18n.Locale()).CaptureTakingAt(percent) }
+
+// CaptureTakingAt says "Capturing · {percent}%"
+// in the language of msgs.
+//
+// Announced after captureMovedOne or captureMovedMany while a page the
+// island held is still being captured: how far it has come.
+func (msgs Messages) CaptureTakingAt(percent int) string {
+	return Catalog.Format(msgs.locale, "captureTakingAt", map[string]any{"percent": percent})
+}
+
+// CaptureTabTaking says "Capturing {name} · {percent}%"
+// in the language the app shows.
+//
+// Tooltip of the Favorites tab after the Favorites tab name and a middle
+// dot, while a page moved there with the capture island is being captured:
+// which page, and how far it has come, as under the tab.
+func CaptureTabTaking(name string, percent int) string {
+	return In(i18n.Locale()).CaptureTabTaking(name, percent)
+}
+
+// CaptureTabTaking says "Capturing {name} · {percent}%"
+// in the language of msgs.
+//
+// Tooltip of the Favorites tab after the Favorites tab name and a middle
+// dot, while a page moved there with the capture island is being captured:
+// which page, and how far it has come, as under the tab.
+func (msgs Messages) CaptureTabTaking(name string, percent int) string {
+	return Catalog.Format(msgs.locale, "captureTabTaking", map[string]any{"name": name, "percent": percent})
+}
+
+// CaptureTakenNote says "Captured"
+// in the language the app shows.
+//
+// Under the Favorites tab's icon for a few seconds when a page finished
+// while the island was in Favorites. Kept short: it sits under a 32 px tab.
+func CaptureTakenNote() string { return In(i18n.Locale()).CaptureTakenNote() }
+
+// CaptureTakenNote says "Captured"
+// in the language of msgs.
+//
+// Under the Favorites tab's icon for a few seconds when a page finished
+// while the island was in Favorites. Kept short: it sits under a 32 px tab.
+func (msgs Messages) CaptureTakenNote() string {
+	return Catalog.Format(msgs.locale, "captureTakenNote", nil)
+}
+
+// CaptureQueued says "Waiting"
+// in the language the app shows.
+//
+// A capture's card and its place in Favorites: in place of how far it has
+// come while it waits its turn. Kept short.
+func CaptureQueued() string { return In(i18n.Locale()).CaptureQueued() }
+
+// CaptureQueued says "Waiting"
+// in the language of msgs.
+//
+// A capture's card and its place in Favorites: in place of how far it has
+// come while it waits its turn. Kept short.
+func (msgs Messages) CaptureQueued() string {
+	return Catalog.Format(msgs.locale, "captureQueued", nil)
+}
+
+// CaptureNotTakenShort says "Not captured"
+// in the language the app shows.
+//
+// A capture's place in Favorites, at its foot, and the first line of the
+// note under the Favorites tab when a page could not be taken while the
+// island was in Favorites. Kept short.
+func CaptureNotTakenShort() string { return In(i18n.Locale()).CaptureNotTakenShort() }
+
+// CaptureNotTakenShort says "Not captured"
+// in the language of msgs.
+//
+// A capture's place in Favorites, at its foot, and the first line of the
+// note under the Favorites tab when a page could not be taken while the
+// island was in Favorites. Kept short.
+func (msgs Messages) CaptureNotTakenShort() string {
+	return Catalog.Format(msgs.locale, "captureNotTakenShort", nil)
 }
 
 // CaptureWaiting says "{name}, waiting"

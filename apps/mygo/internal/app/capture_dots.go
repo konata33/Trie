@@ -12,15 +12,21 @@ import (
 	"trie/internal/theme"
 )
 
-// The capture picture (DESIGN.md Capture 显影): a page as a grid of round
-// dots, 3px a cell in the island's 72 × 45 thumbnail, each the colour of its
-// cell of the page. How far the pack has come develops it: the dots come in
-// layer by layer, mostly from the top, grow, and take on their colours. The
-// button's 4 × 4 of dots is the same picture, small.
+// The capture picture (DESIGN.md Capture 显影): a page as a fine screen of
+// round dots, each the colour of its cell of the page, there from the first
+// frame: small, dim and grey while the page is being taken, a slow light
+// passing over them. How far the pack has come develops it: the dots grow and
+// take on their colours, mostly from the top, until they touch and the page
+// reads whole; its first screen then comes into focus over them. The button's
+// 4 × 4 of dots is the same picture, small.
 
-// packCols and packRows are the picture's cells, the island thumbnail's 72 × 45
-// in 3px cells; it keeps them at every size.
-const packCols, packRows = 24, 15
+// The picture's cells: 2 px apart in the island's 72 × 45 thumbnail (and as
+// it flies), 5 px on the 440 × 275 card, so it reads as the page at both sizes
+// and as dots only up close.
+const (
+	thumbCols, thumbRows = 36, 22
+	cardCols, cardRows   = 88, 55
+)
 
 // The capture icon: a 4 × 4 halftone, its dots growing from the top row,
 // small and dim, to the bottom one, full and amber (DESIGN.md Icons). The dots
@@ -70,12 +76,29 @@ func captureDots(dev float32, lit bool, ink ui.Color) []inkDot {
 	return out
 }
 
-// dotGrid is a picture's colours, a cell each.
-type dotGrid [packCols * packRows]ui.Color
+// dotGrid is a picture's colours, a cell each, cols × rows.
+type dotGrid struct {
+	cols, rows int
+	c          []ui.Color
+}
 
-// gridOf is img's colours as the 16:10 window onto its top shows them, each
-// cell's the average of 8 × 8 points over it; nil for no picture.
-func gridOf(img image.Image) *dotGrid {
+// dotPic is a picture's colours at the thumbnail's cells and at the card's.
+type dotPic struct{ thumb, card *dotGrid }
+
+// at is the grid for the card's size, else the thumbnail's; nil for none.
+func (d *dotPic) at(card bool) *dotGrid {
+	switch {
+	case d == nil:
+		return nil
+	case card:
+		return d.card
+	}
+	return d.thumb
+}
+
+// gridOf is img's colours as the 16:10 window onto its top shows them, at both
+// sizes; nil for no picture.
+func gridOf(img image.Image) *dotPic {
 	if img == nil {
 		return nil
 	}
@@ -83,23 +106,33 @@ func gridOf(img image.Image) *dotGrid {
 	if src.Empty() {
 		return nil
 	}
-	var g dotGrid
-	const n = 8
-	for i := range g {
-		col, row := i%packCols, i/packCols
-		var r, gr, b float64
+	return &dotPic{thumb: sampleGrid(img, src, thumbCols, thumbRows), card: sampleGrid(img, src, cardCols, cardRows)}
+}
+
+// sampleGrid is img's colours in cols × rows square cells across the window src,
+// centred in its height as the dots are, each cell's the average of 4 × 4
+// points over it.
+func sampleGrid(img image.Image, src image.Rectangle, cols, rows int) *dotGrid {
+	g := &dotGrid{cols: cols, rows: rows, c: make([]ui.Color, cols*rows)}
+	const n = 4
+	cell := float64(src.Dx()) / float64(cols)
+	top := float64(src.Min.Y) + (float64(src.Dy())-cell*float64(rows))/2
+	b := img.Bounds()
+	for i := range g.c {
+		col, row := i%cols, i/cols
+		var r, gr, bl float64
 		for sy := range n {
 			for sx := range n {
-				x := src.Min.X + (col*n+sx)*src.Dx()/(packCols*n)
-				y := src.Min.Y + (row*n+sy)*src.Dy()/(packRows*n)
+				x := min(b.Max.X-1, src.Min.X+int((float64(col)+(float64(sx)+0.5)/n)*cell))
+				y := min(b.Max.Y-1, max(b.Min.Y, int(top+(float64(row)+(float64(sy)+0.5)/n)*cell)))
 				cr, cg, cb, _ := img.At(x, y).RGBA()
-				r, gr, b = r+float64(cr), gr+float64(cg), b+float64(cb)
+				r, gr, bl = r+float64(cr), gr+float64(cg), bl+float64(cb)
 			}
 		}
 		k := float64(n*n) * 257
-		g[i] = ui.Color{R: uint8(r / k), G: uint8(gr / k), B: uint8(b / k), A: 255}
+		g.c[i] = ui.Color{R: uint8(r / k), G: uint8(gr / k), B: uint8(bl / k), A: 255}
 	}
-	return &g
+	return g
 }
 
 // topWindow is the 16:10 window onto the top of a picture of bounds b: its
@@ -138,24 +171,37 @@ func screenTop(img image.Image, w int) image.Image {
 
 // developing is how the picture shows in a frame.
 type developing struct {
-	// from is the picture the app has of the page (nil: neutral grey), to
-	// the first screen once taken; recolour is how far the dots have gone
-	// from the one's colours to the other's.
-	from, to *dotGrid
-	recolour float32
-	p        float32 // how far it has developed, 0 to 1
-	shown    float32 // the dots' opacity: they fade as the first screen rises out of them
+	// from is the picture the app has of the page (nil: the ground's colour), to
+	// the first screen once taken; baseIn is how far the dots have gone from
+	// the ground to from's colours as it came, recolour from from's to to's.
+	from, to         *dotPic
+	ground           ui.Color
+	baseIn, recolour float32
+	p                float32 // how far it has developed, 0 to 1
+	shown            float32 // the dots' opacity
 	// failed is when the pack failed and its dots let go; zero while it
 	// has not.
 	failed time.Time
-	still  bool // less motion: the dots do not grow or fall, their colours fade
+	still  bool // less motion: the dots do not grow, wave or fall; their colours fade
 }
 
-// The picture's timing within p: a dot comes in over dotIn of it, at a
-// moment of its own, its row's share dotRows and the rest its own.
+// The picture's timing within p: a dot develops over dotWin of it, from a
+// moment of its own, its row's share dotRows and the rest its own; so the
+// page comes in as a soft wave going down rather than dot by dot.
 const (
-	dotIn   = 0.14
-	dotRows = 0.62
+	dotWin  = 0.32
+	dotRows = 0.7
+)
+
+// A dot as a share of the cells' pitch, still to come and developed: small,
+// dim, a grey of its own lightness keeping a little of its colour (a link's
+// amber, a picture's hue) and drawn toward the ground; then large enough to
+// touch its neighbours, in its own colour.
+const (
+	latentR, fullR = 0.36, 0.62
+	latentA        = 0.85
+	latentInk      = 0.7
+	latentHue      = 0.35
 )
 
 // hash01 is a steady value from 0 to 1 for dot i, one per salt.
@@ -169,38 +215,50 @@ func hash01(i, salt uint32) float32 {
 	return float32(x>>8) / (1 << 24)
 }
 
-// dotAt is when dot i comes in, as p: mostly from the top, a little at
-// random, so the picture fills in layer by layer rather than as a line.
-func dotAt(i int) float32 {
-	row := float32(i/packCols) / (packRows - 1)
-	return (1 - dotIn) * (dotRows*row + (1-dotRows)*hash01(uint32(i), 1))
+// dotAt is when dot i of a cols × rows picture starts to develop, as p:
+// mostly from the top, a little at random.
+func dotAt(i, cols, rows int) float32 {
+	row := float32(i/cols) / float32(max(1, rows-1))
+	return (1 - dotWin) * (dotRows*row + (1-dotRows)*hash01(uint32(i), 1))
 }
 
-// paintDeveloping paints d in r, its cells r.W/packCols across, centred on
-// device pixels so the dots stay round and crisp. Where none has come yet, a
-// faint dot breathes, each on its own 2–4 s and from its own moment. It asks
-// for frames while anything moves.
+// paintDeveloping paints d in r: the card's cells when r is card-sized, else
+// the thumbnail's, their pitch r.W across, centred on device pixels so the
+// dots stay round and crisp. Every dot is there from the start; those still to
+// develop wait small and dim, a slow light passing over them from the top left
+// (CaptureWave). It asks for frames while anything moves.
 func paintDeveloping(p *ui.Painter, r ui.Rect, d developing) {
+	card := r.W > 2*thumbW
+	from, to := d.from.at(card), d.to.at(card)
+	cols, rows, corner := thumbCols, thumbRows, 6*r.W/thumbW
+	if card {
+		cols, rows, corner = cardCols, cardRows, 12
+	}
+	pitch := r.W / float32(cols)
 	s := p.Scale()
 	snap := func(v float32) float32 { return float32(math.Round(float64(v*s))) / s }
-	cell := r.W / packCols
-	ox, oy := snap(r.X), snap(r.Y)
+	ox, oy := snap(r.X), snap(r.Y+(r.H-float32(rows)*pitch)/2)
 	now := p.Now()
-	secs := float64(now.UnixNano()%int64(time.Hour)) / 1e9
+	wave := float64(now.UnixNano()%int64(time.Hour)) / float64(motion.CaptureWave)
+	n := cols * rows
+	ease := make([]float32, n)
+	for i := range n {
+		ease[i] = motion.Ease(unit((d.p - dotAt(i, cols, rows)) / dotWin))
+	}
 	var fell time.Duration
 	if !d.failed.IsZero() {
 		fell = max(time.Nanosecond, now.Sub(d.failed))
 	}
-	// A failed pack's dots fall, each to the top of those below it in its
-	// column, so that they settle in a heap on the frame's floor.
-	var rest [packCols * packRows]int
+	// A failed pack's developed dots fall, each to the top of those below it in
+	// its column, so that they settle in a heap on the frame's floor; the rest go out.
+	var rest []int
 	if fell > 0 {
-		for col := range packCols {
+		rest = make([]int, n)
+		for col := range cols {
 			k := 0
-			for row := packRows - 1; row >= 0; row-- {
-				i := row*packCols + col
-				if d.p > dotAt(i) {
-					rest[i] = packRows - 1 - k
+			for row := rows - 1; row >= 0; row-- {
+				if i := row*cols + col; ease[i] >= 0.5 {
+					rest[i] = rows - 1 - k
 					k++
 				}
 			}
@@ -211,58 +269,50 @@ func paintDeveloping(p *ui.Painter, r ui.Rect, d developing) {
 		desat = motion.Ease(unit(float32(fell) / float32(motion.CaptureGrey)))
 	}
 	moving := fell > 0 && fell < motion.CaptureFall+motion.CaptureFallStagger
-	for i := range packCols * packRows {
-		col, row := i%packCols, i/packCols
-		x := ox + (float32(col)+0.5)*cell
-		y := oy + (float32(row)+0.5)*cell
-		at := dotAt(i)
-		in := motion.Ease(unit((d.p - at) / dotIn))
-		grow := unit((d.p - at) / (1 - at))
-		// Not come yet: a faint dot, breathing.
-		if faint := (1 - in) * d.shown; faint > 0.01 {
-			breath := float32(0.5)
-			if !d.still {
-				period := (motion.CaptureBreathMin + time.Duration(hash01(uint32(i), 2)*float32(motion.CaptureBreathMax-motion.CaptureBreathMin))).Seconds()
-				breath = 0.5 - 0.5*float32(math.Cos(2*math.Pi*(secs/period+float64(hash01(uint32(i), 3)))))
-				moving = true
-			}
-			if fell > 0 {
-				faint *= 1 - desat
-			}
-			rad := 0.22 * cell
-			p.Fill(ui.Rect{X: x - rad, Y: y - rad, W: 2 * rad, H: 2 * rad}, theme.CaptureFaint.Alpha(faint*(0.35+0.65*breath)), rad)
+	for i := range n {
+		col, row := i%cols, i/cols
+		x := ox + (float32(col)+0.5)*pitch
+		y := oy + (float32(row)+0.5)*pitch
+		e := ease[i]
+		full := d.ground
+		if from != nil {
+			full = full.Mix(from.c[i], d.baseIn)
 		}
-		if in <= 0.001 {
-			continue
+		if to != nil {
+			full = full.Mix(to.c[i], d.recolour)
 		}
-		c := theme.CaptureDot
-		if d.from != nil {
-			c = d.from[i]
-		}
-		if d.to != nil {
-			c = c.Mix(d.to[i], d.recolour)
-		}
-		grey := grayOf(c)
-		// The colour comes slowly: grey of its own lightness at first, its own once grown.
-		c = grey.Mix(c, (0.2+0.8*grow)*(1-desat))
-		rad := cell * (0.35*in + 0.15*grow)
-		alpha := in
-		if d.still {
-			rad = 0.42 * cell
+		c := theme.Window.Mix(grayOf(full).Mix(full, latentHue*(1-desat)), latentInk).Mix(full, e*(1-desat))
+		rad := pitch * (latentR + (fullR-latentR)*e)
+		alpha := latentA + (1-latentA)*e
+		switch {
+		case d.still:
+			rad = 0.5 * pitch
+		case e < 1 && fell == 0:
+			// The light passing over what is still to come, a narrow band: brighter
+			// and a little larger where it is; the rest waits as it is.
+			ph := 0.55*float64(col)/float64(cols) + 0.45*float64(row)/float64(rows) + 0.08*float64(hash01(uint32(i), 3))
+			b := float32(math.Pow(0.5-0.5*math.Cos(2*math.Pi*(wave-ph)), 4))
+			alpha = min(1, alpha*(1+0.35*(1-e)*b))
+			rad *= 1 + 0.25*(1-e)*b
+			moving = true
 		}
 		if fell > 0 {
-			delay := time.Duration(hash01(uint32(i), 4) * float32(motion.CaptureFallStagger))
-			f := motion.TravelEase(float32(fell-delay) / float32(motion.CaptureFall))
-			if d.still {
-				f = 0
+			if e < 0.5 {
+				alpha *= 1 - desat
+			} else if !d.still {
+				delay := time.Duration(hash01(uint32(i), 4) * float32(motion.CaptureFallStagger))
+				f := motion.TravelEase(float32(fell-delay) / float32(motion.CaptureFall))
+				y += float32(rest[i]-row) * pitch * f
+				rad += (0.5*pitch - rad) * f
 			}
-			y += float32(rest[i]-row) * cell * f
-			rad = rad + (0.36*cell-rad)*f
 			alpha *= 1 - 0.45*desat
 		}
+		if alpha < 0.01 {
+			continue
+		}
 		// In the frame's rounded corners a dot keeps inside the curve, round.
-		if room := cornerRoom(x-ox, y-oy, r.W, r.H, 2*cell); room < rad {
-			if room < 0.3*cell {
+		if room := cornerRoom(x-r.X, y-r.Y, r.W, r.H, corner); room < rad {
+			if room < 0.3*pitch {
 				continue
 			}
 			rad = room

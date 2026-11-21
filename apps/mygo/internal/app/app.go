@@ -79,6 +79,8 @@ type App struct {
 
 	kbd    bool // the last input was a key: what it does shows at once
 	Reduce bool // the app's own switch for less motion (tests)
+	// lessMotion is still(c) as this frame began, for what is drawn without the context (give).
+	lessMotion bool
 
 	lay     *motion.Lay
 	layRow  string // the article whose row the ground goes back to
@@ -165,6 +167,9 @@ func New(opt Options) (*App, error) {
 		looks: map[string]titleLook{}}
 	a.accept(lib)
 	a.loadPacks()
+	if opt.Reading != nil {
+		opt.Reading.Mended = func(id string) { a.post(func() { a.mended(id) }) }
+	}
 	return a, nil
 }
 
@@ -240,6 +245,7 @@ func (a *App) observe(ev ui.InputEvent) {
 // View builds the window.
 func (a *App) View(c *ui.Context) {
 	hourCycle = c.Region().HourCycle
+	a.lessMotion = a.still(c)
 	c.SetTheme(a.theme)
 	for len(a.waiting) > 0 {
 		fns := a.waiting
@@ -289,9 +295,9 @@ func (a *App) View(c *ui.Context) {
 		behind = root.AnimateTo("behind", target, motion.Fade(d))
 	}
 	// Behind a passage on the stage the whole window, sidebar too, goes out
-	// of focus as it goes dark; the stage itself is a layer above it.
+	// of focus as it dims (clipsStage); the stage itself is a layer above it.
 	if s := a.clipsSt().stage; s != nil && a.page.kind == "clips" {
-		behind = max(behind, motion.Defocus*s.dark(s.values(c.Now())))
+		behind = max(behind, stageBlur*s.dark(s.values(c.Now())))
 	}
 	if behind > 0.01 {
 		root.Blur(behind)

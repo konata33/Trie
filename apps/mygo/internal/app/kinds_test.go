@@ -25,7 +25,7 @@ func TestExploreKinds(t *testing.T) {
 	ex := a.ex
 	works := ex.kinds["landing"]
 	if len(works) == 0 {
-		t.Fatalf("Land-book shelves its works under landing: %v", len(ex.kinds))
+		t.Fatalf("One Page Love shelves its works under landing: %v", len(ex.kinds))
 	}
 	for i := 1; i < len(works); i++ {
 		if exTime(works[i].publishedAt) > exTime(works[i-1].publishedAt) {
@@ -93,20 +93,43 @@ func TestDoorLeave(t *testing.T) {
 		t.Fatalf("Explore is let go once gone: %+v", a.left)
 	}
 	rest(tt)
-	h, ok := tt.Find("落地页")
-	if !ok || a.page != (page{"kind", "landing"}) {
+	if a.page != (page{"kind", "landing"}) {
 		t.Fatalf("on the wall: %+v", a.page)
 	}
 	kw := a.wall("landing")
-	tt.Move(h.X-20, 30) // on the way back, above the head
+	// The way back: the button named 探索 in the content area, not the sidebar's tab.
+	var way ui.Rect
+	for _, n := range tt.AccessAll() {
+		if n.Role == ui.RoleButton && n.Name == "探索" && n.Bounds.X >= a.area.X {
+			way = n.Bounds
+		}
+	}
+	if way.W <= 0 {
+		t.Fatal("no way back to 探索 on the wall")
+	}
+	tt.Move(way.X+way.W/2, way.Y+way.H/2)
 	tt.Advance(50 * time.Millisecond)
 	if kw.back.IsZero() {
 		t.Fatal("resting on the way back marks it")
 	}
-	tt.Move(h.X+200, 400)
+	tt.Move(way.X+200, 400)
 	tt.Frame()
 	if !kw.back.IsZero() {
 		t.Fatal("leaving it unmarks it")
+	}
+	// Scrolled down and left, the page opens at its top again through its door.
+	kw.scroll.Y = 300
+	tt.Frame()
+	if kw.scroll.Y == 0 {
+		t.Fatal("the wall scrolls")
+	}
+	a.Press("back")
+	tt.Frame()
+	rest(tt)
+	must(t, tt.Click("落地页"))
+	rest(tt)
+	if a.page != (page{"kind", "landing"}) || kw.scroll.Y != 0 {
+		t.Fatalf("through its door the page opens at its top: %+v at %v", a.page, kw.scroll.Y)
 	}
 }
 
@@ -243,31 +266,99 @@ func TestMapLayout(t *testing.T) {
 	}
 }
 
-// A door stands on the work chosen for its kind, the same on every visit;
-// where that cannot be had (offline on a first start), on the kind's newest.
-func TestDoorCover(t *testing.T) {
+// A door stands on its kind's own drawing, shipped with the app. Pointed
+// at, it lights and its moving part goes to where it is drawn; the
+// pendulum swings once and comes to rest; the brand's mark lights once the
+// stamp has pressed it. Back from a wall, a door that played does not play
+// again. From the keys it is lit at once and nothing plays; under less
+// motion the part stands where it is drawn and only the light changes.
+func TestDoorDrawing(t *testing.T) {
 	for _, k := range kindOrder {
-		if doorCovers[k].src == "" {
-			t.Errorf("%s has no work of its own to stand on", k)
+		art := doorArts()[k]
+		if art.still.svg == nil || art.moving.svg == nil || art.amber.svg == nil || art.faint.svg == nil {
+			t.Errorf("%s's drawing is missing layers", k)
+		}
+		if _, ok := doorPoses[k]; !ok {
+			t.Errorf("%s's drawing has no pose", k)
 		}
 	}
 	a, _ := newExploreApp(t, nil)
 	tt := exploreTester(a)
 	toExplore(t, a, tt)
-	ex := a.ex
-	ex.scroll.Y = 500
+	a.ex.scroll.Y = 500
 	tt.Frame()
 	rest(tt)
-	works := ex.kinds["landing"]
-	if len(works) == 0 {
-		t.Fatal("Land-book shelves its works under landing")
+	point := func(name string) {
+		t.Helper()
+		r, ok := tt.Find(name)
+		if !ok {
+			t.Fatalf("no door %s", name)
+		}
+		tt.Move(r.X+r.W/2, r.Y+r.H/2)
 	}
-	if cov, pic := a.doorPic("landing"); cov.src != "" || pic != a.workPic(works[0]) {
-		t.Fatalf("offline, the door stands on the kind's newest: %q %p", cov.src, pic)
+	landing, mot := a.wall("landing"), a.wall("motion")
+	if landing.look != 0 || landing.lit != 0 {
+		t.Fatalf("a door at rest: %v %v", landing.look, landing.lit)
 	}
-	ex.pics["door:landing"] = &exPic{done: true, bmp: ui.NewBitmap(image.NewRGBA(image.Rect(0, 0, 4, 5)))}
-	if cov, pic := a.doorPic("landing"); cov.src != doorCovers["landing"].src || pic.bmp == nil {
-		t.Fatalf("its own work, once had: %q", cov.src)
+	point("落地页")
+	tt.Advance(motion.DoorAct + 100*time.Millisecond)
+	if landing.look < 0.999 || landing.lit < 0.999 {
+		t.Fatalf("pointed at, the door lights and its sun rises: %v %v", landing.look, landing.lit)
+	}
+	point("动效")
+	tt.Advance(motion.DoorSwingFor / 5)
+	if mot.acting.beat == 0 {
+		t.Fatal("pointed at, the pendulum swings")
+	}
+	tt.Advance(motion.DoorSwingFor)
+	if mot.acting.beat != 0 || mot.acting.runs != 1 {
+		t.Fatalf("it swings once and comes to rest: %v, %d", mot.acting.beat, mot.acting.runs)
+	}
+	if landing.look > 0.001 {
+		t.Fatalf("the pointer gone, the sun sets behind the hills again: %v", landing.look)
+	}
+	brand := a.wall("brand")
+	point("品牌")
+	tt.Advance(50 * time.Millisecond)
+	if brand.acting.beat == 0 || brand.amber > 0.2 {
+		t.Fatalf("pointed at, the stamp comes down before the mark lights: %v %v", brand.acting.beat, brand.amber)
+	}
+	tt.Advance(motion.DoorStampFor)
+	if brand.acting.beat != 0 || brand.amber < 0.999 {
+		t.Fatalf("the stamp lifted, the mark it pressed is lit: %v %v", brand.acting.beat, brand.amber)
+	}
+	must(t, tt.Click("动效"))
+	rest(tt)
+	runs := mot.acting.runs
+	tt.Key(0, ui.KeyEscape)
+	for range 30 {
+		tt.Advance(30 * time.Millisecond)
+		if brand.acting.beat != 0 {
+			t.Fatalf("back from the wall, the stamp presses again: %v", brand.acting.beat)
+		}
+	}
+	if brand.acting.runs != 1 || mot.acting.runs != runs {
+		t.Fatalf("back from the wall, nothing plays again: %d, %d after %d", brand.acting.runs, mot.acting.runs, runs)
+	}
+	a.kbd = false
+	// From the keys.
+	tt.Move(10, 10)
+	settle(tt)
+	tt.SetWindowActive(true)
+	a.ex.focus = "kind:portfolio"
+	tt.Frame()
+	tt.Key(0, ui.KeyTab)
+	tt.Advance(50 * time.Millisecond)
+	if !tt.Focused("动效") || mot.look < 0.999 || mot.acting.runs != runs {
+		t.Fatalf("in focus from the keys, the door is lit at once and its pendulum still: %v, %d", mot.look, mot.acting.runs)
+	}
+	// Under less motion.
+	a.kbd = false
+	a.Reduce = true
+	tt.Move(10, 10)
+	settle(tt)
+	if landing.look != 1 || landing.lit != 0 {
+		t.Fatalf("under less motion the drawing stands as drawn, unlit: %v %v", landing.look, landing.lit)
 	}
 }
 

@@ -112,13 +112,18 @@ var (
 	ChipLight = ui.Hex("#EDEDED")
 
 	// The capture thumbnail (DESIGN.md Capture): its dots with no picture to
-	// take colours from, the faint ones breathing where none has come yet, and
-	// the light passing over a page once taken.
+	// take colours from, and the light passing over a page once taken.
 	CaptureDot   = ui.Hex("#6A6A6A")
-	CaptureFaint = ui.RGBA(255, 255, 255, 0.11)
 	CaptureSweep = ui.RGBA(255, 255, 255, 0.22)
 	// CaptureEdge is the hairline inside the capture card's edge.
 	CaptureEdge = ui.RGBA(255, 255, 255, 0.07)
+	// The capture's proof of an article (DESIGN.md Capture): its body, the
+	// rule beside a quote, code and the block behind it, and a picture's place.
+	ProofBody   = ui.Hex("#9A9A9A")
+	ProofRule   = ui.Hex("#3A3A3A")
+	ProofCode   = ui.Hex("#B9B5AA")
+	ProofCodeBg = ui.Hex("#1F1F1F")
+	ProofPicBg  = ui.Hex("#262626")
 	// CaptureLineShade lies under the card's white line of where its page is, so
 	// that the line reads on light pages and dark.
 	CaptureLineShade = ui.RGBA(0, 0, 0, 0.28)
@@ -186,6 +191,8 @@ var (
 	DotRing        = ui.RGBA(255, 255, 255, 0.28)
 	UnderlineHover = ui.RGBA(255, 255, 255, 0.35)
 	FollowHover    = ui.RGBA(255, 255, 255, 0.1)
+	// Pressed is a quiet pill pressed: a step over FollowHover (DESIGN.md Buttons).
+	Pressed = ui.RGBA(255, 255, 255, 0.14)
 	// Darken is no colour the interface shows: the opaque end of a mask, and
 	// the dark a picture's brightness() filter takes it toward.
 	Darken = ui.RGB(0, 0, 0)

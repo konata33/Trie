@@ -75,6 +75,12 @@ var (
 	Brake = ui.CubicBezier(0.333, 0.667, 0.667, 1)
 )
 
+// DrawIn is how far something on a flight (on Flight) has drawn in to its
+// size at the end, k of the way: most of it early, so it is small before it
+// passes what lies near where it lands, as the capture island going into
+// 收藏's tab.
+func DrawIn(k float32) float32 { return 1 - float32(math.Pow(float64(1-k), 1.6)) }
+
 // CSS's ease-out and ease-in-out keywords, which the ground lights up and
 // melts along.
 var (
@@ -558,13 +564,11 @@ func (w *Words) View(c *ui.Context, key any, old, new func() ui.Element) bool {
 const (
 	TipWait = 550 * time.Millisecond // the first tooltip waits
 
-	InkDraw, InkUndraw = 480 * time.Millisecond, 220 * time.Millisecond // 一笔圈出: the loop sweeping round the words, and back
-	InkGone            = 200 * time.Millisecond                         // the loop drawing in as a button busies
-	Roll               = 300 * time.Millisecond                         // a count's digits rolling
-	Reveal             = 120 * time.Millisecond                         // a row's actions, a ··· trigger, appearing
-	LinkHover          = 140 * time.Millisecond                         // an author's site link
-	SignHover          = 150 * time.Millisecond                         // the sign-off's link
-	ErrorOpen          = 180 * time.Millisecond                         // a field's error line opening its height
+	Roll      = 300 * time.Millisecond // a count's digits rolling
+	Reveal    = 120 * time.Millisecond // a row's actions, a ··· trigger, appearing
+	LinkHover = 140 * time.Millisecond // an author's site link
+	SignHover = 150 * time.Millisecond // the sign-off's link
+	ErrorOpen = 180 * time.Millisecond // a field's error line opening its height
 
 	TabGround      = 180 * time.Millisecond                         // a sidebar tab's hover ground
 	NameLight      = 160 * time.Millisecond                         // an author's name brightening
@@ -601,6 +605,7 @@ const (
 	// where it stands once they are StageLand of the way there, and going.
 	StageIn, StageOut           = 600 * time.Millisecond, 360 * time.Millisecond
 	StagePartsIn, StagePartsOut = 180 * time.Millisecond, 160 * time.Millisecond
+	SheetHold                   = 1200 * time.Millisecond // the clip card's sheet keeping its size after a turn, the dial still in hand
 
 	RulerNap, RulerOut, RulerSpread = 900 * time.Millisecond, 400 * time.Millisecond, 140 * time.Millisecond // the scrollbar: asleep after, going, its light spreading
 
@@ -667,22 +672,29 @@ func (d Dissolve) Closing() time.Duration {
 // screen's colours over CaptureRecolour; once taken, the first screen rising out of
 // them over CaptureRise and one light passing over it over CaptureSweep, then staying
 // CaptureLinger, or that long after the island was last held, before it flies to
-// 收藏. Dots not yet developed breathe, each over CaptureBreathMin to
-// CaptureBreathMax; a pack that failed greys its dots over CaptureGrey and lets them
+// 收藏. Over the dots not yet developed a slow light passes from the top left, once
+// each CaptureWave; a pack that failed greys its dots over CaptureGrey and lets them
 // fall on the travel spring over CaptureFall, each up to CaptureFallStagger after the
 // first, and leaves the island CaptureFailedFor later. A card's line of where its
-// page is stays bright CaptureLineHold after the page stops.
+// page is stays bright CaptureLineHold after the page stops. How far a pack has
+// come shows in hundredths that move on at most every CapturePercent; while the
+// page opens they creep toward a tenth, nearing it over CaptureOpening, so they
+// never stand still. 收藏's tab says 已拓下 of a page taken while the island was
+// away for CaptureTold, or that long after the pointer was last on it.
 const (
-	CaptureFly                         = 600 * time.Millisecond
-	CaptureRecolour                    = 400 * time.Millisecond
-	CaptureRise                        = 500 * time.Millisecond
-	CaptureSweep                       = 600 * time.Millisecond
-	CaptureLinger                      = 5 * time.Second
-	CaptureBreathMin, CaptureBreathMax = 2 * time.Second, 4 * time.Second
-	CaptureGrey                        = 250 * time.Millisecond
-	CaptureFall, CaptureFallStagger    = 900 * time.Millisecond, 300 * time.Millisecond
-	CaptureFailedFor                   = 10 * time.Minute
-	CaptureLineHold                    = 700 * time.Millisecond
+	CaptureFly                      = 600 * time.Millisecond
+	CaptureRecolour                 = 400 * time.Millisecond
+	CaptureRise                     = 500 * time.Millisecond
+	CaptureSweep                    = 600 * time.Millisecond
+	CaptureLinger                   = 5 * time.Second
+	CaptureWave                     = 2400 * time.Millisecond
+	CaptureGrey                     = 250 * time.Millisecond
+	CaptureFall, CaptureFallStagger = 900 * time.Millisecond, 300 * time.Millisecond
+	CaptureFailedFor                = 10 * time.Minute
+	CaptureLineHold                 = 700 * time.Millisecond
+	CapturePercent                  = 400 * time.Millisecond
+	CaptureOpening                  = 4 * time.Second
+	CaptureTold                     = 3 * time.Second
 )
 
 // FlightFor is how long a long flight takes over d px, as a face flies into
@@ -700,15 +712,62 @@ var Island = Travel(450 * time.Millisecond)
 // spring, kept under less motion, where only colours change by it.
 var Develop = ui.Animation{Spring: Follow.Spring, NonMotion: true}
 
-// Unfold is a kind's wall coming in under its head as its door opens into
-// it (PAGES.md 类别页): its rows come into focus from Rise below over In,
-// the first After the crossing starts, each Row after the one above.
+// Unfold is a kind's wall coming in under the band as its door opens into
+// it (PAGES.md 类别页): its works come into focus from Rise below over In,
+// the first After the crossing starts, each a Row later for each row
+// further down and half a Row for each column further from the door.
 var Unfold = struct {
 	After, Row, In time.Duration
 	Rise           float32
-}{After: 240 * time.Millisecond, Row: 60 * time.Millisecond, In: 420 * time.Millisecond, Rise: 16}
+}{After: 80 * time.Millisecond, Row: 60 * time.Millisecond, In: 420 * time.Millisecond, Rise: 16}
 
 // DoorLeave is how long the page a door opens or closes over takes to go:
-// covered by the ground the door opens, or gone from over Explore before
-// that ground draws back into the door (PAGES.md 类别页).
+// covered by the ground the door opens, or nearly gone from over Explore
+// before that ground draws back into the door (PAGES.md 类别页).
 const DoorLeave = 150 * time.Millisecond
+
+// DoorDim is how the door's picture goes into the ground it spreads into
+// (PAGES.md 类别页): opening, dark Dim in; closing back, the ground held
+// whole Hold while the page goes, then showing the picture again from Show
+// to Shown, as it nears the door. The shade behind the name goes over Shade
+// as the name leaves the door, and comes back over the last Shade of the
+// way as it lands.
+var DoorDim = struct{ Dim, Hold, Show, Shown, Shade time.Duration }{Dim: 150 * time.Millisecond, Hold: 100 * time.Millisecond,
+	Show: 150 * time.Millisecond, Shown: 350 * time.Millisecond, Shade: 150 * time.Millisecond}
+
+// A door's drawing acting under the pointer (PAGES.md 探索, 门): its moving
+// part goes to where it is drawn over DoorAct along Ease, and back over
+// DoorActBack; the pendulum's swing (DoorSwing) and the stamp's press
+// (DoorStamp) play once each, over DoorSwingFor and DoorStampFor.
+const (
+	DoorAct, DoorActBack       = 600 * time.Millisecond, 360 * time.Millisecond
+	DoorSwingFor, DoorStampFor = 1600 * time.Millisecond, 760 * time.Millisecond
+)
+
+// DoorSwing is the motion door's pendulum k of the way through its swing,
+// pushed from rest: its angle as a share of its widest, reached on the first
+// swing out, each swing after smaller, at rest again at the end.
+func DoorSwing(k float32) float32 {
+	if k <= 0 || k >= 1 {
+		return 0
+	}
+	return float32(math.Sin(3*math.Pi*float64(k)) * math.Pow(1-float64(k), 1.6) / doorSwingWidest)
+}
+
+// doorSwingWidest is sin(3πk)·(1−k)^1.6 at its widest, k ≈ 0.146.
+const doorSwingWidest = 0.7622
+
+// DoorStamp is how far down the brand door's stamp is, k of the way through
+// its press: down along Ease over the first quarter, a moment on the sheet,
+// lifted along Ease.
+func DoorStamp(k float32) float32 {
+	switch {
+	case k <= 0 || k >= 1:
+		return 0
+	case k < 0.26:
+		return Ease(k / 0.26)
+	case k < 0.34:
+		return 1
+	}
+	return 1 - Ease((k-0.34)/0.66)
+}

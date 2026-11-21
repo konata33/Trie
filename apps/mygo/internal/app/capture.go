@@ -70,18 +70,23 @@ type packItem struct {
 	progress float32
 	// base is the picture the app had of the page, first its first screen
 	// once taken, and shot that screen to show.
-	base, first *dotGrid
+	base, first *dotPic
 	shot        *ui.Bitmap
-	// When its first screen came, it was taken and it failed, as the frames
-	// saw them.
-	firstAt, takenAt, failedAt time.Time
-	cancel                     context.CancelFunc
-	pages                      *packPages // its card's page, read while the card is open
-	gone                       bool       // deleted, or abandoned as the app quits
+	// When the app's picture and its first screen came, it started, it was taken
+	// and it failed, as the frames saw them.
+	baseAt, firstAt, startedAt, takenAt, failedAt time.Time
+	// pct is how far it has come as its figures show it, since pctAt (percent).
+	pct    int
+	pctAt  time.Time
+	cancel context.CancelFunc
+	pages  *packPages // its card's page, read while the card is open
+	gone   bool       // deleted, or abandoned as the app quits
 	// filed: it has left the island for good, into 收藏 or sent away with it.
 	filed bool
-	// The first screen and the face were asked for (packShot, packFont).
-	shotAsked, fontAsked bool
+	// The first screen and the face were asked for (packShot, packFont); the
+	// app has a picture of the page, or it is on its way (takePage), so its
+	// dots wait on the window's ground rather than show grey first.
+	shotAsked, fontAsked, basing bool
 }
 
 // Where a pack's card grew out of, and goes back into: its thumbnail in the
@@ -113,13 +118,29 @@ type captureState struct {
 	copiedHome string
 	copyKbd    bool
 	// heldAt is when the island was last pointed at, or its card open: what
-	// was just taken stays CaptureLinger past it. away: 收起 sent the island off,
+	// was just taken stays CaptureLinger past it. away: 收进收藏 sent the island off,
 	// until nothing is being taken; focused: the keys were in it.
-	heldAt      time.Time
-	away        bool
-	focused     bool
-	hideHovered bool           // 收起 was pointed at in the frame before
-	files       []*captureFile // thumbnails on their way into 收藏
+	heldAt  time.Time
+	away    bool
+	focused bool
+	// wide, tall and markAt are the island's size and its mark's place as it last
+	// held something: going back into its point it keeps them, one whole, rather
+	// than closing round its mark first.
+	wide, tall, markAt float32
+	files              []*captureFile // thumbnails on their way into 收藏
+	pct                int            // the figures the island showed last, kept as they cross into the mark
+	// islandRect is the island as the frame before laid it out, in the window;
+	// homing the island on its way home into 收藏's tab, which then tells of
+	// what it took in (capture_post.go): of told, taken while it was away, since
+	// toldAt; tabPct and tabFill are the figures and the orbit it showed last.
+	// post is the note of a page that could not be taken while it was away.
+	islandRect ui.Rect
+	homing     *captureHoming
+	told       *packItem
+	toldAt     time.Time
+	tabPct     int
+	tabFill    float32
+	post       *capturePost
 	// scroll is the open card's page; lastY where it was in the frame before, and
 	// movedAt when it last moved, for the line that tells where it is.
 	scroll  ui.ScrollState
@@ -156,18 +177,22 @@ type captureFile struct {
 const (
 	thumbW, thumbH = 72, 45
 	islandTop      = 8
-	islandPad      = 4
+	islandPad      = 6
 	islandGap      = 4
 	islandShown    = 5  // thumbnails side by side; earlier ones stack behind the last
 	islandEdges    = 3  // the edges of the stacked ones that show
 	packsWarm      = 12 // the packs of earlier sessions whose first screens load at once
-	// 已复制 beside the thumbnails: its gap from them, and its room at the right.
-	islandNoteGap   = 10
+	// The island's right end: its status, how far the page being taken has come
+	// or the capture mark, 4 from the thumbnails and from the edge, wide enough
+	// for 100%; and 收进收藏, the width of an icon button, after it while the
+	// island is pointed at.
+	islandStatusW = 36
+	islandMarkGap = 4
+	islandHideW   = 28
+	// 已复制 after the mark: its gap from the mark's icon, and its room at the right.
+	islandNoteGap   = 8
 	islandNoteRight = 12
-	// 收起: a round button over the island's top-left corner, centred 4 in.
-	islandHide   = 20
-	islandHideAt = 4
-	cardW, cardH = 440, 275
+	cardW, cardH    = 440, 275
 )
 
 // loadPacks reads the packs kept from earlier sessions, their first screens
@@ -310,8 +335,8 @@ func (h *captureState) copiedBack() time.Duration {
 }
 
 // copiedNote is when the island says 已复制 for the pack just copied: from when
-// its card is back in its thumbnail, which loses its amber edge then, for
-// motion.Copied. Zero when nothing was copied.
+// its card is back in its thumbnail, for motion.Copied. Zero when nothing was
+// copied.
 func (h *captureState) copiedNote() (from, to time.Time) {
 	if h.copied.IsZero() {
 		return
@@ -322,6 +347,57 @@ func (h *captureState) copiedNote() (from, to time.Time) {
 	}
 	return from, from.Add(motion.Copied)
 }
+
+// packOpened is the share of the way a pack has come once its page has opened
+// (explore.TakePack's).
+const packOpened = 0.1
+
+// shown is how far it has come as it shows: its pack's share, which stands
+// still while the page opens, the first tenth of the way and up to 15 s, so
+// until then it creeps toward that tenth by the time gone (CaptureOpening);
+// it never goes back. A pack that failed keeps where it got to.
+func (it *packItem) shown(now time.Time) float32 {
+	switch it.state {
+	case packTaken:
+		return 1
+	case packWaiting:
+		return 0
+	}
+	p := it.progress
+	if p < packOpened && !it.startedAt.IsZero() {
+		end := now
+		if it.state == packFailed && !it.failedAt.IsZero() {
+			end = it.failedAt
+		}
+		t := end.Sub(it.startedAt).Seconds() / motion.CaptureOpening.Seconds()
+		p = max(p, packOpened*float32(1-math.Exp(-max(0, t))))
+	}
+	return p
+}
+
+// percent is how far it has come in hundredths, as its figures show it: they
+// move on at most every CapturePercent, so they read as steps rather than as a
+// counter running, and reach 100 only once it is taken.
+func (it *packItem) percent(c *ui.Context, now time.Time) int {
+	n := min(99, int(it.shown(now)*100))
+	if it.state == packTaken {
+		n = 100
+	}
+	switch wait := motion.CapturePercent - now.Sub(it.pctAt); {
+	case n <= it.pct:
+	case n == 100 || it.pctAt.IsZero() || wait <= 0:
+		it.pct, it.pctAt = n, now
+	default:
+		c.After(wait)
+	}
+	if it.state == packTaking {
+		c.After(motion.CapturePercent) // it creeps on with nothing told
+	}
+	return it.pct
+}
+
+// percentText is n hundredths as figures: 37%.
+func percentText(n int) string { return strconv.Itoa(n) + "%" }
 
 // packKey names what is kept of a pack apart from its folder, its picture in
 // 收藏 and its face: its folder and when it was taken, as a page captured
@@ -406,10 +482,11 @@ func (a *App) packTarget(rp *readerPage, art *library.Article) (link, name strin
 	return link, link
 }
 
-// packPicture is the picture the app already has of the page, for the dots'
-// first colours: a work's first screen, an article's picture. It reads it
-// when called, off the window's thread.
-func (a *App) packPicture(rp *readerPage, art *library.Article) func() image.Image {
+// packPicture is the picture the app already has of the page, as the dots'
+// first colours: a work's first screen; for an article, its proof, set from what
+// the reader has of it now (proofPic). It makes it when called, off the window's
+// thread.
+func (a *App) packPicture(rp *readerPage, art *library.Article) func() *dotPic {
 	if w := rp.work; w != nil {
 		data := w.Poster
 		if data == nil && len(w.Sections) > 0 {
@@ -419,35 +496,71 @@ func (a *App) packPicture(rp *readerPage, art *library.Article) func() image.Ima
 			return nil
 		}
 		raw := *data
-		return func() image.Image {
-			return decodeData(raw)
+		return func() *dotPic {
+			return gridOf(decodeData(raw))
 		}
 	}
-	if a.opt.Thumbs != nil {
-		return nil // the tests' stand-in has no pixels
+	p := proofPage{title: titleOf(art.Title), date: articleDate(art, false)}
+	if rp.r != nil {
+		p.blocks = rp.r.Body.Sketch(32)
 	}
-	id := art.ID
-	return func() image.Image {
-		img, _ := a.thumbImage(id, 0, 240, false)
-		return img
+	var icon string
+	if src := a.sourceOf(art); src != nil {
+		p.source = nameOf(src)
+		if src.Icon != nil {
+			icon = *src.Icon
+		}
 	}
+	// The library knows whether it has a picture: one without asks nothing of it.
+	id, pictures := art.ID, art.Preview != nil && art.Preview.HasImage && a.opt.Thumbs == nil // the tests' stand-in has no pixels
+	return func() *dotPic {
+		if pictures {
+			p.picture, _ = a.thumbImage(id, 0, 240, false)
+		}
+		p.mark = markOf(decodeData(icon))
+		return proofPic(p)
+	}
+}
+
+// markOf is a site's icon as the one colour it reads as from afar: the mean of
+// its opaque pixels; zero for none.
+func markOf(img image.Image) ui.Color {
+	if img == nil {
+		return ui.Color{}
+	}
+	b := img.Bounds()
+	var r, g, bl, n float64
+	for y := b.Min.Y; y < b.Max.Y; y += max(1, b.Dy()/24) {
+		for x := b.Min.X; x < b.Max.X; x += max(1, b.Dx()/24) {
+			cr, cg, cb, ca := img.At(x, y).RGBA()
+			if ca < 0x8000 {
+				continue
+			}
+			r, g, bl, n = r+float64(cr)/float64(ca), g+float64(cg)/float64(ca), bl+float64(cb)/float64(ca), n+1
+		}
+	}
+	if n == 0 {
+		return ui.Color{}
+	}
+	return ui.Color{R: uint8(255 * r / n), G: uint8(255 * g / n), B: uint8(255 * bl / n), A: 255}
 }
 
 // takePage captures page (an article's ID) at link, named name, its dots
 // first coloured by pic (nil for grey): it waits for the packs before it, and
 // when from is set, its thumbnail flies there from the button.
-func (a *App) takePage(page, link, name string, pic func() image.Image, from ui.Rect, now time.Time) *packItem {
+func (a *App) takePage(page, link, name string, pic func() *dotPic, from ui.Rect, now time.Time) *packItem {
 	h := &a.capture
 	it := &packItem{ID: h.folder(name, link), URL: link, Page: page, Name: name, Created: now}
 	h.items = append([]*packItem{it}, h.items...)
-	h.away = false // pressed again, the island comes back
+	// Pressed again, the island comes back, one island, the one on its way home
+	// gone; and the note goes into its tab.
+	h.away, h.homing = false, nil
+	h.foldPost(now)
 	if pic != nil {
+		it.basing = true
 		a.do(func() func() {
-			g := gridOf(pic())
-			if g == nil {
-				return nil
-			}
-			return func() { it.base = g }
+			g := pic()
+			return func() { it.base, it.basing = g, g != nil }
 		})
 	}
 	if from.W > 0 {
@@ -504,7 +617,9 @@ func (a *App) packTaken(it *packItem, p *explore.Pack, err error, dir string) {
 		}
 	case err != nil:
 		it.state, it.failed = packFailed, packFailure(err)
-		a.said = append(a.said, locales.CaptureDidFail(it.Name))
+		if !a.capture.away {
+			a.said = append(a.said, locales.CaptureDidFail(it.Name)) // out of sight, a notice says it
+		}
 	default:
 		it.state, it.progress = packTaken, 1
 		it.Screens, it.Images, it.Fonts, it.Cut = len(p.Screens), p.Images, p.Fonts, p.Cut
@@ -512,6 +627,9 @@ func (a *App) packTaken(it *packItem, p *explore.Pack, err error, dir string) {
 		a.packFont(it)
 		a.savePacks()
 		a.said = append(a.said, locales.CaptureDone(it.Name))
+		if a.capture.away {
+			a.capture.told, a.capture.toldAt = it, time.Time{} // 收藏's tab says so (tabNews)
+		}
 	}
 	a.nextPack()
 }
@@ -549,11 +667,12 @@ func (a *App) dropPack(it *packItem) {
 // retryPack takes a pack that failed again, as a new one in its place.
 func (a *App) retryPack(it *packItem, now time.Time) {
 	h := &a.capture
-	h.card = "" // its card goes back into the thumbnail, which breathes again
+	h.card = "" // its card goes back into the thumbnail, which waits to develop again
 	it.state, it.failed, it.progress, it.failedAt = packWaiting, "", 0, time.Time{}
+	it.startedAt, it.pct, it.pctAt = time.Time{}, 0, time.Time{}
 	it.ID = "" // its name is free again: it left no folder
 	it.ID, it.Created = h.folder(it.Name, it.URL), now
-	it.filed, h.away = false, false // taken again, it shows in the island again
+	it.filed, h.away, h.homing = false, false, nil // taken again, it shows in the island again, the only one
 	h.back = it.ID
 	a.nextPack()
 }
@@ -609,21 +728,39 @@ func filesIn(dir string, folder ...string) int {
 	return n
 }
 
-// hideIsland is 收起: the island goes back into its point with what it
-// holds; what is taken is filed into 收藏, whose tab lights, and what is still
-// being taken goes on out of sight.
-func (a *App) hideIsland(now time.Time) {
+// hideIsland is 收进收藏: the island itself goes home into 收藏's tab (putAway),
+// which tells from then on how what is still being taken goes on there.
+func (a *App) hideIsland(c *ui.Context, now time.Time) {
 	h := &a.capture
 	h.away, h.focused = true, false
 	for _, it := range h.last {
-		switch it.state {
-		case packTaken:
-			a.lights[favLight] = now
-			fallthrough
-		case packFailed:
+		if it.state == packTaken || it.state == packFailed {
 			it.filed = true
 		}
 	}
+	a.putAway(c, slices.Clone(h.last), now)
+	// Its way home takes over from where the island was, in this frame: the island is gone.
+	h.up = false
+	clear(h.slots)
+	clear(h.placed)
+}
+
+// onShelf tells whether the captures in 收藏 are what the window shows.
+func (a *App) onShelf() bool {
+	return a.page == (page{kind: "favorites"}) && a.fav != nil && a.fav.kind == captures
+}
+
+// showShelf goes to the captures in 收藏: the 拓本 block zoomed into, everything
+// shown.
+func (a *App) showShelf(c *ui.Context) {
+	fs := a.favs()
+	fs.query = ""
+	if a.page == (page{kind: "favorites"}) {
+		a.zoomTo(c, captures)
+		return
+	}
+	fs.kind, fs.place = captures, ""
+	a.goTo(c, page{kind: "favorites"}, motion.Side, nil)
 }
 
 // captureButton is 拓本 in the reader's bar, mirroring the page's pack: its
@@ -647,10 +784,15 @@ func (a *App) captureButton(c *ui.Context, rp *readerPage, art *library.Article)
 	tip, dev, lit := locales.CaptureTip(), float32(-1), false
 	if it != nil {
 		switch it.state {
-		case packWaiting, packTaking:
-			tip, dev = locales.CaptureTakingTip(), b.AnimateTo("dev", it.progress, motion.Develop)
+		case packWaiting:
+			tip, dev = locales.CaptureTakingTip(), 0
+		case packTaking:
+			// Its tip says how far it has come, as the island's figures do.
+			tip, dev = locales.CaptureTakingTip()+" "+percentText(it.percent(c, c.Now())), b.AnimateTo("dev", it.shown(c.Now()), motion.Develop)
 		case packTaken:
 			tip, lit = locales.CaptureReadyTip(), true
+		case packFailed:
+			tip = locales.CaptureFailedTip() // pressed, its card says what happened and offers 重试
 		}
 	}
 	copied := false
@@ -696,8 +838,8 @@ func (a *App) captureButton(c *ui.Context, rp *readerPage, art *library.Article)
 // and waiting, those that failed until they leave, and those just taken, for
 // CaptureLinger, or that long after the island was last held, unless copied. A
 // pack whose card grew out of it stays while that card is open or going back
-// into it, and after a copy while the island says so. Sent away (收起), it
-// shows only that.
+// into it, and after a copy while the island says so. Sent into 收藏
+// (收进收藏), it shows only that.
 func (a *App) islandItems(c *ui.Context) []*packItem {
 	h := &a.capture
 	now := c.Now()
@@ -733,7 +875,46 @@ func (a *App) islandItems(c *ui.Context) []*packItem {
 			out = append(out, it)
 		}
 	}
+	// From the left: those taken or failed, then those waiting, then the page
+	// being taken, next to its figures (islandRank); newest first within each.
+	slices.SortStableFunc(out, func(x, y *packItem) int { return islandRank(x) - islandRank(y) })
 	return out
+}
+
+// islandFront is which of items (islandItems, more than islandShown) show side
+// by side; the others stack behind. Those to wait for least go behind: the
+// earliest taken or failed first, then the latest to be taken of those
+// waiting; the one being taken, and the one just taken, always show.
+func islandFront(items []*packItem) []*packItem {
+	out := slices.Clone(items)
+	done := slices.IndexFunc(out, func(it *packItem) bool { return islandRank(it) > 0 }) // past the taken and failed, newest first
+	if done < 0 {
+		done = len(out)
+	}
+	for over := len(out) - islandShown; over > 0; over-- {
+		if done > 1 {
+			done--
+			out = slices.Delete(out, done, done+1) // the earliest taken
+			continue
+		}
+		at := done // the newest waiting
+		if at >= len(out) || out[at].state != packWaiting {
+			at = 0
+		}
+		out = slices.Delete(out, at, at+1)
+	}
+	return out
+}
+
+// islandRank is where a pack stands in the island, from the left.
+func islandRank(it *packItem) int {
+	switch it.state {
+	case packWaiting:
+		return 1
+	case packTaking:
+		return 2
+	}
+	return 0
 }
 
 // captureLayers are the island, the thumbnails flying into it and out of it into
@@ -742,14 +923,25 @@ func (a *App) captureLayers(c *ui.Context) {
 	h := &a.capture
 	now := c.Now()
 	busy := false
-	// The frames see when each pack's moments came; a pack that failed leaves after a while.
-	h.items = slices.DeleteFunc(h.items, func(it *packItem) bool {
+	// The frames see when each pack's moments came. Out of sight, 收藏's tab says
+	// what came of each, one that failed in a note under it; a pack that failed
+	// leaves the island after a while and stays in 收藏 until it is deleted or
+	// taken again.
+	for _, it := range h.items {
+		if it.base != nil && it.baseAt.IsZero() {
+			it.baseAt = now
+		}
 		if it.first != nil && it.firstAt.IsZero() {
 			it.firstAt = now
 		}
 		switch {
-		case it.state == packWaiting || it.state == packTaking:
+		case it.state == packWaiting:
 			busy = true
+		case it.state == packTaking:
+			busy = true
+			if it.startedAt.IsZero() {
+				it.startedAt = now
+			}
 		case it.state == packTaken && it.takenAt.IsZero():
 			it.takenAt = now
 			if h.away {
@@ -760,16 +952,18 @@ func (a *App) captureLayers(c *ui.Context) {
 			}
 		case it.state == packFailed && it.failedAt.IsZero():
 			it.failedAt = now
-			it.filed = it.filed || h.away
-		case it.state == packFailed && it.ID != h.card:
+			if h.away {
+				it.filed = true
+				a.postFailed(it, now)
+			}
+		case it.state == packFailed && !it.filed && it.ID != h.card:
 			if left := motion.CaptureFailedFor - now.Sub(it.failedAt); left > 0 {
 				c.After(left)
 			} else {
-				return true
+				it.filed = true
 			}
 		}
-		return false
-	})
+	}
 	// Sent away, the island stays away until it is down and nothing is being taken.
 	if h.away && !h.up && !busy {
 		h.away = false
@@ -811,14 +1005,16 @@ func (a *App) captureLayers(c *ui.Context) {
 			clear(h.placed)
 		}
 		a.captureFiles(c)
+		a.captureHoming(c)
+		a.capturePost(c)
 	})
 	a.packCard(c)
 }
 
 // captureFiles draw the thumbnails on their way from the island into 收藏's tab:
 // along a low arc, on Flight, as long as the way is (FlightFor), from 72
-// across to the tab's icon; landing, they light the tab. Under less motion
-// each fades where it was, and the tab lights as it is gone.
+// across to the tab's icon, each as it stands; landing, they light the tab.
+// Under less motion each fades where it was, and the tab lights as it is gone.
 func (a *App) captureFiles(c *ui.Context) {
 	h := &a.capture
 	now := c.Now()
@@ -852,15 +1048,8 @@ func (a *App) captureFiles(c *ui.Context) {
 		box := ui.Box(c.Key("file-"+f.it.ID)).Absolute().Left(float32(x-w/2)).Top(float32(y-ht/2)).Size(float32(w), float32(ht)).
 			Radius(float32(math.Max(2, 6*w/thumbW))).Background(theme.Window).ClipX().ClipY().Shadow(0, 8, 20, -8, theme.ShadowDialog).
 			Opacity(o).IgnoreInput(true).AccessHidden(true)
-		it := f.it
-		box.Children(func() {
-			if it.shot != nil {
-				ui.Image(c, it.shot).Absolute().Fill().Fit(ui.Cover)
-				return
-			}
-			d := developing{from: it.base, to: it.first, p: 1, shown: 1}
-			ui.Box(c).Absolute().Fill().Draw(func(p *ui.Painter, r ui.Rect) { paintDeveloping(p, r, d) })
-		})
+		it, still := f.it, f.still
+		box.Children(func() { thumbFace(c, it, now, still) })
 		live = append(live, f)
 		c.AnimationFrame()
 	}
@@ -895,8 +1084,7 @@ func (a *App) island(c *ui.Context, items []*packItem, on bool) {
 	}
 	h.up = true
 
-	// 收起 stands out past its corner: on it, the island counts as pointed at.
-	hovered := (isl.Hovered() || h.hideHovered) && !a.kbd
+	hovered := isl.Hovered() && !a.kbd
 	// Pointed at, or its card open, it holds what was just taken; the keys in it, Esc sends it away (shortcuts).
 	if hovered || h.card != "" && h.home == homeIsland {
 		h.heldAt = now
@@ -906,16 +1094,19 @@ func (a *App) island(c *ui.Context, items []*packItem, on bool) {
 	if !still {
 		s = 1 + 0.12*isl.AnimateTo("hover", map[bool]float32{true: 1}[hovered], motion.Follow)
 	}
-	n := len(items)
+	all, n := items, len(items)
 	cols, edges := min(n, islandShown), 0
 	if n > islandShown {
-		edges, items = min(n-islandShown, islandEdges), items[:islandShown]
+		// The rest stack behind the first shown, their edges showing at its left.
+		edges, items = min(n-islandShown, islandEdges), islandFront(items)
 	}
 	tw, th := thumbW*s, thumbH*s
-	w := 2*islandPad + float32(cols)*tw + float32(max(0, cols-1))*islandGap + 2*float32(edges)
+	thumbsW := islandPad + float32(cols)*tw + float32(max(0, cols-1))*islandGap + 2*float32(edges)
+	markX := thumbsW + islandMarkGap
+	w := markX + islandStatusW + islandMarkGap
 	ht := 2*islandPad + th
 	// Just copied, once its card is back in its thumbnail, the island grows by a
-	// word at the right to say so, and gives it back.
+	// word after the mark to say so, and gives it back.
 	note := locales.CommonCopied()
 	from, to := h.copiedNote()
 	noting := h.copiedHome == homeIsland && !now.Before(from) && now.Before(to) &&
@@ -923,10 +1114,20 @@ func (a *App) island(c *ui.Context, items []*packItem, on bool) {
 	if now.Before(from) {
 		c.After(from.Sub(now))
 	}
-	thumbsW := w - islandPad
+	noteX := markX + islandStatusW/2 + 8 + islandNoteGap
+	// 收进收藏 comes after the status while it is pointed at or the keys are in it.
+	open := on && (hovered || h.focused) && !noting
 	if noting {
 		nw, _ := c.MeasureText(0, ui.Span{Text: note, Size: theme.Body})
-		w += islandNoteGap + nw + islandNoteRight - islandPad
+		w = noteX + nw + islandNoteRight
+	} else if open {
+		w += islandHideW
+	}
+	var shown float32
+	if a.kbd || still {
+		shown = isl.Jump("hide", map[bool]float32{true: 1}[open])
+	} else {
+		shown = isl.AnimateTo("hide", map[bool]float32{true: 1}[open], a.ease(motion.Hover))
 	}
 	var said float32
 	if a.kbd {
@@ -940,6 +1141,11 @@ func (a *App) island(c *ui.Context, items []*packItem, on bool) {
 		}
 		return isl.AnimateTo(key, v, motion.Follow)
 	}
+	if on {
+		h.wide, h.tall, h.markAt = w, ht, markX
+	} else if h.wide > 0 {
+		w, ht, markX = h.wide, h.tall, h.markAt
+	}
 	w, ht = size("w", w), size("h", ht)
 	area := a.area
 	if area.W <= 0 {
@@ -947,7 +1153,8 @@ func (a *App) island(c *ui.Context, items []*packItem, on bool) {
 		area = ui.Rect{W: vw}
 	}
 	left := float32(math.Round(float64(area.X + area.W/2 - w/2)))
-	isl.Left(left).Top(islandTop).Width(w).Height(ht).Radius(10).Background(theme.Elevated).
+	h.islandRect = ui.Rect{X: left, Y: islandTop, W: w, H: ht}
+	isl.Left(left).Top(islandTop).Width(w).Height(ht).Radius(12).Background(theme.Elevated).
 		InsetShadow(0, 0, 0, 1, theme.Line).Shadow(0, 0, 0, 1, theme.ShadowEdge).Shadow(0, 12, 32, 0, theme.ShadowFloat)
 	if still {
 		isl.Opacity(k)
@@ -956,41 +1163,31 @@ func (a *App) island(c *ui.Context, items []*packItem, on bool) {
 		isl.TransformOrigin(0.5, -islandTop/ht).Scale(k, k).Opacity(min(1, 4*k))
 	}
 	a.control(isl)
-	// 收起 shows while it is pointed at or the keys are in it, and fades as it goes.
-	showHide := float32(0)
-	if on && (hovered || h.focused) {
-		showHide = 1
-	}
-	var hide float32
-	if a.kbd || still {
-		hide = isl.Jump("hide", showHide)
-	} else {
-		hide = isl.AnimateTo("hide", showHide, a.ease(motion.Hover))
-	}
 	built := map[string]bool{}
 	isl.Children(func() {
-		// The packs before the fifth stack behind it, their edges showing.
-		last := islandPad + tw/2 + float32(len(items)-1)*(tw+islandGap)
+		// The earliest stack behind the first shown, their edges showing.
+		first := islandPad + 2*float32(edges) + tw/2
 		for e := edges; e >= 1; e-- {
-			ui.Box(c.Key(e)).Absolute().Left(last-thumbW/2+2*float32(e)).Top(islandPad+th/2-thumbH/2).Size(thumbW, thumbH).
+			ui.Box(c.Key(e)).Absolute().Left(first-thumbW/2-2*float32(e)).Top(islandPad+th/2-thumbH/2).Size(thumbW, thumbH).
 				TransformOrigin(0.5, 0.5).Scale(s, s).Radius(6).Background(theme.Window.Mix(theme.Elevated, 0.25*float32(e-1))).
 				AccessHidden(true).IgnoreInput(true)
 		}
 		for i, it := range items {
-			cx := islandPad + tw/2 + float32(i)*(tw+islandGap)
+			cx := first + float32(i)*(tw+islandGap)
 			cy := islandPad + th/2
 			h.slots[it.ID] = ui.Rect{X: left + cx - tw/2, Y: islandTop + cy - th/2, W: tw, H: th}
 			built[it.ID] = true
 			a.packThumb(c, it, cx, cy, s, hovered, now)
 		}
+		a.islandStatus(c, all, markX, ht, noting, now)
+		if on {
+			a.islandHide(c, markX+islandStatusW, ht, shown, now)
+		}
 		if said > 0.01 {
-			ui.Row(c.Key("note")).Absolute().Left(thumbsW + islandNoteGap).Top(0).Height(ht).AlignItems(ui.Center).
+			ui.Row(c.Key("note")).Absolute().Left(noteX).Top(0).Height(ht).AlignItems(ui.Center).
 				Opacity(said * said).IgnoreInput(true).AccessHidden(true).Children(func() {
 				ui.Text(c, note).FontSize(theme.Body).TextColor(theme.Text).NoWrap()
 			})
-		}
-		if on {
-			a.islandHideButton(c, hide, now)
 		}
 	})
 	for id := range h.slots {
@@ -999,20 +1196,64 @@ func (a *App) island(c *ui.Context, items []*packItem, on bool) {
 		}
 	}
 	h.placed = built
+	// Esc with the keys in it sends it away (收进收藏), at once. The island asks
+	// for it, around the focus: the tip of the thumbnail the keys are on, the
+	// layer on top, would take the first Esc from the page.
+	if on && isl.Shortcut(0, ui.KeyEscape) {
+		a.hideIsland(c, now)
+	}
 }
 
-// islandHideButton is 收起, a round button over the island's top-left corner,
-// shown as far as shown goes: it sends the island away (hideIsland).
-func (a *App) islandHideButton(c *ui.Context, shown float32, now time.Time) {
+// islandStatus is the island's right end, at x: how far the page being taken
+// has come, in hundredths (percent), and, a moment after one is taken, its
+// 100%; else the capture mark, lit once all the island holds are taken. Just
+// copied, the mark's dots flow into a check while the island says so. The
+// figures and the mark cross where they are.
+func (a *App) islandStatus(c *ui.Context, items []*packItem, x, ht float32, copied bool, now time.Time) {
 	h := &a.capture
-	at := float32(islandHideAt - islandHide/2)
-	b := ui.ButtonBase(c.Key("hide")).Label(locales.CaptureHide()).Absolute().Left(at).Top(at).Size(islandHide, islandHide).
-		Radius(islandHide/2).Center().Background(theme.Elevated).InsetShadow(0, 0, 0, 1, theme.Line).Shadow(0, 0, 0, 1, theme.ShadowEdge).
-		Shadow(0, 4, 12, 0, theme.ShadowFloat).FocusRing(false).ZIndex(2)
-	if shown < 0.5 && !b.Focused() {
-		b.IgnoreInput(true) // not yet there: the pointer passes to what is under it
+	var at *packItem
+	lit := len(items) > 0
+	for _, it := range items {
+		switch {
+		case it.state == packTaking && at == nil,
+			it.state == packTaken && now.Sub(it.takenAt) < motion.CaptureRise+motion.CapturePercent:
+			at = it
+		}
+		lit = lit && it.state == packTaken
 	}
-	h.hideHovered = b.Hovered()
+	if at != nil && !copied {
+		h.pct = at.percent(c, now)
+		if at.state == packTaken {
+			c.After(motion.CaptureRise + motion.CapturePercent - now.Sub(at.takenAt))
+		}
+	}
+	slot := ui.Box(c.Key("status")).Absolute().Left(x).Top(0).Size(islandStatusW, ht).IgnoreInput(true).AccessHidden(true)
+	figures := slot.AnimateTo("figures", map[bool]float32{true: 1}[at != nil && !copied], a.ease(motion.SwapIn))
+	slot.Children(func() {
+		if figures > 0.01 {
+			ui.Row(c.Key("figures")).Absolute().Fill().AlignItems(ui.Center).Justify(ui.Center).Opacity(figures).Children(func() {
+				ui.Text(c, percentText(h.pct)).FontSize(theme.Body).FontFeatures(theme.Numbers).TextColor(theme.Text).NoWrap()
+			})
+		}
+		if figures < 0.99 {
+			box := ui.Box(c.Key("mark")).Absolute().Left((islandStatusW-16)/2).Top((ht-16)/2).Size(16, 16).Opacity(1 - figures)
+			dots := captureDots(-1, lit, theme.Icon)
+			if flow := a.flow(c, box, copied); flow > 0 {
+				dots = flowed(dots, flow)
+			}
+			box.Draw(func(p *ui.Painter, r ui.Rect) { paintDots(p, r, dots, dotLight{}, 0) })
+		}
+	})
+}
+
+// islandHide is 收进收藏 at x, shown as far as shown goes: 收藏's own icon, for
+// that is where it sends what the island holds (hideIsland).
+func (a *App) islandHide(c *ui.Context, x, ht, shown float32, now time.Time) {
+	b := ui.ButtonBase(c.Key("hide")).Label(locales.CaptureHide()).Absolute().Left(x).Top(islandPad).
+		Size(islandHideW, ht-2*islandPad).Radius(6).Center().FocusRing(false)
+	if shown < 0.5 && !b.Focused() {
+		b.IgnoreInput(true) // not there yet: the pointer passes to what is under it
+	}
 	if shown < 0.999 {
 		b.Opacity(shown)
 	}
@@ -1025,17 +1266,17 @@ func (a *App) islandHideButton(c *ui.Context, shown float32, now time.Time) {
 	if b.FocusVisible() {
 		b.FocusRing(true)
 	}
-	b.Children(func() { a.dotIcon(c, b, "close", 12, iconLook{ink: fg}) })
+	b.Children(func() { a.dotIcon(c, b, "favorites", 16, iconLook{ink: fg}) })
 	a.tip(c, b, locales.CaptureHide(), false)
 	a.control(b)
 	if b.Clicked() {
-		a.hideIsland(now)
+		a.hideIsland(c, now)
 	}
 }
 
 // packThumb is it's thumbnail at (cx, cy) in the island, scaled by s: its
 // picture developing, the first screen rising out of the dots once taken, a
-// light passing over it, then the amber edge while it is not yet used.
+// light passing over it. Its tip says whose it is and how it stands.
 func (a *App) packThumb(c *ui.Context, it *packItem, cx, cy, s float32, hovered bool, now time.Time) {
 	h := &a.capture
 	still := a.still(c)
@@ -1063,9 +1304,14 @@ func (a *App) packThumb(c *ui.Context, it *packItem, cx, cy, s float32, hovered 
 	if s != 1 {
 		b.Scale(s, s)
 	}
-	// Pointed at, the one pointed at is bright and the others a step back.
+	// Pointed at, the one pointed at is bright and the others a step back; one
+	// waiting its turn stands a step back until it starts.
 	o := float32(1)
-	if hovered && !b.Hovered() {
+	switch {
+	case hovered && b.Hovered():
+	case it.state == packWaiting:
+		o = 0.6
+	case hovered:
 		o = 0.8
 	}
 	o = b.AnimateTo("o", o, a.ease(motion.Hover))
@@ -1081,8 +1327,9 @@ func (a *App) packThumb(c *ui.Context, it *packItem, cx, cy, s float32, hovered 
 			delete(h.fresh, it.ID)
 		}
 	}
-	if slices.ContainsFunc(h.flights, func(f *captureFlight) bool { return f.id == it.ID }) {
-		o = 0 // it is on its way here
+	if slices.ContainsFunc(h.flights, func(f *captureFlight) bool { return f.id == it.ID }) ||
+		slices.ContainsFunc(h.files, func(f *captureFile) bool { return f.it == it }) {
+		o = 0 // it is on its way here, or away into 收藏
 	}
 	if o < 1 {
 		b.Opacity(o)
@@ -1090,28 +1337,7 @@ func (a *App) packThumb(c *ui.Context, it *packItem, cx, cy, s float32, hovered 
 	if b.FocusVisible() {
 		b.FocusRing(true)
 	}
-	// Taken and not used: the amber edge, lit as the light passes. Just copied,
-	// it holds until its card is back in it.
-	ring := it.state == packTaken && !it.Used
-	if from, _ := h.copiedNote(); it.ID == h.copiedID && now.Before(from) {
-		ring = true
-		c.After(from.Sub(now))
-	}
-	if ring {
-		if wait := motion.CaptureRise + motion.CaptureSweep/2 - now.Sub(it.takenAt); wait > 0 && !still {
-			ring = false
-			c.After(wait)
-		}
-	}
-	var lit float32
-	if fresh {
-		lit = b.Jump("ring", map[bool]float32{true: 1}[ring])
-	} else {
-		lit = b.AnimateTo("ring", map[bool]float32{true: 1}[ring], motion.Fade(motion.Light))
-	}
-	if lit > 0.001 {
-		b.Shadow(0, 0, 0, 1, theme.Accent.Alpha(lit))
-	}
+	a.tip(c, b, label, false)
 	d := a.developingOf(c, b, it, now, still)
 	rise, sweep := a.risen(c, it, now, still)
 	b.Children(func() {
@@ -1138,20 +1364,33 @@ func (a *App) packThumb(c *ui.Context, it *packItem, cx, cy, s float32, hovered 
 	}
 }
 
-// developingOf is how it's picture stands in e this frame: its progress
-// followed on the follow spring, its colours going over to the first
-// screen's once it comes, falling once it failed.
+// developingOf is how it's picture stands in e this frame: how far it has come
+// (shown), followed on the follow spring (devAt).
 func (a *App) developingOf(c *ui.Context, e ui.Element, it *packItem, now time.Time, still bool) developing {
-	target := it.progress
-	if it.state == packTaken {
-		target = 1
+	d := devAt(it, e.AnimateTo("p", it.shown(now), motion.Develop), now, still)
+	if it.base != nil && d.baseIn < 1 || it.first != nil && d.recolour < 1 {
+		c.AnimationFrame()
 	}
-	d := developing{from: it.base, to: it.first, p: e.AnimateTo("p", target, motion.Develop), shown: 1, still: still}
+	return d
+}
+
+// devAt is it's picture developed as far as p: its dots going from grey (the
+// ground, while the app's picture is on its way) to that picture as it comes,
+// and over to its first screen's
+// colours once that comes, each over CaptureRecolour; falling once it failed.
+func devAt(it *packItem, p float32, now time.Time, still bool) developing {
+	d := developing{from: it.base, to: it.first, ground: theme.CaptureDot, p: p, shown: 1, still: still}
+	if it.basing {
+		d.ground = theme.Window // its picture is a moment away: it waits unseen rather than flash grey
+	}
+	if it.base != nil {
+		d.baseIn = 1
+		if !it.baseAt.IsZero() {
+			d.baseIn = motion.Ease(unit(float32(now.Sub(it.baseAt)) / float32(motion.CaptureRecolour)))
+		}
+	}
 	if it.first != nil {
 		d.recolour = motion.Ease(unit(float32(now.Sub(it.firstAt)) / float32(motion.CaptureRecolour)))
-		if d.recolour < 1 {
-			c.AnimationFrame()
-		}
 	}
 	if it.state == packFailed {
 		d.failed = it.failedAt
@@ -1208,10 +1447,12 @@ func (a *App) captureFlights(c *ui.Context) {
 		y := (1-k)*(1-k)*y0 + 2*(1-k)*k*my + k*k*y1
 		w := float64(f.from.W) + float64(to.W-f.from.W)*k
 		ht := w * thumbH / thumbW
-		d := developing{from: it.base, to: it.first, p: it.progress, shown: 1}
+		d := devAt(it, it.shown(now), now, false)
 		ui.Box(c.Key("fly-"+f.id)).Absolute().Left(float32(x-w/2)).Top(float32(y-ht/2)).Size(float32(w), float32(ht)).
-			Radius(float32(math.Max(2, 6*w/thumbW))).Background(theme.Window).Shadow(0, 8, 20, -8, theme.ShadowDialog).
-			IgnoreInput(true).AccessHidden(true).Draw(func(p *ui.Painter, r ui.Rect) { paintDeveloping(p, r, d) })
+			Radius(float32(math.Max(2, 6*w/thumbW))).Background(theme.Window).ClipX().ClipY().Shadow(0, 8, 20, -8, theme.ShadowDialog).
+			IgnoreInput(true).AccessHidden(true).Children(func() {
+			ui.Box(c).Absolute().Fill().Draw(func(p *ui.Painter, r ui.Rect) { paintDeveloping(p, r, d) })
+		})
 		live = append(live, f)
 		c.AnimationFrame()
 	}
@@ -1321,6 +1562,26 @@ func (a *App) packCardView(c *ui.Context, it *packItem) {
 	}
 	tools = append(tools, tool{key: "delete", icon: "trash", label: locales.CommonDelete(), tip: locales.CommonDelete(), danger: true,
 		press: func() { a.dropPack(it) }})
+	// While it is being taken, how far it has come stands where 复制 will be (排队中
+	// while it waits), the tools to its left; it gives way to 复制 as the first
+	// screen rises.
+	share, shareW := "", float32(0)
+	switch {
+	case it.state == packTaking:
+		share = percentText(it.percent(c, now))
+	case it.state == packWaiting:
+		share = locales.CaptureQueued()
+	case it.state == packTaken && rise < 1 && !still:
+		share = percentText(100)
+	}
+	toolsRight := float32(cardToolsRight)
+	if share != "" {
+		shareW, _ = c.MeasureText(0, ui.Span{Text: share, Size: theme.Body})
+		shareW = max(32, shareW)
+		if it.state != packTaken {
+			toolsRight += shareW + 2
+		}
+	}
 
 	card.Children(func() {
 		if rise < 1 || it.shot == nil {
@@ -1372,7 +1633,7 @@ func (a *App) packCardView(c *ui.Context, it *packItem) {
 
 		// The words: the name, in the page's own face when it has one for it, level
 		// with the tools.
-		words := ui.Column(c.Key("words")).Absolute().Left(20).Bottom(cardWordsBottom).Right(cardToolsRight + float32(len(tools))*cardToolStep + 12).
+		words := ui.Column(c.Key("words")).Absolute().Left(20).Bottom(cardWordsBottom).Right(toolsRight + float32(len(tools))*cardToolStep + 12).
 			Gap(cardWordsGap).IgnoreInput(true)
 		words.Children(func() {
 			name := ui.Text(c, it.Name).FontSize(theme.Subtitle).LineHeight(26.0 / 20).TextColor(theme.Text).SingleLine().Ellipsis("…")
@@ -1389,10 +1650,23 @@ func (a *App) packCardView(c *ui.Context, it *packItem) {
 			a.leafLine(c, it, k, now)
 		}
 
+		if share != "" {
+			o := float32(1)
+			if it.state == packTaken {
+				o = 1 - rise
+			}
+			ui.Row(c.Key("share")).Absolute().Right(cardToolsRight).Bottom(10).Height(32).Width(shareW).Justify(ui.Center).AlignItems(ui.Center).
+				Opacity(o).IgnoreInput(true).AccessHidden(true).Children(func() {
+				ui.Text(c, share).FontSize(theme.Body).FontFeatures(theme.Numbers).TextColor(theme.Text).NoWrap()
+			})
+		}
 		// The tools, the first at the right; the others come in one after another.
 		for i, t := range tools {
 			b := a.cardTool(c, t.key, t.icon, t.label, t.tip, t.lit, t.done, t.danger)
-			b.Absolute().Right(cardToolsRight + float32(i)*cardToolStep).Bottom(10)
+			b.Absolute().Right(toolsRight + float32(i)*cardToolStep).Bottom(10)
+			if t.always && share != "" && it.state == packTaken {
+				b.Opacity(rise) // 复制 comes in as the figures go
+			}
 			if !t.always {
 				o := unit((k - 0.15*float32(i-1)) / 0.85)
 				if b.FocusVisible() {

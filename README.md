@@ -8,7 +8,7 @@
 
 ![Trie's Favourites page: kept design work from Fonts In Use, Awwwards and Behance, with followed writers and sites in the sidebar](docs/images/favorites-en.jpg)
 
-Trie is an open-source RSS reader for the Mac that comes already filled: more than sixty hand-picked indie blogs, design writers and design galleries, all readable before you subscribe. Articles open as clean, structured text. Design work opens with its screen recording, screenshots and colour palette. When something is worth borrowing, Trie captures the page as it is, in a folder your coding agent can work from.
+Trie is an open-source RSS reader for the Mac that comes already filled: more than fifty hand-picked indie blogs, design writers and design galleries, all readable before you subscribe. Articles open as clean, structured text. Design work opens with its screen recording, screenshots and colour palette. When something is worth borrowing, Trie captures the page as it is, in a folder your coding agent can work from.
 
 ## Why Trie
 

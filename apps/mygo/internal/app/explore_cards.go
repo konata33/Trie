@@ -4,6 +4,7 @@ import (
 	"image"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -71,21 +72,6 @@ func band(c *ui.Context, top, h, rise float32, pic *exPic, y, pw, ph float32, ra
 	bandOver(c, bandKey{w: pw, h: h, top: top, rise: rise, y: y, ph: ph}, pic, radius)
 }
 
-// bandAtFoot is band baked for g, held at the foot of its box however tall
-// the box is: in a frame that flies, it goes with the picture.
-func bandAtFoot(c *ui.Context, g bandKey, pic *exPic, radius float32) {
-	var box ui.Element
-	if bmp := pic.band(g); bmp != nil {
-		box = ui.Image(c, bmp).Fit(ui.FillBox)
-	} else {
-		box = ui.Box(c).LinearGradient(bandScrim(min(1, g.rise/g.h)))
-	}
-	box.Absolute().Left(0).Right(0).Bottom(0).Height(g.h).IgnoreInput(true).AccessHidden(true)
-	if radius > 0 {
-		box.Radius(0, 0, radius, radius)
-	}
-}
-
 // bandOver is band baked for g.
 func bandOver(c *ui.Context, g bandKey, pic *exPic, radius float32) {
 	if g.h <= 0 {
@@ -108,20 +94,29 @@ func bandOver(c *ui.Context, g bandKey, pic *exPic, radius float32) {
 // 移焦): from 0.2 and 3 out of focus as it shows, clear once seven tenths of
 // it is in; it follows the scroll.
 func (a *App) intoView(e ui.Element, dy float32) {
-	b := e.LayoutBounds()
-	if b.H <= 0 {
-		return
-	}
-	// dy is how far the card is drawn below where it is laid out (the middle column's half card).
-	bottom := a.area.Y + a.area.H
-	k := min(1, max(0, (bottom-b.Y-dy)/(0.7*b.H)))
+	k := a.seenOf(e, dy)
 	if k >= 1 {
 		return
 	}
-	e.Opacity(0.2 + 0.8*k)
-	if blur := 3 * (1 - k); blur > 0.05 {
+	opacity, blur := seenLook(k)
+	e.Opacity(opacity)
+	if blur > 0.05 {
 		e.Blur(blur)
 	}
+}
+
+// seenLook is the opacity and the blur of a card k of the way into view.
+func seenLook(k float32) (opacity, blur float32) { return 0.2 + 0.8*k, 3 * (1 - k) }
+
+// seenOf is how far a card has come into view for intoView, 1 once seven
+// tenths of it is in; dy is how far it is drawn below where it is laid out
+// (the middle column's half card).
+func (a *App) seenOf(e ui.Element, dy float32) float32 {
+	b := e.LayoutBounds()
+	if b.H <= 0 {
+		return 1
+	}
+	return min(1, max(0, (a.area.Y+a.area.H-b.Y-dy)/(0.7*b.H)))
 }
 
 // --- The design room's front page: the newest works in turn, and the
@@ -868,8 +863,12 @@ func (a *App) siteCard(c *ui.Context, e *explore.Entry, w, h float32, middle boo
 			ui.Column(c.Key("words")).Absolute().Left(16).Right(16).Bottom(14).Gap(2).Children(func() {
 				ui.Row(c.Key("name")).Gap(8).AlignItems(ui.Center).Height(20).Children(func() {
 					a.exFace(c, e, 20, false, 11)
+					// The name before the address: the address shows only whole, beside a
+					// name that fits, and not when the name is the address itself.
 					ui.Text(c, e.Name).FontSize(theme.Item).LineHeight(20.0 / 15).FontWeight(600).TextColor(theme.Text).SingleLine().Shrink(1)
-					ui.Text(c, e.Host).FontSize(theme.Label).TextColor(theme.Text2).Shrink(0).NoWrap()
+					if room := w - 32 - 20 - 8 - dotsW(shown, gallery); !sameHost(e.Name, e.Host) && textW(c, e.Name, theme.Item, 600)+8+textW(c, e.Host, theme.Label, 0) <= room {
+						ui.Text(c, e.Host).FontSize(theme.Label).TextColor(theme.Text2).Shrink(0).NoWrap()
+					}
 					if !gallery && shown != nil && len(shown.dots) > 0 {
 						ui.Box(c).Grow(1)
 						ui.Row(c.Key("dots")).Gap(4).Padding(0, 0, 0, 8).Children(func() {
@@ -1240,4 +1239,27 @@ func hexOf(c ui.Color) string {
 		b[1+2*i], b[2+2*i] = digits[v>>4], digits[v&15]
 	}
 	return string(b)
+}
+
+// textW is how wide text is set in one line at size and weight.
+func textW(c *ui.Context, text string, size float32, weight int) float32 {
+	w, _ := c.MeasureText(0, ui.Span{Text: text, Size: size, Weight: weight})
+	return w
+}
+
+// dotsW is how wide a site card's palette is beside its name, with the gap
+// before it; none on a gallery's card.
+func dotsW(shown *exPic, gallery bool) float32 {
+	if gallery || shown == nil || len(shown.dots) == 0 {
+		return 0
+	}
+	n := float32(len(shown.dots))
+	return 8 + 8 + n*8 + (n-1)*4
+}
+
+// sameHost reports whether a site's name is only its address (pentagram.com
+// for pentagram.com), told apart from www. and case.
+func sameHost(name, host string) bool {
+	trim := func(s string) string { return strings.TrimPrefix(strings.ToLower(strings.TrimSpace(s)), "www.") }
+	return trim(name) == trim(host)
 }

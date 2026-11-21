@@ -2,8 +2,6 @@ package app
 
 import (
 	"strconv"
-	"time"
-	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
 
@@ -20,10 +18,10 @@ import (
 func (a *App) pressing(e ui.Element) bool { return e.Pressed() && !a.kbd }
 
 // give shrinks a card or a passage the pointer presses a little, from the
-// press on (DESIGN.md 按下就有反应).
+// press on (DESIGN.md 按下就有反应); under less motion it stays its size.
 func (a *App) give(e ui.Element, scale float32) {
 	p := ui.Pose{}
-	if e.Pressed() && !a.kbd {
+	if e.Pressed() && !a.kbd && !a.lessMotion {
 		p.Scale = scale
 	}
 	e.AnimatePose(p, ui.Animation{Duration: motion.Press, Ease: motion.Ease})
@@ -83,7 +81,6 @@ const (
 type btnOpt struct {
 	kind     btnKind
 	small    bool
-	inset    bool // in a panel: the loop stays inside the button
 	loading  bool
 	disabled bool
 	key      any
@@ -93,91 +90,72 @@ type btnOpt struct {
 	words func(color ui.Color, weight int)
 }
 
-// button is 一笔圈出 (DESIGN.md Buttons): the words alone at rest; under
-// the pointer one hand-drawn loop sweeps round them from the upper left,
-// drawn at once by the keyboard's focus in the focus colour. Primary and
-// danger keep theirs drawn.
+// button is a pill (DESIGN.md Buttons), as the subscribe pill is: primary
+// and danger in their colour, the words dark and heavier; secondary on the
+// quiet ground the pill has once subscribed; ghost the words alone, the
+// ground showing under the pointer. Pointed at, the ground goes up a step,
+// pressed another; the keyboard's focus is the focus ring.
 func (a *App) button(c *ui.Context, label string, o btnOpt) ui.Element {
 	key := o.key
 	if key == nil {
 		key = "btn:" + label
 	}
-	b := ui.ButtonBase(c.Key(key)).Label(label).Height(32).Padding(0, 12).Radius(6).AlignItems(ui.Center).Justify(ui.Center).
-		FontSize(theme.Body).LineHeight(16.0 / 13).Shrink(0).FocusRing(false)
-	color, weight := theme.Text, 400
-	switch o.kind {
-	case primary, danger:
-		b.Padding(0, 16)
-		weight = 600
-	case ghost:
-		b.Padding(0, 8)
-		color = theme.Text2
+	h, pad, size := float32(32), float32(16), float32(theme.Body)
+	if o.kind == ghost {
+		pad = 12
 	}
 	if o.small {
-		b.Height(24).Padding(0, 8).FontSize(theme.Label)
+		h, pad, size = 24, 10, theme.Label
 	}
-	still := o.disabled || o.loading
+	b := ui.ButtonBase(c.Key(key)).Label(label).Height(h).Padding(0, pad).Radius(h / 2).AlignItems(ui.Center).Justify(ui.Center).
+		FontSize(size).LineHeight(16.0 / 13).Shrink(0).FocusRing(false)
+	if o.small {
+		b.LineHeight(16.0 / 12)
+	}
+	busy := o.disabled || o.loading
 	if o.disabled {
 		b.Disabled(true).Opacity(0.4)
 	}
 	if o.loading {
 		b.Busy(true)
 	}
-	hover := b.Hovered() && !still
-	down := a.pressing(b) && !still
-	focus := b.FocusVisible()
-	if o.kind == ghost && (hover || down) {
-		color = theme.Text
-	}
-	kept := o.kind == primary || o.kind == danger
-	ink := theme.Text2
-	switch {
-	case focus:
-		ink = theme.Focus
-	case o.kind == primary:
-		ink = theme.Accent
-	case o.kind == danger:
-		ink = theme.Danger
-	case down:
-		ink = theme.Text // pressed, the loop goes up a step
-	}
-	draw := float32(0)
-	if kept && !o.loading || hover || focus {
-		draw = 1
-	}
-	var anim ui.Animation
-	switch {
-	case focus || a.kbd || a.still(c) || kept:
-		anim = ui.Animation{Duration: time.Nanosecond}
-	case draw == 1:
-		anim = ui.Animation{Duration: motion.InkDraw, Ease: motion.Ease}
-	default:
-		anim = ui.Animation{Duration: motion.InkUndraw, Ease: motion.Ease}
-	}
-	drawn := b.AnimateTo("ink", draw, anim)
-	gone := b.AnimateTo("gone", map[bool]float32{true: 1, false: 0}[o.loading], ui.Animation{Duration: motion.InkGone, Ease: motion.Ease})
-	inkColor := b.AnimateColor("inkColor", ink, a.ease(motion.Hover))
-	textColor := b.AnimateColor("color", color, a.ease(motion.Hover))
-	n := utf8.RuneCountInString(label)
-	loop := inkLoops()[map[bool]int{true: 0, false: map[bool]int{true: 1, false: 2}[n <= 4]}[n <= 2]]
-	return b.Children(func() {
-		if drawn > 0.001 && gone < 0.999 {
-			l := ui.Image(c, loop).Fit(ui.FillBox).Absolute().IgnoreInput(true).TextColor(inkColor)
-			inX, inY := float32(-9), float32(-5)
-			if o.small {
-				inX, inY = -7, -4
-			}
-			if o.inset {
-				inX, inY = 0, 0
-			}
-			l.Left(inX).Right(inX).Top(inY).Bottom(inY)
-			if sweep := min(1, drawn*380/360); sweep < 1 {
-				l.MaskConicGradient(ui.ConicGradient{Angle: -70, Stops: []ui.GradientStop{{Color: theme.Text, At: 0}, {Color: theme.Text, At: sweep}, {Color: ui.Transparent, At: sweep}}})
-			}
-			if gone > 0 {
-				l.Opacity(1-gone).TransformOrigin(0.5, 0.5).Scale(1-0.6*gone, 1-0.6*gone)
-			}
+	hover := b.Hovered() && !busy
+	down := a.pressing(b) && !busy
+	ground, color, weight := theme.Selected, theme.Text, 400
+	switch o.kind {
+	case primary, danger:
+		ground, color, weight = theme.Accent, theme.OnAccent, 600
+		if o.kind == danger {
+			ground = theme.Danger
 		}
+		switch {
+		case down:
+			ground = brighten(ground, 1.12)
+		case hover:
+			ground = brighten(ground, 1.06)
+		}
+	case ghost:
+		ground, color = ui.Transparent, theme.Text2
+		switch {
+		case down:
+			ground, color = theme.Selected, theme.Text
+		case hover:
+			ground, color = theme.Hover, theme.Text
+		}
+	default:
+		switch {
+		case down:
+			ground = theme.Pressed
+		case hover:
+			ground = theme.FollowHover
+		}
+	}
+	b.Background(b.AnimateColor("bg", ground, a.ease(motion.Hover)))
+	if b.FocusVisible() {
+		b.FocusRing(true)
+	}
+	textColor := b.AnimateColor("color", color, a.ease(motion.Hover))
+	return b.Children(func() {
 		if o.words != nil {
 			o.words(textColor, weight)
 			return
@@ -187,9 +165,10 @@ func (a *App) button(c *ui.Context, label string, o btnOpt) ui.Element {
 			a.icon(c, o.trail, 16, false).Margin(0, 0, 0, 4).TextColor(textColor)
 		}
 		if o.loading {
+			// Busy, the words make room for the loading mark where they stood, the pill keeping its width.
 			t.Opacity(0)
 			ui.Box(c).Absolute().Left(0).Top(0).Right(0).Bottom(0).Center().Children(func() {
-				a.loading(c, map[bool]float32{true: 12, false: 16}[o.small])
+				a.loading(c, pick(o.small, 12, 16)).TextColor(textColor)
 			})
 		}
 	})

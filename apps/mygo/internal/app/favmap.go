@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -40,6 +41,7 @@ const (
 	mapTileGap = 2   // between the tiles of a block
 	mapRailGap = 6   // between blocks in the strip
 	mapRail    = 80  // the strip the map folds into
+	mapRailMin = 32  // the least a block in the strip stands on a side: room for its tab and some of its picture
 	mapRow     = 280 // a zoomed block's rows, about
 	mapRowGap  = 8
 	wallGap    = 16  // between columns of writers' sheets
@@ -102,13 +104,14 @@ func (a *App) blocks(groups []*favGroup, query string) []mapBlock {
 	return out
 }
 
-// shelved are the pages captured that have come into 收藏, newest first,
-// those whose name or address hold what is typed.
+// shelved are the pages captured, newest first, from the moment each is
+// pressed: being taken, waiting, taken, or not taken; those whose name or
+// address hold what is typed.
 func (a *App) shelved(query string) []*packItem {
 	q := strings.ToLower(strings.TrimSpace(query))
 	var out []*packItem
 	for _, it := range a.capture.items {
-		if it.state != packTaken || !it.filed || it.gone {
+		if it.gone {
 			continue
 		}
 		if q == "" || strings.Contains(strings.ToLower(it.Name), q) || strings.Contains(strings.ToLower(it.URL), q) {
@@ -137,6 +140,20 @@ func kindGlyph(k string) string { return "kind-" + k }
 
 // mapRects lays the blocks over r, gap apart, each as large as what it
 // holds is many, though never under half an even share.
+// railRects are the strip's blocks: the map in mapRail by h, or taller, as
+// tall as it, a quarter more at a time, until none stands under mapRailMin
+// on a side; and how tall.
+func railRects(blocks []mapBlock, h float32) ([]ui.Rect, float32) {
+	small := func(r ui.Rect) bool { return min(r.W, r.H) < mapRailMin }
+	for rh := h; ; rh *= 1.25 {
+		rects := mapRects(blocks, ui.Rect{W: mapRail, H: rh}, mapRailGap)
+		// ponytail: a 1.25 step overshoots by up to a quarter; a search for the least height if that ever shows.
+		if !slices.ContainsFunc(rects, small) || rh > 64*h {
+			return rects, rh
+		}
+	}
+}
+
 func mapRects(blocks []mapBlock, r ui.Rect, gap float32) []ui.Rect {
 	total := 0
 	for _, b := range blocks {
@@ -258,7 +275,7 @@ func (a *App) zoomTo(c *ui.Context, k string) {
 			fs.focus = "m:" + fs.kind
 		}
 	}
-	fs.kind, fs.turned = k, c.Now()
+	fs.kind, fs.turned, fs.railFor = k, c.Now(), ""
 	fs.shelves.ScrollTo(0, 0, ui.Animation{})
 }
 
@@ -280,13 +297,36 @@ func (a *App) mapTr(c *ui.Context, match any, quiet bool) ui.ElementTransition {
 	return t
 }
 
-// favMap is 收藏's first page: the map, h tall, or the block zoomed into
-// beside the strip.
-func (a *App) favMap(c *ui.Context, p page, groups []*favGroup, h float32, quiet bool, stop string, live bool) {
+// favRail is the strip beside the block zoomed into, blocks[at]: the map in
+// mapRail; with more blocks than h holds at mapRailMin, as tall as they need
+// and scrolling, the block zoomed into brought into it as it opens.
+func (a *App) favRail(c *ui.Context, blocks []mapBlock, at int, h float32, quiet bool, stop string, live bool) {
 	fs := a.favs()
-	blocks := a.blocks(groups, fs.query)
+	rects, rh := railRects(blocks, h)
+	if live && fs.railFor != fs.kind {
+		fs.railFor = fs.kind
+		if r := rects[at]; r.Y < fs.rail.Y || r.Y+r.H > fs.rail.Y+h {
+			fs.rail.ScrollTo(0, max(0, min(rh-h, r.Y+r.H/2-h/2)), ui.Animation{})
+		}
+	}
+	ui.Box(c.Key("rail")).Width(mapRail).Height(h).Shrink(0).Sticky().Top(24).Role(ui.RoleList).Label(locales.TabFavorites()).Children(func() {
+		ui.Scroll(c.Key("strip")).TrackScroll(&fs.rail).Fill().Scrollbars(false).Children(func() {
+			ui.Box(c.Key("blocks")).Width(mapRail).Height(rh).Children(func() {
+				for i, b := range blocks {
+					a.mapBlock(c, b, rects[i], true, quiet, stop, live)
+				}
+			})
+		})
+	})
+}
+
+// favMap is 收藏's first page: the map of blocks (a.blocks of groups), h
+// tall, or the block zoomed into beside the strip.
+func (a *App) favMap(c *ui.Context, p page, groups []*favGroup, blocks []mapBlock, h float32, quiet bool, stop string, live bool) {
+	fs := a.favs()
 	w := min(a.area.W, 1200) - 64
-	if fs.kind == "" {
+	// While a search hides the block zoomed into, the map shows what it finds (favoritesPage).
+	if fs.kind == "" || !slices.ContainsFunc(blocks, func(b mapBlock) bool { return b.key == fs.kind }) {
 		rects := mapRects(blocks, ui.Rect{W: w, H: h}, mapGap)
 		ui.Box(c.Key("map")).Width(w).Height(h).Margin(0, 0, 32, 0).Role(ui.RoleList).Label(locales.TabFavorites()).Children(func() {
 			for i, b := range blocks {
@@ -295,15 +335,15 @@ func (a *App) favMap(c *ui.Context, p page, groups []*favGroup, h float32, quiet
 		})
 		return
 	}
-	in := blocks[slices.IndexFunc(blocks, func(b mapBlock) bool { return b.key == fs.kind })]
+	at := slices.IndexFunc(blocks, func(b mapBlock) bool { return b.key == fs.kind })
+	in := blocks[at]
 	ui.Row(c.Key("zoom")).FillWidth().Gap(24).AlignItems(ui.Start).Padding(0, 0, 64, 0).Children(func() {
-		rects := mapRects(blocks, ui.Rect{W: mapRail, H: h}, mapRailGap)
-		ui.Box(c.Key("rail")).Width(mapRail).Height(h).Shrink(0).Sticky().Top(24).Role(ui.RoleList).Label(locales.TabFavorites()).Children(func() {
-			for i, b := range blocks {
-				a.mapBlock(c, b, rects[i], true, quiet, stop, live)
-			}
-		})
-		mw := w - mapRail - 24
+		// A map of one block has no strip: it would only show that block cut down.
+		mw := w
+		if len(blocks) > 1 {
+			mw = w - mapRail - 24
+			a.favRail(c, blocks, at, h, quiet, stop, live)
+		}
 		ui.Column(c.Key("in:" + in.key)).Width(mw).Shrink(0).Children(func() {
 			switch {
 			case in.packs != nil:
@@ -382,7 +422,11 @@ func (a *App) mapBlock(c *ui.Context, b mapBlock, r ui.Rect, mini, quiet bool, s
 		case b.packs != nil:
 			for i, t := range mosaic(len(b.packs), r.W, r.H, mapTileGap) {
 				it := b.packs[i]
-				a.mapTile(c, b.key, "p:"+it.ID, it.Name, a.packPic(it), t, lit, mini, quiet)
+				if it.state != packTaken {
+					a.mapPackTile(c, b.key, it, t, mini, quiet)
+					continue
+				}
+				a.mapTile(c, b.key, "p:"+it.ID, it.Name, a.packPic(it, t.W), t, lit, mini, quiet)
 			}
 		case b.g == nil:
 			a.mapWriters(c, b, r, mini, quiet)
@@ -437,6 +481,22 @@ func (a *App) mapTab(c *ui.Context, b mapBlock, mini, lit bool) {
 		}
 		fillet("along").Right(-r).Top(0)
 		fillet("down").Left(0).Bottom(-r)
+	})
+}
+
+// mapPackTile is a page captured on its block while it is being taken, waits
+// or was not taken: its picture as it stands, as in the island.
+func (a *App) mapPackTile(c *ui.Context, block string, it *packItem, r ui.Rect, mini, quiet bool) {
+	key := "p:" + it.ID
+	t := ui.Box(c.Key(key)).Absolute().Left(r.X).Top(r.Y).Size(r.W, r.H).ClipX().ClipY().Background(theme.Window).IgnoreInput(true)
+	if !mini {
+		t.Transition(a.mapTr(c, tileMatch{block, key}, quiet))
+	}
+	d := a.developingOf(c, t, it, c.Now(), a.still(c))
+	// The page's 16:10 covers the tile from its top, as its first screen will.
+	w, h := max(r.W, r.H*16/10), max(r.H, r.W*10/16)
+	t.Children(func() {
+		ui.Box(c).Absolute().Left((r.W-w)/2).Top(0).Size(w, h).Draw(func(p *ui.Painter, r ui.Rect) { paintDeveloping(p, r, d) })
 	})
 }
 
@@ -530,9 +590,10 @@ func (a *App) mapWriters(c *ui.Context, b mapBlock, r ui.Rect, mini, quiet bool)
 				ui.Text(c.Key(art.ID), t).Font(reader.TitleFont(t)).FontSize(lead).LineHeight(1.4).FontWeight(600).TextColor(theme.Text).
 					MaxLines(lines).Ellipsis("…")
 				// Under a writer kept from once or twice, how their newest opens, as many lines as the sheet
-				// holds over the rest: their face's line, the title's two and the other title's.
-				if paras := a.sheetOpening(art); len(g.list) <= 2 && s.W >= 240 && len(paras) > 0 {
-					if lines := int((s.H - top - 16 - 24 - under - 2*lead*1.4 - 10 - float32(len(g.list)-1)*32) / 24); lines > 0 {
+				// holds over the rest: their face's line, the title's two and the other title's. Only then is the
+				// article read for it (sheetOpening), not for every writer on the map.
+				if lines := int((s.H - top - 16 - 24 - under - 2*lead*1.4 - 10 - float32(len(g.list)-1)*32) / 24); len(g.list) <= 2 && s.W >= 240 && lines > 0 {
+					if paras := a.sheetOpening(art); len(paras) > 0 {
 						t := strings.Join(paras, "\n")
 						family, scale := reader.PassageFace(t)
 						ui.Text(c.Key("opening"), t).Font(family).FontSize(14*scale).LineHeight(24/(14*scale)).TextColor(theme.Text2).
@@ -719,7 +780,7 @@ func (a *App) mapPapers(c *ui.Context, p page, b mapBlock, w float32, quiet bool
 			})
 		}
 	})
-	if live && from <= len(fs.cards) {
+	if live {
 		// J and K go writer by writer, as the block has them, rather than down one column and then the next.
 		order := map[string]int{}
 		for i, g := range b.writers {
@@ -879,9 +940,11 @@ func (a *App) paperTitle(c *ui.Context, p page, art *library.Article, lead, quie
 					})
 				}
 			})
-			if pv := art.Preview; lead && pv != nil && pv.Excerpt != nil && *pv.Excerpt != "" {
-				family, scale := reader.PassageFace(*pv.Excerpt)
-				ui.Text(c.Key("opening"), *pv.Excerpt).Font(family).FontSize(14 * scale).LineHeight(24 / (14 * scale)).TextColor(theme.Text2).
+			// How the article opens, as the writer's sheet on the map has it (sheetOpening).
+			if paras := a.sheetOpening(art); lead && len(paras) > 0 {
+				t := strings.Join(paras, "\n")
+				family, scale := reader.PassageFace(t)
+				ui.Text(c.Key("opening"), t).Font(family).FontSize(14 * scale).LineHeight(24 / (14 * scale)).TextColor(theme.Text2).
 					MaxLines(3).Ellipsis("…")
 			}
 		})
@@ -989,16 +1052,30 @@ func (a *App) wallPicture(c *ui.Context, p page, block string, art *library.Arti
 
 // wallPack is a page captured, zoomed into: its first screen in r, a little
 // dimmer the lighter it is and whole when pointed at, drifting closer; its
-// name and address rising at its foot. Its card grows out of it and goes
-// back into it; copied there, it says 已复制 at its foot for a while.
+// name and address rising at its foot. While it is being taken it is its
+// picture developing, how far it has come at its foot's right (排队中 while it
+// waits, 没拓成 once it failed). Its card grows out of it and goes back into
+// it; copied there, it says 已复制 at its foot for a while.
 func (a *App) wallPack(c *ui.Context, it *packItem, r ui.Rect, quiet bool, stop string, live bool) {
 	fs, h := a.favs(), &a.capture
 	key := "p:" + it.ID
 	w, ht := r.W, r.H
 	cell := ui.Box(c.Key(key)).Absolute().Left(r.X).Top(r.Y).Size(w, ht).Role(ui.RoleListItem).Transition(a.mapTr(c, tileMatch{captures, key}, quiet))
 	hover := cell.Hovered()
-	pic := a.packPic(it)
+	var pic *favPic
+	if it.state == packTaken {
+		pic = a.packPic(it, w)
+	}
 	now := c.Now()
+	status := ""
+	switch it.state {
+	case packTaking:
+		status = percentText(it.percent(c, now))
+	case packWaiting:
+		status = locales.CaptureQueued()
+	case packFailed:
+		status = locales.CaptureNotTakenShort()
+	}
 	said := false
 	if h.copiedHome == homeShelf && h.copiedID == it.ID {
 		from, to := h.copiedNote()
@@ -1039,7 +1116,9 @@ func (a *App) wallPack(c *ui.Context, it *packItem, r ui.Rect, quiet bool, stop 
 					ui.Box(c).Absolute().Fill().Background(theme.Darken).Opacity(v)
 				}
 			} else if pic == nil || !pic.done {
-				a.breathing(c, theme.Hover)
+				// Not taken yet, or its first screen still on its way: its picture as it stands.
+				d := a.developingOf(c, b, it, now, a.still(c))
+				ui.Box(c.Key("dots")).Absolute().Fill().Draw(func(p *ui.Painter, r ui.Rect) { paintDeveloping(p, r, d) })
 			}
 			// The foot's shade comes with the words, or with 已复制.
 			capH := min(ht, 72)
@@ -1048,11 +1127,14 @@ func (a *App) wallPack(c *ui.Context, it *packItem, r ui.Rect, quiet bool, stop 
 				ease = ui.Animation{Duration: time.Nanosecond}
 			}
 			cap := ui.Box(c.Key("cap")).Absolute().Left(0).Right(0).Bottom(0).Height(capH).IgnoreInput(true)
-			cap.Opacity(cap.AnimateTo("show", map[bool]float32{true: 1}[hover || focus || said], ease)).Children(func() {
+			cap.Opacity(cap.AnimateTo("show", map[bool]float32{true: 1}[hover || focus || said || status != ""], ease)).Children(func() {
 				ui.Box(c).Absolute().Fill().LinearGradient(bandScrim(min(1, 40/capH)))
 				note := locales.CommonCopied()
+				if status != "" {
+					note = status
+				}
 				right := float32(14)
-				if said {
+				if said || status != "" {
 					nw, _ := c.MeasureText(0, ui.Span{Text: note, Size: theme.Body})
 					right += nw + 12
 				}
@@ -1061,8 +1143,8 @@ func (a *App) wallPack(c *ui.Context, it *packItem, r ui.Rect, quiet bool, stop 
 					wallCaption(c, it.Name)
 					ui.Text(c, hostOf(it.URL)).FontSize(theme.Label).LineHeight(16.0 / 12).TextColor(theme.Text2).SingleLine().Ellipsis("…")
 				})
-				if o := cap.AnimateTo("said", map[bool]float32{true: 1}[said], ease); o > 0.01 {
-					ui.Text(c.Key("said"), note).FontSize(theme.Body).LineHeight(18.0 / 13).TextColor(theme.Text).NoWrap().
+				if o := cap.AnimateTo("said", map[bool]float32{true: 1}[said || status != ""], ease); o > 0.01 {
+					ui.Text(c.Key("said"), note).FontSize(theme.Body).LineHeight(18.0 / 13).FontFeatures(theme.Numbers).TextColor(theme.Text).NoWrap().
 						Absolute().Right(12).Bottom(12).Opacity(o)
 				}
 			})
@@ -1075,15 +1157,28 @@ func (a *App) wallPack(c *ui.Context, it *packItem, r ui.Rect, quiet bool, stop 
 	})
 }
 
-// packPic is a page captured's first screen for 收藏, 720 wide.
-func (a *App) packPic(it *packItem) *favPic {
+// packPic is a page captured's first screen for 收藏, shown w wide: 720
+// pixels across, or 1440 or 2880 for a larger tile on a screen of twice the
+// points, never wider than the screen taken.
+func (a *App) packPic(it *packItem, w float32) *favPic {
+	px, key := 720, "pack:"+packKey(it)
+	for px < 2880 && w*2 > float32(px)*1.25 {
+		px *= 2
+	}
+	if px > 720 {
+		key += "@" + strconv.Itoa(px)
+	}
 	file := filepath.Join(a.capture.dir, it.ID, "screens", "00.jpg")
-	return a.favPicture("pack:"+packKey(it), func() image.Image {
+	return a.favPicture(key, func() image.Image {
 		data, err := os.ReadFile(file)
 		if err != nil {
 			return nil
 		}
-		return screenTop(decodeAny(data), 720)
+		img := decodeAny(data)
+		if img == nil {
+			return nil
+		}
+		return screenTop(img, min(px, max(720, img.Bounds().Dx())))
 	})
 }
 
