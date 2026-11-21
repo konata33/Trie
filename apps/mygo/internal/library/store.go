@@ -1063,6 +1063,7 @@ func (s *Store) ImportFeed(sourceID string, feed ParsedFeed, resubscribe bool, i
 			return err
 		}
 		fetched, fetchedOK := web.JSDateParse(feed.FetchedAt)
+		given := map[string]ArticleSnapshot{} // the articles the feed gives now, by id
 		for _, entry := range feed.Articles {
 			entryKey, err := web.URLKey(entry.URL)
 			if err != nil {
@@ -1144,6 +1145,14 @@ func (s *Store) ImportFeed(sourceID string, feed ParsedFeed, resubscribe bool, i
 			if err := remember(article, append([]string{id, article.URL}, aliases...)...); err != nil {
 				return err
 			}
+			given[id] = article
+		}
+		moved, err := s.mergeMoved(before, sourceID, given)
+		if err != nil {
+			return err
+		}
+		for _, id := range moved {
+			delete(imported, id) // not new: the same post at its new address
 		}
 		for id := range imported {
 			delete(updated, id)
@@ -1156,6 +1165,85 @@ func (s *Store) ImportFeed(sourceID string, feed ParsedFeed, resubscribe bool, i
 	}
 	state, err := s.library()
 	return SubscriptionResult{Library: state, SourceID: sourceID, ImportedCount: len(imported), UpdatedCount: len(updated)}, err
+}
+
+// mergeMoved makes one article of a post its site moved to another address:
+// the feed gives it as a new entry, and the article kept at its old address
+// is no longer in the feed. Both are sourceID's, with the same title and the
+// same time of publishing to the second (a post given again under another
+// title, or two talks of one name, stay apart). The one the feed gives now
+// stays, at its address; it takes the old one's favourite, its place unless
+// its own is newer, and its clips, and keeps the old address as an alias;
+// the old one goes. It returns the ids that took one in.
+func (s *Store) mergeMoved(before LibraryState, sourceID string, given map[string]ArticleSnapshot) ([]string, error) {
+	sign := func(a ArticleSnapshot) string {
+		if a.SourceID != sourceID || a.Title == "" || a.PublishedAt == nil || *a.PublishedAt == "" {
+			return ""
+		}
+		return a.Title + "\x00" + *a.PublishedAt
+	}
+	now := map[string][]string{} // ids given now, by signature
+	for id, a := range given {
+		if k := sign(a); k != "" {
+			now[k] = append(now[k], id)
+		}
+	}
+	kept := map[string]Article{}
+	for _, a := range before.Articles {
+		kept[a.ID] = a
+	}
+	var merged []string
+	for _, old := range before.Articles {
+		ids := now[sign(old.ArticleSnapshot)]
+		if _, still := given[old.ID]; still || len(ids) != 1 || sign(old.ArticleSnapshot) == "" {
+			continue
+		}
+		id, to := ids[0], given[ids[0]]
+		cur, had := kept[id]
+		if old.Favorite && !(had && cur.Favorite) {
+			if err := s.exec("UPDATE articles SET favorite=1, favoritedAt=? WHERE id=?", old.FavoritedAt, id); err != nil {
+				return nil, err
+			}
+		}
+		if p := old.ReadingPosition; p != nil && (!had || cur.ReadingPosition == nil || p.UpdatedAt > cur.ReadingPosition.UpdatedAt) {
+			moved := *p
+			moved.ArticleID = id
+			data, err := stringify(moved)
+			if err == nil {
+				err = s.exec(`INSERT INTO article_reading_positions(articleID, data) VALUES (?, ?)
+          ON CONFLICT(articleID) DO UPDATE SET data = excluded.data`, id, data)
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+		err := s.exec("UPDATE clips SET data=json_set(data, '$.citation.url', ?) WHERE articleID=? AND json_type(data, '$.citation') = 'object'", to.URL, old.ID)
+		if err == nil {
+			err = s.exec("UPDATE clips SET articleID=?, data=json_set(data, '$.articleID', ?) WHERE articleID=?", id, id, old.ID)
+		}
+		if err != nil {
+			return nil, err
+		}
+		to.Aliases = dedupe(append(append(to.Aliases, old.ID, old.URL), old.Aliases...))
+		data, err := s.rewrite("articles", "id", id, to)
+		if err == nil {
+			err = s.exec("UPDATE articles SET data=? WHERE id=?", data, id)
+		}
+		for _, table := range []string{"article_content", "article_feed_content", "article_previews", "article_reading_positions", "article_sources"} {
+			if err == nil {
+				err = s.exec("DELETE FROM "+table+" WHERE articleID=?", old.ID)
+			}
+		}
+		if err == nil {
+			err = s.exec("DELETE FROM articles WHERE id=?", old.ID)
+		}
+		if err != nil {
+			return nil, err
+		}
+		given[id] = to
+		merged = append(merged, id)
+	}
+	return merged, nil
 }
 
 func or(a, b string) string {

@@ -1,6 +1,7 @@
 package library
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -269,4 +270,48 @@ func TestContentSurvivesReopen(t *testing.T) {
 	fails(t, err, "Unknown article ID")
 	equal(t, must[*Site](t)(s.Site("antfu")).HomeURL, seed.Sources[1].HomeURL, "site")
 	equal(t, must[*Site](t)(s.Site("missing")), (*Site)(nil), "unknown site")
+}
+
+// A post its site moved to another address is one article: the old one's
+// favourite, place and clips go to the address the feed gives now, which keeps
+// the old one as an alias. Two posts of one title published apart stay two.
+func TestMovedPostMerged(t *testing.T) {
+	s := mustOpen(t, ":memory:", empty)
+	at, earlier := daysAgo(3), daysAgo(40)
+	feed := func(posts ...post) ParsedFeed {
+		f := writerFeed("https://writer.example/", posts...)
+		for i := range f.Articles {
+			f.Articles[i].Title = strings.Split(f.Articles[i].Title, "-")[0]
+		}
+		return f
+	}
+	must[SubscriptionResult](t)(s.ImportFeed("writer", feed(post{"aesthetic-tinkering", at, "words"}, post{"talk-one", earlier, ""}), true, nil, ""))
+	old := "https://writer.example/aesthetic-tinkering/"
+	mutate(t, s, ToggleFavorite{ID: old})
+	if err := s.SaveReadingPosition(ReadingPositionInput{ArticleID: old, ContentVersion: "v1", Progress: 0.4}); err != nil {
+		t.Fatal(err)
+	}
+	mutate(t, s, AddClip{Clip: clipInput(old)})
+
+	got := must[SubscriptionResult](t)(s.ImportFeed("writer", feed(post{"aesthetic-thinking", at, "words"}, post{"talk-two", daysAgo(10), ""}), false, nil, ""))
+	if got.ImportedCount != 1 {
+		t.Errorf("the moved post counts as new: %d imported", got.ImportedCount)
+	}
+	moved := "https://writer.example/aesthetic-thinking/"
+	var titles []string
+	for _, a := range got.Library.Articles {
+		titles = append(titles, a.Title)
+		if a.ID == old {
+			t.Errorf("the old address is still an article")
+		}
+		if a.ID == moved && (!a.Favorite || a.ReadingPosition == nil || a.ReadingPosition.Progress != 0.4 || a.ReadingPosition.ArticleID != moved || !slices.Contains(a.Aliases, old)) {
+			t.Errorf("the moved post did not take in the old one: %+v", a)
+		}
+	}
+	if n := strings.Count(strings.Join(titles, ","), "talk"); n != 2 {
+		t.Errorf("two talks of one title published apart were merged: %v", titles)
+	}
+	if clips := lib(t, s).Clips; len(clips) != 1 || clips[0].ArticleID != moved {
+		t.Errorf("the clip did not move: %+v", clips)
+	}
 }
