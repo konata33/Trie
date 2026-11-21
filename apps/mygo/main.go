@@ -155,6 +155,8 @@ func main() {
 			}
 		})
 	})
+	// A design gallery's post reads from the library as it does from Explore.
+	reader.Gallery = ex.CardFor
 	// TRIE_PUBLISH_EXPLORE=<dir> reads all of Explore into the library and writes the snapshot copies of the app pull
 	// into dir (explore.Publish), with no window, then quits: what the project's site publishes.
 	if out := os.Getenv("TRIE_PUBLISH_EXPLORE"); out != "" {

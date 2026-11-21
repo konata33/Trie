@@ -184,7 +184,7 @@ func (r *Reader) paintFlow(p *ui.Painter, _ ui.Rect) {
 	for _, s := range f.shots {
 		box := ui.Rect{X: lerp(s.from.X, s.to.X) - tx, Y: lerp(s.from.Y, s.to.Y), W: lerp(s.from.W, s.to.W), H: lerp(s.from.H, s.to.H)}
 		// In the corner it takes where it lands, as the body shows it (pictureRadius).
-		rad := pictureRadius(s.to.W)
+		rad := pictureRadius(s.pic, s.to.W)
 		p.Clip(box, rad, func() {
 			p.Image(s.pic.img, box, ui.FillBox)
 			if len(s.pic.texts) > 0 {

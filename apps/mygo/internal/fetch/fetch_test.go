@@ -558,3 +558,22 @@ func TestDroppedConnections(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A request the site never answered may be asked again; a name that does not exist, or a refusal of the policy, is
+// final.
+func TestUnanswered(t *testing.T) {
+	for err, want := range map[error]bool{
+		errTimeout():                          true,
+		errDNSTimeout():                       true,
+		&NetError{Err: errors.New("dropped")}: true,
+		&NetError{Err: &net.DNSError{Err: "no such host", IsNotFound: true}}:        false,
+		&NetError{Err: &net.DNSError{Err: "server misbehaving", IsTemporary: true}}: true,
+		errScope():   false,
+		errTooBig():  false,
+		errAddress(): false,
+	} {
+		if Unanswered(err) != want {
+			t.Errorf("Unanswered(%v) = %v", err, !want)
+		}
+	}
+}

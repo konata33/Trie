@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 	"strings"
 	"sync"
@@ -775,6 +776,19 @@ func (r *Reader) original(c *ui.Context) {
 	}
 }
 
+// pictureRunGap is the room between pictures one under another, in DIPs: the spacing scale's 8, as a work's strip of shots.
+const pictureRunGap = 8
+
+// endsInPicture reports whether nothing of b shows under its last picture (no caption), and startsWithPicture whether
+// nothing shows above its first.
+func endsInPicture(b *block) bool {
+	return b.kind == Picture || b.kind == Figure && len(b.children) > 0 && endsInPicture(b.children[len(b.children)-1])
+}
+
+func startsWithPicture(b *block) bool {
+	return b.kind == Picture || b.kind == Figure && len(b.children) > 0 && startsWithPicture(b.children[0])
+}
+
 // outer is a block's margins once those of its first and last children
 // collapse through it, as CSS collapses them through a box without padding.
 func outer(b *block) (top, bottom float32) {
@@ -799,6 +813,9 @@ func (r *Reader) children(c *ui.Context, bs []*block, collapse bool, tc textCtx,
 			// A heading right under another belongs with it: as near as the one above leaves room for.
 			_, before := outer(bs[i-1])
 			gap = max(before, min(top, .9))
+		case i > 0 && endsInPicture(bs[i-1]) && startsWithPicture(b):
+			// Pictures one under another, nothing between them, are a set: 8 apart instead of a paragraph's room.
+			gap = pictureRunGap / r.em()
 		case i > 0:
 			_, before := outer(bs[i-1])
 			gap = max(before, top)
@@ -865,7 +882,15 @@ func (r *Reader) block(c *ui.Context, b *block, tc textCtx) ui.Element {
 	case Quote:
 		return r.quote(c, b, tc)
 	case Figure:
-		return ui.Column(c).Children(func() { r.children(c, b.children, true, tc, nil) })
+		// A figure of one picture narrowed to the reader's height narrows with it, so that its caption stands under
+		// the picture, not at the column's edge.
+		fig := ui.Column(c)
+		if p := onlyPicture(b); p != nil {
+			if w, narrowed := r.fit(p); narrowed {
+				fig.Width(w).MaxWidthPercent(100).AlignSelf(ui.Center)
+			}
+		}
+		return fig.Children(func() { r.children(c, b.children, true, tc, nil) })
 	case Code:
 		return r.code(c, b)
 	case Table:
@@ -930,7 +955,15 @@ func (r *Reader) paragraph(c *ui.Context, b *block, tc textCtx) ui.Element {
 			color = theme.Text2
 		}
 	case Caption:
+		// A credit is a step quieter than a caption: the picture's source, not words about it.
 		size, color = theme.Body*r.textSize()/theme.ReadingSize, theme.Muted
+		if b.credit {
+			size = theme.Label * r.textSize() / theme.ReadingSize
+		}
+	default:
+		if b.dek {
+			color = theme.Text2
+		}
 	}
 	segs := r.segments(b)
 	var e ui.Element
@@ -1237,14 +1270,7 @@ func (r *Reader) copyButton(c *ui.Context, cv *codeView) {
 // stand on the column's edges, as the text does. Wider than the column, it scrolls sideways, and the side it goes on
 // fades out, less as it nears its end.
 func (r *Reader) table(c *ui.Context, b *block, tc textCtx) ui.Element {
-	cols := 0
-	for _, row := range b.rows {
-		n := 0
-		for _, cl := range row {
-			n += cl.colSpan
-		}
-		cols = max(cols, n)
-	}
+	cols := columns(b.rows)
 	width := r.width()
 	if r.body.W > 0 {
 		width = r.body.W
@@ -1266,25 +1292,54 @@ func (r *Reader) table(c *ui.Context, b *block, tc textCtx) ui.Element {
 		return
 	}
 	// Chrome's table (width: max-content, at least the column; cells at most
-	// 360 with their room): each column as wide as its widest cell's words on
-	// one line, up to 360, and the room left, when they fit, shared as their
-	// widths are; wider, the table scrolls.
+	// 360 with their room, but never narrower than their longest word): each
+	// column as wide as its widest cell's words on one line, up to 360, and as
+	// its longest word, up to the column; a cell across columns widens those
+	// it covers as far as it needs, each by its share, the narrower spans first;
+	// the room left, when they fit, shared as their widths are; wider, the
+	// table scrolls.
+	needs := func(i int, cl *cell) float32 {
+		size, weight := tc.size, 400
+		switch {
+		case i < head:
+			size = label.size
+		case cl.header:
+			weight = 600
+		}
+		words, widest := r.cellWidth(cl, size, weight)
+		left, right := pad(cl.col, cl.colSpan)
+		return max(min(words, 336), min(float32(math.Ceil(float64(widest))), width-left-right)) + left + right
+	}
 	want := make([]float32, cols)
+	type spanning struct {
+		row int
+		cl  *cell
+	}
+	var spans []spanning
 	for i, row := range b.rows {
-		col := 0
 		for _, cl := range row {
-			if cl.colSpan == 1 && col < cols {
-				size, weight := tc.size, 400
-				switch {
-				case i < head:
-					size = label.size
-				case cl.header:
-					weight = 600
-				}
-				left, right := pad(col, 1)
-				want[col] = max(want[col], min(r.cellWidth(cl, size, weight), 336)+left+right)
+			if cl.colSpan == 1 {
+				want[cl.col] = max(want[cl.col], needs(i, cl))
+			} else {
+				spans = append(spans, spanning{i, cl})
 			}
-			col += cl.colSpan
+		}
+	}
+	slices.SortStableFunc(spans, func(a, b spanning) int { return a.cl.colSpan - b.cl.colSpan })
+	for _, s := range spans {
+		covered := want[s.cl.col:min(s.cl.col+s.cl.colSpan, cols)]
+		have := float32(0)
+		for _, w := range covered {
+			have += w
+		}
+		if more := needs(s.row, s.cl) - have; more > 0 {
+			for i := range covered {
+				if have > 0 {
+					covered[i] += more * covered[i] / have
+				} else {
+					covered[i] += more / float32(len(covered))
+				}
+			}
 		}
 	}
 	total := float32(0)
@@ -1308,7 +1363,6 @@ func (r *Reader) table(c *ui.Context, b *block, tc textCtx) ui.Element {
 			ui.Grid(c).ColumnTracks(tracks...).MinWidth(width).Children(func() {
 				for i, row := range b.rows {
 					r.row++
-					col := 0
 					for _, cl := range row {
 						cc := tc
 						if i < head {
@@ -1317,8 +1371,8 @@ func (r *Reader) table(c *ui.Context, b *block, tc textCtx) ui.Element {
 							cc.weight = 600
 						}
 						cc.row, cc.sep = r.row, "\n"
-						left, right := pad(col, cl.colSpan)
-						e := ui.Column(c).Padding(10, right, 10, left)
+						left, right := pad(cl.col, cl.colSpan)
+						e := ui.Column(c).Padding(10, right, 10, left).RowStart(i + 1).ColumnStart(cl.col + 1)
 						switch {
 						case i < head:
 							// The head's words sit on its rule.
@@ -1326,7 +1380,7 @@ func (r *Reader) table(c *ui.Context, b *block, tc textCtx) ui.Element {
 						default:
 							e.Justify(ui.Start)
 						}
-						if cl.colSpan == 1 && col < len(b.numeric) && b.numeric[col] {
+						if cl.colSpan == 1 && cl.col < len(b.numeric) && b.numeric[cl.col] {
 							cc.align = ui.End
 							e.AlignItems(ui.End)
 						}
@@ -1344,7 +1398,6 @@ func (r *Reader) table(c *ui.Context, b *block, tc textCtx) ui.Element {
 							e.RowSpan(cl.rowSpan)
 						}
 						e.Children(func() { r.children(c, cl.blocks, false, cc, nil) })
-						col += cl.colSpan
 					}
 				}
 			})
@@ -1389,12 +1442,17 @@ func (r *Reader) picture(c *ui.Context, b *block) ui.Element {
 	default:
 		e = ui.Image(c, p.img)
 	}
-	e.Width(p.w).MaxWidthPercent(100).AspectRatio(p.w / p.h).AlignSelf(ui.Start)
+	shown, narrowed := r.fit(p)
+	if narrowed {
+		e.Width(shown).MaxWidthPercent(100).AspectRatio(p.w / p.h).AlignSelf(ui.Center)
+	} else {
+		e.Width(p.w).MaxWidthPercent(100).AspectRatio(p.w / p.h).AlignSelf(ui.Start)
+	}
 	r.picBox[b] = e.LayoutBounds()
 	if p.alt != "" {
 		e.Label(p.alt)
 	}
-	rad := pictureRadius(min(p.w, r.width()))
+	rad := pictureRadius(p, shown)
 	if rad > 0 {
 		e.Radius(rad)
 	}
@@ -1422,10 +1480,39 @@ func (r *Reader) picture(c *ui.Context, b *block) ui.Element {
 	return e
 }
 
-// pictureRadius is the corner of a picture of the body shown w wide: a card's, 10, where it shows as a picture;
-// none for a small one, a badge or an icon, which a corner would cut into.
-func pictureRadius(w float32) float32 {
-	if w >= 160 {
+// tallPicture is the most of the reader's height a picture of the body takes, so that one is seen whole: a portrait
+// photo the column's width would make taller is narrowed to it.
+const tallPicture = 0.8
+
+// fit is how wide picture p shows: its own width, at most the column's, narrower when that would make it taller than
+// tallPicture of the reader's height; narrowed, it stands in the middle of the column.
+func (r *Reader) fit(p *picture) (w float32, narrowed bool) {
+	w = min(p.w, r.width())
+	if limit := r.view.H * tallPicture; limit > 0 && p.w > 0 && p.h > 0 && w*p.h/p.w > limit {
+		return limit * p.w / p.h, true
+	}
+	return w, false
+}
+
+// onlyPicture is the picture of a figure that holds one, with nothing beside it but its caption; nil for any other.
+func onlyPicture(b *block) *picture {
+	var p *picture
+	for _, ch := range b.children {
+		switch {
+		case ch.kind == Picture && p == nil:
+			p = ch.pic
+		case ch.kind != Caption:
+			return nil
+		}
+	}
+	return p
+}
+
+// pictureRadius is the corner of picture p of the body shown w wide: a card's, 10, where it shows as a picture;
+// none for a small one, a badge or an icon, which a corner would cut into, nor for one whose edges are see-through
+// (picture.clear), which a corner and an edge would frame. Without a corner it has no edge drawn (pictureEdge).
+func pictureRadius(p *picture, w float32) float32 {
+	if w >= 160 && !p.clear {
 		return 10
 	}
 	return 0
@@ -1516,10 +1603,14 @@ func (r *Reader) missing(c *ui.Context, p *picture) ui.Element {
 	}
 	e := ui.Column(c).Label(label).MinHeight(260).Padding(24).Gap(16).Center()
 	if p.w > 0 && p.h > 0 {
+		// Where the picture will show, as large, so that the text does not move when it arrives.
 		e.AspectRatio(p.w / p.h)
+		if w, narrowed := r.fit(p); narrowed {
+			e.Width(w).AlignSelf(ui.Center)
+		}
 	}
 	if r.view.H > 0 {
-		e.MaxHeight(r.view.H * 0.7)
+		e.MaxHeight(r.view.H * tallPicture)
 	}
 	return e.Children(func() {
 		if r.Missing != nil {
@@ -1652,28 +1743,35 @@ func asciiWord(s string) bool {
 	return s != ""
 }
 
-// cellWidth is how wide a cell's words are on one line (their max-content),
-// at size, kept on the cell.
-func (r *Reader) cellWidth(cl *cell, size float32, weight int) float32 {
+// cellWidth is how wide a cell's words are on one line (their max-content), its pictures as wide as they are, and
+// how wide its widest word is (its min-content), at size, kept on the cell.
+func (r *Reader) cellWidth(cl *cell, size float32, weight int) (words, widest float32) {
 	if cl.measuredAt == size {
-		return cl.measured
+		return cl.measured, cl.widest
 	}
-	w := float32(0)
+	font := ui.Font{Family: r.face().Family, Size: size, Weight: weight}
 	var walk func(bs []*block)
 	walk = func(bs []*block) {
 		for _, b := range bs {
+			if b.pic != nil {
+				words = max(words, b.pic.w)
+			}
 			if len(b.runs) > 0 {
 				segs := make([]segment, len(b.runs))
 				for i, rn := range b.runs {
 					segs[i] = segment{run: rn, cjkFont: r.face().CJK}
 				}
-				lw, _ := ui.ShapeRichText(spans(segs, size), ui.Font{Family: r.face().Family, Size: size, Weight: weight}, 0).Size()
-				w = max(w, lw)
+				sp := spans(segs, size)
+				w, _ := ui.ShapeRichText(sp, font, 0).Size()
+				words = max(words, w)
+				// Lines as narrow as can be, broken only between words: the widest is the widest word.
+				w, _ = ui.ShapeRichTextWith(sp, font, ui.TextShape{Width: 1, NoBreakWords: true}).Size()
+				widest = max(widest, w)
 			}
 			walk(b.children)
 		}
 	}
 	walk(cl.blocks)
-	cl.measured, cl.measuredAt = w, size
-	return w
+	cl.measured, cl.widest, cl.measuredAt = words, widest, size
+	return words, widest
 }

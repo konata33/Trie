@@ -456,6 +456,23 @@ func (s *Service) NameFor(feedURL *string, homeURL string) string {
 	return ""
 }
 
+// CardFor is the work a design gallery's post stands as when its page gives none, as ReadTarget gives it to the reader,
+// for a post read from the library: its title, the site it features and the first picture its feed body holds. nil for
+// a source that is not one of the catalog's galleries.
+func (s *Service) CardFor(src library.Source, a library.Article, body *library.FeedBody) *reading.Card {
+	catalog, err := s.catalogEntries()
+	if err != nil {
+		return nil
+	}
+	if !slices.ContainsFunc(catalog, func(e catalogEntry) bool {
+		return e.gallery() && (src.FeedURL != nil && e.feed() != "" && sameFeed(e.feed(), *src.FeedURL) || host(e.HomeURL) == host(src.HomeURL))
+	}) {
+		return nil
+	}
+	entry := library.FeedEntry{URL: a.URL, Title: a.Title, FeedBody: body}
+	return &reading.Card{Name: a.Title, Site: featuredSite(entry, src.HomeURL), Picture: firstImage(entry)}
+}
+
 func sameFeed(a, b string) bool {
 	x, err := feed.CanonicalFeedURL(a)
 	if err != nil {

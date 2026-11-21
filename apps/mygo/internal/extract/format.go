@@ -23,7 +23,7 @@ import (
 // block keeps its language and text, and the reader colours it with MyGo's own highlighting.
 
 // FormatVersion is the reader format's version, stored with each formatted article.
-const FormatVersion = 4
+const FormatVersion = 6
 
 // Formatted is an article laid out for the reader.
 type Formatted struct {
@@ -96,7 +96,7 @@ func cleaner(images *[]string, sourceOnly bool) *policy {
 		tags: readerTags,
 		attributes: map[string][]string{"*": {"id"}, "a": {"href", "title"}, "img": {"src", "alt", "title", "width", "height"}, "code": {"class"}, "pre": {"class"},
 			"div": {"class"}, "p": {"class"}, "blockquote": {"class"}, "th": {"colspan", "rowspan", "scope"}, "td": {"colspan", "rowspan"}, "ol": {"start"}},
-		classes: map[string][]string{"code": nil, "pre": nil, "div": formatterClasses, "p": {"reader-callout-title"},
+		classes: map[string][]string{"code": nil, "pre": nil, "div": formatterClasses, "p": {"reader-callout-title", "reader-dek"},
 			"blockquote": {"reader-callout", "reader-note", "reader-tip", "reader-important", "reader-warning", "reader-caution"}},
 		classPattern: map[string]*regexp.Regexp{"code": languageClass, "pre": languageClass},
 		schemes:      []string{"http", "https"}, imgSchemes: imgSchemes,
@@ -524,6 +524,7 @@ func FormatArticleHTML(page string, snapshot *library.ReaderSourceSnapshot) (For
 	}
 	f := &formatter{usedIDs: map[string]bool{}, suffixes: map[string]int{}, occurrences: map[string]int{}, headings: []library.Heading{}, codeBlocks: []library.CodeBlock{}}
 	root := parseHast(cleaner(&f.images, false).run(page))
+	tidy(root)
 	type frame struct {
 		n     *hnode
 		depth int

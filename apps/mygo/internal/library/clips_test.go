@@ -66,6 +66,49 @@ func TestDeletedClipRestoresItsTime(t *testing.T) {
 	equal(t, len(lib(t, s).Clips), 1, "clips")
 }
 
+// a clip keeps its pictures across a note edit and reopen; a clip without them
+// still loads, and badly placed pictures are refused
+func TestClipKeepsPictures(t *testing.T) {
+	path, snapshot := libraryPath(t), fixture(t)
+	s := mustOpen(t, path, snapshot)
+	in := clipInput(snapshot.Articles[0].ID)
+	pictures := []ClipPicture{{Unit: "reader-unit-a", At: 0}, {Unit: "reader-unit-b", At: 14}}
+	in.Pictures = pictures
+	mutate(t, s, AddClip{Clip: in})
+	mutate(t, s, UpdateClipNote{ID: clipUUID, Note: "chart"})
+	plain := clipInput(snapshot.Articles[0].ID)
+	plain.ID = "00000000-0000-4000-8000-000000000002"
+	mutate(t, s, AddClip{Clip: plain})
+	s.Close()
+	if _, err := raw(t, path).Exec("INSERT INTO clips VALUES (?, ?, json_set((SELECT data FROM clips WHERE id = ?), '$.id', ?, '$.pictures', json('[{\"unit\":\"u\",\"at\":1.5}]')))",
+		"00000000-0000-4000-8000-000000000003", snapshot.Articles[0].ID, clipUUID, "00000000-0000-4000-8000-000000000003"); err != nil {
+		t.Fatal(err)
+	}
+	clips := lib(t, mustOpen(t, path, snapshot)).Clips
+	equal(t, len(clips), 2, "clips (the one with a fractional At is damaged)")
+	for _, c := range clips {
+		if c.ID == clipUUID {
+			equal(t, c.Pictures, pictures, "pictures")
+			equal(t, c.Note, "chart", "note")
+		} else if c.Pictures != nil {
+			t.Fatalf("plain clip gained pictures %#v", c.Pictures)
+		}
+	}
+	for _, bad := range [][]ClipPicture{
+		{{Unit: "u", At: 27}},
+		{{Unit: "u", At: 5}, {Unit: "v", At: 4}},
+		{{Unit: "", At: 0}},
+		{{Unit: "u", At: 0}, {Unit: "u", At: 3}},
+		{{Unit: "u", At: -1}},
+	} {
+		c := clipInput("a")
+		c.Pictures = bad
+		if checkAction(AddClip{Clip: c}) == nil {
+			t.Fatalf("%#v was accepted", bad)
+		}
+	}
+}
+
 // a damaged clip row is skipped instead of breaking the library
 func TestDamagedClipIsSkipped(t *testing.T) {
 	path, snapshot := libraryPath(t), fixture(t)

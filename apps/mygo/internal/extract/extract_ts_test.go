@@ -451,3 +451,74 @@ func TestRootHoldsPageText(t *testing.T) {
 	r = ExtractPage(post, tsBase, true)
 	must(t, r.Status == "ready" && strings.Contains(r.HTML, "useful public article") && !strings.Contains(r.HTML, "Sidebar words"), "the article root was not used: %s", r.HTML[:min(300, len(r.HTML))])
 }
+
+// Pictures a post sets in boxes beside its words, which Readability's text scoring leaves out, are put back where the
+// page has them; the next posts' cards around the article stay out.
+func TestPicturesBesideWords(t *testing.T) {
+	shot := func(name string) string {
+		return `<div class="module-image"><div class="ratio"><img src="https://cdn.example/` + name + `.jpg?class=w1080" width="1600" height="1200" alt="` + name + `"></div></div>`
+	}
+	words := func(n int) string {
+		return `<div class="module-text"><div class="px4"><div class="max-line-length"><div class="rich-text"><p>` + strings.Repeat(tsProse, n) + `</p><p>` +
+			strings.Repeat(tsProse, n) + `</p></div></div></div></div>`
+	}
+	page := `<html><head><title>A photo series</title></head><body><nav><img src="https://cdn.example/logo.png" alt="logo"><a href="/">Home</a></nav>` +
+		`<div class="page"><div class="col">` + shot("one") + words(2) + shot("two") + shot("three") + shot("four") + `</div>` +
+		`<div class="more"><a href="/next-1"><img src="https://cdn.example/next-1.jpg" width="800">A different story about posters</a>` +
+		`<a href="/next-2"><img src="https://cdn.example/next-2.jpg" width="800">Another story about type in public places</a></div></div></body></html>`
+	rulesOff = map[string]bool{"pictures": true}
+	before := ExtractPage(page, tsBase, true)
+	rulesOff = nil
+	must(t, before.Status == "ready" && len(before.Images) == 0, "Readability keeps the pictures by itself now: %v", before.Images)
+	r := ExtractPage(page, tsBase, true)
+	order := regexp.MustCompile(`cdn\.example/(\w+)\.jpg|(useful public article)`).FindAllStringSubmatch(r.HTML, -1)
+	var seq []string
+	for _, m := range order {
+		if m[1] != "" {
+			seq = append(seq, m[1])
+		} else if len(seq) == 0 || seq[len(seq)-1] != "words" {
+			seq = append(seq, "words")
+		}
+	}
+	must(t, strings.Join(seq, " ") == "one words two three four", "%v in %s", seq, r.HTML)
+	must(t, !strings.Contains(r.HTML, "next-") && !strings.Contains(r.HTML, "logo"), "%s", r.HTML)
+}
+
+// A page names its own picture even when it gives no body, as a gallery's page drawn by scripts does.
+func TestLeadPicture(t *testing.T) {
+	r := ExtractPage(`<html><head><meta property="og:type" content="article"><meta property="og:image" content="/shots/a.webp"></head><body><div id="app"></div></body></html>`, tsBase, true)
+	must(t, r.Status == "unavailable" && r.Lead == "https://example.com/shots/a.webp", "%+v", r)
+}
+
+// A cover before the words is kept ahead of them; more pictures beside the words (a photo column, a stack of slides
+// the page shows one at a time as the words scroll by) follow the text instead of burying it.
+func TestPicturesAheadOfWords(t *testing.T) {
+	stack := func(n int) string {
+		var b strings.Builder
+		for i := range n {
+			fmt.Fprintf(&b, `<img src="https://cdn.example/slide-%d.jpg" width="1920" height="1080">`, i)
+		}
+		return `<div class="images"><div class="stack">` + b.String() + `</div></div>`
+	}
+	words := `<div class="text"><div class="steps"><div class="step"><p>` + prose3 + `</p><p>` + prose3 + `</p></div></div></div>`
+	page := func(n int) string {
+		return `<html><body><div class="talk">` + stack(n) + words + `</div></body></html>`
+	}
+	cover := ExtractPage(page(1), tsBase, true)
+	must(t, len(cover.Images) == 1 && strings.Index(cover.HTML, "slide-0") < strings.Index(cover.HTML, "useful public article"), "%s", cover.HTML)
+	slides := ExtractPage(page(12), tsBase, true)
+	must(t, slides.Status == "ready" && len(slides.Images) == 12, "%v", slides.Images)
+	must(t, strings.Index(slides.HTML, "useful public article") < strings.Index(slides.HTML, "slide-0") &&
+		strings.Index(slides.HTML, "slide-0") < strings.Index(slides.HTML, "slide-11"), "%s", slides.HTML)
+}
+
+// A page's copy of a part for narrow screens alone goes, the wide screens' copy stays; so does a heading for narrow
+// screens, which names a folded section.
+func TestNarrowScreenCopiesExcluded(t *testing.T) {
+	r := ExtractPage(tsPageHTML(`<h2 class="heading-large only mobile collapse-link">Time &amp; Format</h2>`+
+		`<div class="collapsable mobile collapsed"><p>`+strings.Repeat("Each course meets for two half days of live sessions. ", 4)+`</p></div>`+
+		`<h3 class="only small large desktop">Monday &amp; Tuesday</h3><p class="only mobile"><span>Mon &amp; Tue</span></p>`+
+		`<p class="md:hidden">Tailwind copy</p><div class="d-md-none">Bootstrap copy</div><span class="mobile-only">Plain copy</span>`), tsBase, false)
+	must(t, r.Status == "ready" && match(`Time &(amp;|#x26;) Format`, r.HTML) && strings.Contains(r.HTML, "Each course meets") && strings.Contains(r.HTML, "Monday"), "%s %s", r.Status, r.HTML)
+	must(t, !match(`Mon &(amp;|#x26;) Tue<|Tailwind copy|Bootstrap copy|Plain copy`, r.HTML), "%s", r.HTML)
+}

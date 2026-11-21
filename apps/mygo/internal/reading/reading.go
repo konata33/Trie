@@ -32,7 +32,13 @@ import (
 )
 
 const (
-	imageCacheVersion = 2
+	// imageCacheVersion is the version of the rules a body is read by, kept with it (ArticleContent.ImageCacheVersion).
+	// 3: pictures beside a page's words are kept, and a gallery's post read from the library stands as its work.
+	// 4: a page's copies of its parts for narrow screens are left out (pages kept before are read again: ReadBehind).
+	imageCacheVersion = 4
+	// pictureRules is the first version whose pictures are kept as they are now: a body kept before, with pictures
+	// missing, is read again; one kept since, with none missing, is not given up for a read with some missing.
+	pictureRules      = 3
 	imageBytes        = 8 * 1024 * 1024
 	articleImageBytes = 15 * 1024 * 1024
 	videoBytes        = 16 * 1024 * 1024
@@ -98,6 +104,13 @@ type Service struct {
 	order    []string // the previews' keys, oldest first
 	// saving makes each look at the library and the write that follows it one step.
 	saving sync.Mutex
+
+	// Gallery is the work a library article stands as when its page gives none (Target.Work), for a design gallery's
+	// post; nil for other sources. Set once, before the first read.
+	Gallery func(src library.Source, a library.Article, body *library.FeedBody) *Card
+	// Mended is told, from another goroutine, of an article whose kept page a read in the background replaced
+	// (mendBehind), so that a reader showing it can take the new body. Set once, before the first read.
+	Mended func(id string)
 }
 
 type call struct {
@@ -212,7 +225,7 @@ func (s *Service) Read(ctx context.Context, id string, refresh bool, source stri
 	// mending is a read only to mend what was kept (staleBody): failing, it keeps what was kept and says nothing.
 	var oldImages, staleTeaser, staleGallery, staleShort, staleBody, mending bool
 	if c := cached; c != nil {
-		oldImages = (c.ImageCacheVersion == nil || *c.ImageCacheVersion != imageCacheVersion) &&
+		oldImages = (c.ImageCacheVersion == nil || *c.ImageCacheVersion < pictureRules) &&
 			(c.Message != nil && strings.Contains(*c.Message, "部分图片暂未保存") || c.MissingImageCount != nil && *c.MissingImageCount != 0)
 		// A cached feed lead-in from before teasers were recognised is read again, so the page behind it can replace it.
 		snapshot := c.HTML
@@ -229,6 +242,8 @@ func (s *Service) Read(ctx context.Context, id string, refresh bool, source stri
 		// heading lines (Smashing Magazine), a page that kept "CodeBlock Loading..." for its code (innei.in).
 		staleBody = c.Status == "ready" && (c.SourceKind == "feed" && extract.HasLooseLines(snapshot) ||
 			c.SourceKind == "page" && extract.HasStandIn(snapshot) && !(ok && fetched >= standInChecked))
+		// A page read by older rules, and a gallery's post kept before it stood as its work, are read again behind
+		// the reader when it is opened (ReadBehind), not here: a read ahead must not reach the network.
 		current := feedBody == nil || c.FeedVersion != nil && *c.FeedVersion == feedBody.Version
 		if !refresh && source == "" && !oldImages && !staleTeaser && !staleGallery && !staleShort && !staleBody && current {
 			return s.formatCached(*c), nil
@@ -270,6 +285,56 @@ func (s *Service) Read(ctx context.Context, id string, refresh bool, source stri
 	})
 }
 
+// ReadBehind reads again, in the background, the page an article was kept from when it was read by older rules
+// (imageCacheVersion), and a gallery's post kept before it stood as its work, one read at a time; a feed's body, a
+// work page and a page read by the current rules are left as they are. The reader calls it when the article is
+// opened, after Read gave what was kept, never for a read ahead (the pointer resting on a row), since it reaches the
+// network. A full body with no more pictures missing replaces what was kept, and Mended is told; a read that fails,
+// or gives less, leaves it as it was, to be tried again the next time the article is opened.
+func (s *Service) ReadBehind(id string) {
+	kept, err := s.store.Content(id)
+	if err != nil || kept == nil || kept.Status != "ready" || hasWork(kept.Work) ||
+		kept.ImageCacheVersion != nil && *kept.ImageCacheVersion >= imageCacheVersion {
+		return
+	}
+	// A page is read from the page; a gallery's post as Read would, its feed's words and its card together.
+	from := "page"
+	if kept.SourceKind != "page" {
+		state, err := s.store.Library()
+		at := slices.IndexFunc(state.Articles, func(a library.Article) bool { return a.ID == id })
+		if err != nil || at < 0 || s.cardOf(state, state.Articles[at], nil) == nil {
+			return
+		}
+		from = "auto"
+	}
+	go s.once("behind:"+id, func() (library.ArticleContent, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		content, err := s.retrieve(ctx, id, from)
+		if err != nil {
+			log.Print("Article read again failed: ", err)
+			return *kept, nil
+		}
+		if content.Status != "ready" || noneMissing(kept.MissingImageCount) && !noneMissing(content.MissingImageCount) {
+			return *kept, nil
+		}
+		// Read anew meanwhile (another source chosen in the reading options), what is kept now stays.
+		if now, err := s.store.Content(id); err != nil || now == nil || now.FetchedAt != kept.FetchedAt || now.SourceKind != kept.SourceKind {
+			return *kept, err
+		}
+		if content, err = s.settle(id, kept, content); err != nil || content.RefreshError != nil {
+			return *kept, err
+		}
+		if s.Mended != nil {
+			s.Mended(id)
+		}
+		return content, nil
+	})
+}
+
+// noneMissing reports whether a body's missing picture count says none are.
+func noneMissing(n *int) bool { return n == nil || *n == 0 }
+
 // settle is what read does with a body it has read: keeps what was saved when the new one is worse, formats and saves it.
 func (s *Service) settle(id string, cached *library.ArticleContent, content library.ArticleContent) (library.ArticleContent, error) {
 	if cached != nil && cached.Status == "ready" && cached.HTML != "" && content.Status != "ready" {
@@ -279,7 +344,7 @@ func (s *Service) settle(id string, cached *library.ArticleContent, content libr
 		}
 		return withError(s.formatCached(*cached), message), nil
 	}
-	if cached != nil && cached.Status == "ready" && cached.ImageCacheVersion != nil && *cached.ImageCacheVersion == imageCacheVersion &&
+	if cached != nil && cached.Status == "ready" && cached.ImageCacheVersion != nil && *cached.ImageCacheVersion >= pictureRules &&
 		cached.MissingImageCount != nil && *cached.MissingImageCount == 0 && content.MissingImageCount != nil && *content.MissingImageCount != 0 {
 		return withError(s.formatCached(*cached), locales.ReaderNewImagesIncomplete()), nil
 	}
@@ -502,7 +567,18 @@ func (s *Service) retrieve(ctx context.Context, id, from string) (library.Articl
 		src := source(id)
 		return src != nil && src.FeedURL != nil && *src.FeedURL != ""
 	})
-	return s.fetchContent(ctx, Target{ID: id, URL: article.URL, Aliases: article.Aliases, HomeURL: home.HomeURL, FeedBody: feedBody, TrustedArticle: trusted}, from, readWait)
+	t := Target{ID: id, URL: article.URL, Aliases: article.Aliases, HomeURL: home.HomeURL, FeedBody: feedBody, TrustedArticle: trusted,
+		Work: s.cardOf(state, article, feedBody)}
+	return s.fetchContent(ctx, t, from, readWait)
+}
+
+// cardOf is Gallery's card for a library article; nil without one.
+func (s *Service) cardOf(state library.LibraryState, a library.Article, body *library.FeedBody) *Card {
+	i := slices.IndexFunc(state.Sources, func(src library.Source) bool { return src.ID == a.SourceID })
+	if s.Gallery == nil || i < 0 {
+		return nil
+	}
+	return s.Gallery(state.Sources[i], a, body)
 }
 
 func anywhere(string) bool { return true }
@@ -531,7 +607,7 @@ func retrying(once fetch.Fetch) fetch.Fetch {
 func (s *Service) fetchContent(ctx context.Context, t Target, from string, imageWait time.Duration) (library.ArticleContent, error) {
 	get := retrying(s.fetcher())
 	var result, summary *extract.Extracted
-	picture := false
+	picture, lead := false, ""
 	payload := t.FeedBody
 	sourceURL, sourceKind := t.URL, "page"
 	fromFeed := func(x *extract.Extracted) { result, sourceKind, sourceURL = x, "feed", payload.FeedURL }
@@ -582,7 +658,7 @@ func (s *Service) fetchContent(ctx context.Context, t Target, from string, image
 			case page.Status >= 200 && page.Status < 300 && strings.Contains(lower(page.Type), "html"):
 				var x extract.Extracted
 				if x, err = s.x.Page(decode(page.Body, page.Type), page.URL, t.TrustedArticle); err == nil {
-					result = &x
+					result, lead = &x, x.Lead
 				}
 			}
 		}
@@ -610,8 +686,18 @@ func (s *Service) fetchContent(ctx context.Context, t Target, from string, image
 		}
 	}
 	// A gallery's item with no work page and no fuller article stands as a work built from its feed; the words read stay as its body.
-	if card := t.Work; card != nil && (result == nil || result.Work == nil) &&
-		(result == nil || result.Status != "ready" || result.TextLength < articleText || len(result.Images) == 0 && card.Picture != nil && *card.Picture != "") {
+	// Its picture is the one its feed gives, else the one its page names for itself (The FWA draws its page with scripts).
+	var card *Card
+	if t.Work != nil {
+		c := *t.Work
+		if (c.Picture == nil || *c.Picture == "") && lead != "" {
+			c.Picture = &lead
+		}
+		card = &c
+	}
+	// A body with pictures of its own (two or more) is a picture post and stays one; the work would keep only the first.
+	if card != nil && (result == nil || result.Work == nil) &&
+		(result == nil || result.Status != "ready" || len(result.Images) < 2 && (result.TextLength < articleText || len(result.Images) == 0 && card.Picture != nil && *card.Picture != "")) {
 		words := ""
 		if result != nil && result.Status != "unavailable" {
 			words = result.HTML
@@ -687,9 +773,13 @@ func (s *Service) fetchContent(ctx context.Context, t Target, from string, image
 		return library.ArticleContent{}, errors.New("未找到可读正文")
 	}
 	urls := unique(result.Images)
+	// Past the first 64 a picture is not fetched and counts as missing.
+	total := len(urls)
+	urls = urls[:min(total, 64)]
 	images := map[string]string{}
 	var mu sync.Mutex
 	kept, next := 0, 0
+	again := map[string]bool{} // pictures already put back at the end of the queue
 	deadline := time.Now().Add(imageWait)
 	// Bound work and cached bytes while allowing photo-heavy posts to load in parallel: six at a time, as a browser opens to one site,
 	// since a slow picture CDN (Medium's, one to five seconds a picture through a proxy) otherwise fills a preview's few seconds with half the pictures.
@@ -698,7 +788,7 @@ func (s *Service) fetchContent(ctx context.Context, t Target, from string, image
 		wg.Go(func() {
 			for {
 				mu.Lock()
-				if next >= min(len(urls), 64) || kept >= articleImageBytes || !time.Now().Before(deadline) {
+				if next >= len(urls) || kept >= articleImageBytes || !time.Now().Before(deadline) {
 					mu.Unlock()
 					return
 				}
@@ -706,11 +796,17 @@ func (s *Service) fetchContent(ctx context.Context, t Target, from string, image
 				next++
 				mu.Unlock()
 				// A failed image must not erase the article text.
-				body, kind := s.image(ctx, get, url)
+				body, kind, failed := s.image(ctx, get, url)
 				mu.Lock()
 				if kind != "" && kept+len(body) <= articleImageBytes {
 					images[url] = "data:" + kind + ";base64," + base64.StdEncoding.EncodeToString(body)
 					kept += len(body)
+				}
+				// A picture whose connection stalled or dropped is tried once more after the others, while there is time:
+				// through a proxy one request in a burst sometimes stalls, and the same picture asked again arrives at once.
+				if failed && !again[url] {
+					again[url] = true
+					urls = append(urls, url)
 				}
 				mu.Unlock()
 			}
@@ -779,7 +875,7 @@ func (s *Service) fetchContent(ctx context.Context, t Target, from string, image
 	if links == nil {
 		links = []string{}
 	}
-	version, missing := imageCacheVersion, len(urls)-len(images)
+	version, missing := imageCacheVersion, total-len(images)
 	content := library.ArticleContent{ArticleID: t.ID, Status: result.Status, HTML: html, TextLength: result.TextLength,
 		SourceSnapshot: &library.ReaderSourceSnapshot{HTML: result.HTML, Provenance: "source"},
 		Links:          links, FetchedAt: web.Now(), SourceURL: sourceURL, SourceKind: sourceKind, Message: result.Message,
@@ -803,17 +899,21 @@ func unique(values []string) []string {
 }
 
 // image is one of a body's pictures as it is kept, its kind from its first bytes; no kind when it cannot be had.
-func (s *Service) image(ctx context.Context, get fetch.Fetch, url string) ([]byte, string) {
+// failed is a request that ended without an answer (stalled, dropped), which may be asked again.
+func (s *Service) image(ctx context.Context, get fetch.Fetch, url string) (body []byte, kind string, failed bool) {
 	res, err := get(ctx, url, anywhere, imageBytes)
-	if err != nil || res.Status != 200 || len(res.Body) > imageBytes {
-		return nil, ""
+	if err != nil {
+		return nil, "", ctx.Err() == nil && fetch.Unanswered(err)
 	}
-	body, kind := res.Body, extract.ImageType(res.Body)
+	if res.Status != 200 || len(res.Body) > imageBytes {
+		return nil, "", false
+	}
+	body, kind = res.Body, extract.ImageType(res.Body)
 	// A whiteboard's scene file (extract-content placeWhiteboards) is drawn into a picture here.
 	if kind == "" && s.x.Whiteboard != nil && strings.Contains(lower(res.Type), "json") && len(body) <= 2*1024*1024 {
 		svg, err := s.x.Whiteboard(utf8Text(body))
 		if err != nil {
-			return nil, ""
+			return nil, "", false
 		}
 		if svg != "" {
 			body, kind = []byte(svg), "image/svg+xml"
@@ -822,16 +922,16 @@ func (s *Service) image(ctx context.Context, get fetch.Fetch, url string) ([]byt
 	if kind == "" && svgType.MatchString(lower(res.Type)) && len(body) <= 256*1024 && s.x.SVG != nil {
 		svg, err := s.x.SVG(utf8Text(body))
 		if err != nil {
-			return nil, ""
+			return nil, "", false
 		}
 		if svg != "" {
 			body, kind = []byte(svg), "image/svg+xml"
 		}
 	}
 	if kind == "image/avif" {
-		return FromAVIF(ctx, body)
+		body, kind = FromAVIF(ctx, body)
 	}
-	return body, kind
+	return body, kind, false
 }
 
 // media is one of a work page's pictures as a data URL, or nil when it cannot be had by until.

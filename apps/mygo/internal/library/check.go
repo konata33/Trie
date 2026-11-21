@@ -6,10 +6,12 @@ import (
 	"io"
 	"math"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"trie/internal/locales"
 	"trie/internal/web"
+	"unicode/utf8"
 )
 
 // The checks on stored rows, actions and reader documents. Stored JSON is
@@ -212,7 +214,7 @@ func checkClip(c ClipInput) error {
 		return errors.New(locales.ErrorInvalidArticleID())
 	case web.JSTrim(c.Text) == "" || web.JSLen(c.Text) > 20000:
 		return errors.New(locales.ErrorClipLength())
-	case c.UnitID != nil && (*c.UnitID == "" || web.JSLen(*c.UnitID) > 256 || strings.IndexFunc(*c.UnitID, controlOrSpace) >= 0):
+	case c.UnitID != nil && !unitOK(*c.UnitID), !clipPicturesOK(c.Pictures, utf8.RuneCountInString(c.Text)):
 		return errors.New(locales.ErrorInvalidClipParagraph())
 	case c.ContentRevision != nil && !sha256Hex.MatchString(*c.ContentRevision):
 		return errors.New(locales.ErrorInvalidTextVersion())
@@ -222,6 +224,28 @@ func checkClip(c ClipInput) error {
 		return errors.New(locales.ErrorNoteTooLong())
 	}
 	return nil
+}
+
+// unitOK is a reader unit a clip may name.
+func unitOK(s string) bool {
+	return s != "" && web.JSLen(s) <= 256 && strings.IndexFunc(s, controlOrSpace) < 0
+}
+
+// clipPicturesOK checks a clip's pictures against its text of n runes: at
+// most 64, each unit named once, standing in order within the text.
+func clipPicturesOK(pictures []ClipPicture, n int) bool {
+	if len(pictures) > 64 { // reader.MaxClipPictures
+		return false
+	}
+	at := 0
+	for i, p := range pictures {
+		if !unitOK(p.Unit) || p.At < at || p.At > n ||
+			slices.ContainsFunc(pictures[:i], func(q ClipPicture) bool { return q.Unit == p.Unit }) {
+			return false
+		}
+		at = p.At
+	}
+	return true
 }
 
 func control(r rune) bool        { return r <= 0x1f || r == 0x7f }
@@ -263,6 +287,21 @@ func clipInputJSON(v object) (ClipInput, bool) {
 			return c, false
 		}
 	}
+	if pictures, present := v["pictures"]; present && pictures != nil { // null, as no pictures
+		list, ok := pictures.([]any)
+		if !ok {
+			return c, false
+		}
+		for _, item := range list {
+			p, ok := item.(object)
+			unit, isString := p["unit"].(string)
+			at, isCount := safeCount(p["at"])
+			if !ok || !isString || !isCount {
+				return c, false
+			}
+			c.Pictures = append(c.Pictures, ClipPicture{Unit: unit, At: at})
+		}
+	}
 	return c, checkClip(c) == nil
 }
 
@@ -281,7 +320,7 @@ func clipJSON(value, articleID any) *Clip {
 	}
 	var f fields
 	clip := &Clip{ID: input.ID, ArticleID: input.ArticleID, Text: input.Text, Note: input.Note, UnitID: input.UnitID,
-		ContentRevision: input.ContentRevision, CreatedAt: input.CreatedAt, UpdatedAt: updated,
+		ContentRevision: input.ContentRevision, CreatedAt: input.CreatedAt, UpdatedAt: updated, Pictures: input.Pictures,
 		Citation: Citation{Title: f.str(c["title"]), URL: f.str(c["url"]), SourceName: f.str(c["sourceName"]),
 			Authors: f.strs(c["authors"]), PublishedAt: f.nstr(c["publishedAt"])}}
 	if f.err != nil {
@@ -575,7 +614,7 @@ func has(v object, key string) bool { _, ok := v[key]; return ok }
 
 var (
 	readerTags = set("p", "br", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "blockquote", "pre", "code", "table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption", "figure", "figcaption", "img", "a", "hr", "strong", "em", "b", "i", "s", "del", "sup", "sub", "div", "span")
-	properties = set("id", "className", "href", "title", "src", "alt", "width", "height", "colSpan", "rowSpan", "scope", "start", "dataReaderUnit", "dataCallout")
+	properties = set("id", "className", "href", "title", "src", "alt", "width", "height", "colSpan", "rowSpan", "scope", "start", "dataReaderUnit", "dataCallout", "dataReaderRole")
 	unitKinds  = set("heading", "paragraph", "list-item", "caption", "code", "image", "cell")
 	callouts   = set("NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION")
 	language   = regexp.MustCompile(`^` + ci("language-") + `[a-zA-Z0-9_-]{1,64}$`)
@@ -712,6 +751,10 @@ func isReaderDocument(value any) bool {
 				bindings[property.(string)] = true
 			case "dataCallout":
 				if tag != "blockquote" || !callouts[web.JSString(property)] {
+					return false
+				}
+			case "dataReaderRole":
+				if tag != "p" || web.JSString(property) != "dek" {
 					return false
 				}
 			case "width", "height", "colSpan", "rowSpan", "start":

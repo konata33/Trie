@@ -348,6 +348,34 @@ func TestSVGSanitized(t *testing.T) {
 	check(t, count(result.MissingImageCount) == 1 && count(content(t, store, result.ArticleID).MissingImageCount) == 1, "missing %d", count(result.MissingImageCount))
 }
 
+// a picture whose request went unanswered is asked once more after the others; one the site refused is not
+func TestUnansweredPictureAskedAgain(t *testing.T) {
+	store := open(t, ":memory:", snapshot(t))
+	article := first(t, store)
+	html := strings.Replace(page, "</article>", `<img src="https://images.example.com/stalls.jpg" alt="A"><img src="https://images.example.com/gone.jpg" alt="B"></article>`, 1)
+	var mu sync.Mutex
+	asked := map[string]int{}
+	reader := New(store, serve(func(url string, s func(string) bool, n int) (*fetch.Response, error) {
+		mu.Lock()
+		asked[url]++
+		times := asked[url]
+		mu.Unlock()
+		switch url {
+		case "https://images.example.com/stalls.jpg":
+			if times == 1 {
+				return nil, &fetch.NetError{Err: errors.New("the connection went silent")}
+			}
+			return reply(url, 200, "image/jpeg", jpegish), nil
+		case "https://images.example.com/gone.jpg":
+			return reply(url, 404, "text/html", nil), nil
+		}
+		return htmlPage(html)(url, s, n)
+	}), direct)
+	got := read(t, reader, article.ID, false)
+	check(t, strings.Count(got.HTML, "data:image/jpeg") == 1 && count(got.MissingImageCount) == 1, "%d pictures, %d missing", strings.Count(got.HTML, "data:image/jpeg"), count(got.MissingImageCount))
+	check(t, asked["https://images.example.com/stalls.jpg"] == 2 && asked["https://images.example.com/gone.jpg"] == 1, "%v", asked)
+}
+
 // photo-heavy posts cache images beyond the old count and size limits with bounded concurrency
 func TestPhotoHeavyPosts(t *testing.T) {
 	store := open(t, ":memory:", snapshot(t))
@@ -642,6 +670,109 @@ func TestGalleryCardWork(t *testing.T) {
 	check(t, workOf(t, told) != nil && strings.Contains(told.HTML, "one typeface") && pageReads.Load() == 2, "%s, %d pages", told.HTML, pageReads.Load())
 }
 
+// a gallery's post read from the library stands as its work too; with no picture in the feed, the page's own og:image
+// is the shot (The FWA draws its pages with scripts)
+func TestLibraryGalleryWork(t *testing.T) {
+	shot := "https://gallery.example/shots/atlas.webp"
+	read := func(gallery bool) library.ArticleContent {
+		store := open(t, ":memory:", gallerySnapshot)
+		id := importXML(t, store, "g", `<rss><channel><title>G</title><link>https://gallery.example/</link><item><title>Tokyo Atlas</title><link>https://gallery.example/w/atlas</link>`+
+			`<description>By Atlas Studio. A city guide told in one long scroll.</description></item></channel></rss>`, "https://gallery.example/feed")
+		reader := New(store, serve(func(url string, _ func(string) bool, _ int) (*fetch.Response, error) {
+			if url == shot {
+				return reply(url, 200, "image/png", png), nil
+			}
+			return reply(url, 200, "text/html", []byte(`<html><head><meta property="og:type" content="article"><meta property="og:image" content="/shots/atlas.webp"></head><body><div id="app"></div></body></html>`)), nil
+		}), withFragment(direct))
+		if gallery {
+			reader.Gallery = func(src library.Source, a library.Article, _ *library.FeedBody) *Card { return &Card{Name: a.Title} }
+		}
+		return read(t, reader, id, false)
+	}
+	plain := read(false)
+	check(t, workOf(t, plain) == nil && plain.Status == "summary", "a source that is no gallery reads as before: %+v", plain)
+	got := read(true)
+	w := workOf(t, got)
+	check(t, got.Status == "ready" && w != nil && w.Name == "Tokyo Atlas" && strings.HasPrefix(value(w.Poster), "data:image/png;base64,"), "%+v", got)
+	check(t, strings.Contains(got.HTML, "one long scroll"), "the feed's words are the body: %s", got.HTML)
+}
+
+// a gallery's post kept from its feed before it stood as its work stays as kept for a read alone, and stands as its
+// work once read again behind the reader
+func TestKeptGalleryPostReadBehind(t *testing.T) {
+	store := open(t, ":memory:", gallerySnapshot)
+	id := importXML(t, store, "g", `<rss><channel><title>G</title><link>https://gallery.example/</link><item><title>Tokyo Atlas</title><link>https://gallery.example/w/atlas</link>`+
+		`<description>By Atlas Studio. A city guide told in one long scroll.</description></item></channel></rss>`, "https://gallery.example/feed")
+	var asked atomic.Int32
+	reader := New(store, serve(func(url string, _ func(string) bool, _ int) (*fetch.Response, error) {
+		asked.Add(1)
+		if strings.HasSuffix(url, ".webp") {
+			return reply(url, 200, "image/png", png), nil
+		}
+		return reply(url, 200, "text/html", []byte(`<html><head><meta property="og:type" content="article"><meta property="og:image" content="/shots/atlas.webp"></head><body><div id="app"></div></body></html>`)), nil
+	}), withFragment(direct))
+	reader.Gallery = func(src library.Source, a library.Article, _ *library.FeedBody) *Card { return &Card{Name: a.Title} }
+	fb := must[*library.FeedBody](t)(store.FeedContent(id))
+	save(t, store, library.ArticleContent{ArticleID: id, Status: "ready", HTML: "<p>By Atlas Studio. A city guide told in one long scroll.</p>", TextLength: 56,
+		Links: []string{}, FetchedAt: "2026-11-19T00:00:00Z", SourceURL: "https://gallery.example/w/atlas", SourceKind: "feed", FeedVersion: &fb.Version})
+	got := read(t, reader, id, false)
+	check(t, workOf(t, got) == nil && asked.Load() == 0, "a read alone reached the page: %d, %+v", asked.Load(), got)
+	mended := make(chan string, 1)
+	reader.Mended = func(id string) { mended <- id }
+	reader.ReadBehind(id)
+	select {
+	case <-mended:
+	case <-time.After(20 * time.Second):
+		t.Fatal("the post was not read again")
+	}
+	idle(t, reader, id)
+	check(t, workOf(t, read(t, reader, id, false)) != nil, "the post does not stand as its work")
+}
+
+// a gallery's short post with pictures of its own stays a picture post: the work would keep only the first
+func TestGalleryPicturePostStays(t *testing.T) {
+	store := open(t, ":memory:", snapshot(t))
+	reader := New(store, serve(func(url string, _ func(string) bool, _ int) (*fetch.Response, error) {
+		if strings.HasSuffix(url, ".jpg") {
+			return reply(url, 200, "image/jpeg", jpegish), nil
+		}
+		return reply(url, 200, "text/html", []byte(`<html><body><article><h1>Posters</h1><figure><img src="https://type.example/a.jpg"><figcaption>The first poster.</figcaption></figure>`+
+			`<figure><img src="https://type.example/b.jpg"><figcaption>The second poster.</figcaption></figure></article></body></html>`)), nil
+	}), withFragment(direct))
+	got := preview(reader, Target{ID: "explore:https://type.example/posters", URL: "https://type.example/posters", Aliases: []string{}, HomeURL: "https://type.example/", TrustedArticle: true,
+		Work: &Card{Name: "Posters", Picture: str("https://type.example/a.jpg")}}, "")
+	check(t, workOf(t, got) == nil && strings.Count(got.HTML, "data:image/jpeg") == 2, "%+v", got)
+}
+
+// a page kept as words alone before the pictures beside them were kept is read once more behind the reader, and
+// keeps them now; a read alone, as a read ahead makes, does not reach the page
+func TestWordsAlonePageReadAgain(t *testing.T) {
+	store := open(t, ":memory:", snapshot(t))
+	article := first(t, store)
+	pictured := `<html><body><article><div class="text"><p>` + long + `</p></div><div class="media"><figure><img src="https://images.example.com/a.jpg" width="1200"></figure></div></article></body></html>`
+	reader := New(store, serve(func(url string, s func(string) bool, n int) (*fetch.Response, error) {
+		if strings.HasSuffix(url, ".jpg") {
+			return reply(url, 200, "image/jpeg", jpegish), nil
+		}
+		return htmlPage(pictured)(url, s, n)
+	}), direct)
+	save(t, store, library.ArticleContent{ArticleID: article.ID, Status: "ready", HTML: "<p>Words alone.</p>", TextLength: 11, Links: []string{},
+		FetchedAt: "2026-11-19T00:00:00Z", SourceURL: article.URL, SourceKind: "page"})
+	got := read(t, reader, article.ID, false)
+	check(t, strings.Contains(got.HTML, "Words alone.") && !strings.Contains(got.HTML, "data:image/jpeg"), "a read alone read the page: %+v", got)
+	mended := make(chan string, 1)
+	reader.Mended = func(id string) { mended <- id }
+	reader.ReadBehind(article.ID)
+	select {
+	case <-mended:
+	case <-time.After(20 * time.Second):
+		t.Fatal("the page was not read again")
+	}
+	idle(t, reader, article.ID)
+	got = read(t, reader, article.ID, false)
+	check(t, got.FromCache && strings.Contains(got.HTML, "data:image/jpeg"), "%+v", got)
+}
+
 // a post the feed links on an old domain is read where it moved on its publisher's own site
 func TestMovedPost(t *testing.T) {
 	store := open(t, ":memory:", snapshot(t))
@@ -754,7 +885,7 @@ var formatSnapshot = library.Snapshot{Version: 1, AsOf: "2026-11-02",
 const tinyPNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j5T8AAAAASUVORK5CYII="
 
 func cached(html string) library.ArticleContent {
-	version, missing := 2, 0
+	version, missing := imageCacheVersion, 0
 	return library.ArticleContent{ArticleID: "article", Status: "ready", HTML: html, TextLength: 123, Links: []string{"https://writer.example/reference"},
 		FetchedAt: "2026-11-01T00:00:00Z", SourceURL: "https://writer.example/article", SourceKind: "page", ImageCacheVersion: &version, MissingImageCount: &missing}
 }
@@ -979,7 +1110,7 @@ func TestSourceRevisionsNotCoalesced(t *testing.T) {
 	source := func(name string) *library.ReaderSourceSnapshot {
 		return &library.ReaderSourceSnapshot{HTML: `<p>Rendered body</p><img src="https://example.com/` + name + `.png" alt="Picture">`, Provenance: "source"}
 	}
-	version, missing := 2, 1
+	version, missing := imageCacheVersion, 1
 	old := library.ArticleContent{ArticleID: article.ID, Status: "ready", HTML: `<p>Rendered body</p><span>图片暂未载入：Picture</span>`, TextLength: 150, Links: []string{},
 		FetchedAt: "2026-11-02T00:00:00Z", SourceURL: article.URL, SourceKind: "page", FromCache: true, ImageCacheVersion: &version, MissingImageCount: &missing, SourceSnapshot: source("one")}
 	save(t, store, old)
@@ -1176,3 +1307,96 @@ var awardPage = `<html><head><meta property="og:description" content="An immersi
   <div class="layout-overall__score"><strong>7.4 / 10</strong></div><div class="layout-overall__score"><strong>7.29 / 10</strong></div><div class="layout-overall__score"><strong>7.23 / 10</strong></div><div class="layout-overall__score"><strong>7.4 / 10</strong></div>
 </div><div class="layout-overall"><div class="layout-overall__type">Accessibility</div><div class="layout-overall__score"><strong>7.60 / 10</strong></div></div></div>
 </body></html>`
+
+// idle waits until no read behind the reader runs for id.
+func idle(t *testing.T, r *Service, id string) {
+	t.Helper()
+	for range 500 {
+		r.mu.Lock()
+		_, running := r.pending["behind:"+id]
+		r.mu.Unlock()
+		if !running {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("the read behind the reader did not end")
+}
+
+// A page kept by older rules shows as kept, and Read alone, as a read ahead makes, reaches nothing; opened, it is read
+// again behind the reader (ReadBehind): offline, what was kept stays and the next opening tries again; online, the new
+// body replaces it and Mended is told, and it is not read again after. A page kept by the current rules, and a feed's
+// body, are not read again; nor is a body kept by the current picture rules with a picture missing.
+func TestOlderPageReadAgainBehind(t *testing.T) {
+	store := open(t, ":memory:", formatSnapshot)
+	kept, older := cached("<h2>Kept heading</h2><p>Kept words.</p>"), 3
+	kept.ImageCacheVersion = &older
+	save(t, store, kept)
+	var pages atomic.Int32
+	var online atomic.Bool
+	gate := make(chan struct{})
+	reader := New(store, serve(func(url string, s func(string) bool, n int) (*fetch.Response, error) {
+		pages.Add(1)
+		if !online.Load() {
+			return nil, errors.New("offline")
+		}
+		<-gate
+		return htmlPage(page)(url, s, n)
+	}), direct)
+	mended := make(chan string, 4)
+	reader.Mended = func(id string) { mended <- id }
+
+	got := read(t, reader, "article", false)
+	check(t, strings.Contains(got.HTML, "Kept words.") && got.RefreshError == nil, "%+v", got)
+	time.Sleep(100 * time.Millisecond)
+	check(t, pages.Load() == 0, "a read alone reached the network")
+	reader.ReadBehind("article")
+	for i := 0; pages.Load() == 0 && i < 500; i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	idle(t, reader, "article")
+	check(t, pages.Load() > 0 && count(content(t, store, "article").ImageCacheVersion) == older && len(mended) == 0, "offline: %d reads, %+v", pages.Load(), content(t, store, "article"))
+
+	online.Store(true)
+	got = read(t, reader, "article", false)
+	reader.ReadBehind("article") // returns while the page is still being read
+	check(t, strings.Contains(got.HTML, "Kept words."), "%+v", got)
+	close(gate)
+	select {
+	case id := <-mended:
+		check(t, id == "article", "mended %q", id)
+	case <-time.After(20 * time.Second):
+		t.Fatal("the page was not read again")
+	}
+	idle(t, reader, "article")
+	saved := content(t, store, "article")
+	check(t, count(saved.ImageCacheVersion) == imageCacheVersion && strings.Contains(saved.HTML, "public paragraph") && !strings.Contains(saved.HTML, "Kept words."), "%+v", saved)
+
+	before := pages.Load()
+	got = read(t, reader, "article", false)
+	reader.ReadBehind("article")
+	time.Sleep(100 * time.Millisecond)
+	idle(t, reader, "article")
+	check(t, strings.Contains(got.HTML, "public paragraph") && pages.Load() == before && len(mended) == 0, "read again: %d reads", pages.Load()-before)
+
+	feedStore := open(t, ":memory:", formatSnapshot)
+	fed := cached("<p>A feed's body.</p>")
+	fed.SourceKind, fed.ImageCacheVersion, fed.FetchedAt = "feed", &older, "2026-11-20T00:00:00Z"
+	save(t, feedStore, fed)
+	var asked atomic.Int32
+	feedReader := New(feedStore, serve(func(string, func(string) bool, int) (*fetch.Response, error) {
+		asked.Add(1)
+		return nil, errors.New("offline")
+	}), direct)
+	read(t, feedReader, "article", false)
+	feedReader.ReadBehind("article")
+	time.Sleep(100 * time.Millisecond)
+	idle(t, feedReader, "article")
+	check(t, asked.Load() == 0, "a feed's body was read again")
+
+	missing := 1
+	fed.ImageCacheVersion, fed.MissingImageCount = &older, &missing
+	save(t, feedStore, fed)
+	read(t, feedReader, "article", false)
+	check(t, asked.Load() == 0, "a body kept by the current picture rules was read again for its missing picture")
+}

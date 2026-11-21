@@ -7,6 +7,10 @@ import (
 	"encoding/xml"
 	"errors"
 	"image"
+	"image/color"
+	"image/gif"
+	"image/png"
+	"io"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -30,6 +34,9 @@ type picture struct {
 	texts  []svgText       // an SVG's text, which MyGo's SVGs leave out
 	vb     [4]float32      // the SVG's viewBox, which texts are placed in
 	err    error           // why it shows as a picture that did not load
+	// clear is whether the ring of pixels round its edge is all but see-through (clearEdges): a badge, a logo, a chart
+	// on no ground, which a corner and an edge would frame as a canvas that is not there.
+	clear bool
 }
 
 //go:embed picture.svg
@@ -89,6 +96,7 @@ func (p *picture) decode() error {
 		return err
 	}
 	p.img = img
+	p.clear = clearEdges(data, format)
 	switch format {
 	case "gif":
 		if d, err := ui.NewGIFDecoder(data); err == nil {
@@ -110,6 +118,60 @@ func (p *picture) decode() error {
 		p.w, p.h = w, h
 	}
 	return nil
+}
+
+// clearEdges reports whether the ring of pixels round a picture's edge is all but see-through: nine in ten of them
+// at most a tenth opaque. Only a PNG, a GIF or a WebP with an alpha channel can be; a screenshot whose rounded corners
+// alone are see-through is not.
+func clearEdges(data []byte, format string) bool {
+	var config func(io.Reader) (image.Config, error)
+	var decode func(io.Reader) (image.Image, error)
+	switch format {
+	case "png":
+		config, decode = png.DecodeConfig, png.Decode
+	case "gif":
+		config, decode = gif.DecodeConfig, gif.Decode
+	case "webp":
+		config, decode = webp.DecodeConfig, webp.Decode
+	default:
+		return false
+	}
+	c, err := config(bytes.NewReader(data))
+	if err != nil {
+		return false
+	}
+	switch c.ColorModel {
+	case color.RGBAModel, color.RGBA64Model, color.GrayModel, color.Gray16Model, color.YCbCrModel, color.CMYKModel:
+		// No alpha channel, unless a PNG's grey or colour is made see-through by a tRNS chunk, which its config,
+		// read only to the header, does not tell.
+		if format != "png" || !pngTransparent(data) {
+			return false
+		}
+	}
+	m, err := decode(bytes.NewReader(data))
+	if err != nil {
+		return false
+	}
+	b := m.Bounds()
+	if b.Dx() < 3 || b.Dy() < 3 {
+		return false
+	}
+	clear, all := 0, 0
+	see := func(x, y int) {
+		all++
+		if _, _, _, a := m.At(x, y).RGBA(); a < 0xffff/10 {
+			clear++
+		}
+	}
+	for x := b.Min.X; x < b.Max.X; x++ {
+		see(x, b.Min.Y)
+		see(x, b.Max.Y-1)
+	}
+	for y := b.Min.Y + 1; y < b.Max.Y-1; y++ {
+		see(b.Min.X, y)
+		see(b.Max.X-1, y)
+	}
+	return clear*10 >= all*9
 }
 
 // WebP is the picture of data when it is a lossy WebP, in the colours
@@ -357,4 +419,13 @@ func svgColor(v string) (ui.Color, bool) {
 		return ui.Hex("#ffffff"), true
 	}
 	return ui.Color{}, false
+}
+
+// pngTransparent reports whether a PNG has a tRNS chunk before its pixels.
+func pngTransparent(data []byte) bool {
+	head := data
+	if i := bytes.Index(data, []byte("IDAT")); i > 0 {
+		head = data[:i]
+	}
+	return bytes.Contains(head, []byte("tRNS"))
 }

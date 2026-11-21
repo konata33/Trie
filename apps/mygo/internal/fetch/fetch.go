@@ -53,15 +53,36 @@ type NetError struct {
 func (e *NetError) Error() string { return e.Err.Error() }
 func (e *NetError) Unwrap() error { return e.Err }
 
+// timeoutError is a request given up because the site went silent or took too long, or its name took too long to look up.
+type timeoutError string
+
+func (e timeoutError) Error() string { return string(e) }
+
+// Unanswered reports whether err is a request the site never answered: the connection failed or dropped, the lookup
+// failed for now, or the request stalled or ran too long. Asking again may get an answer; a name that does not exist,
+// or a refusal of the policy, never will.
+func Unanswered(err error) bool {
+	var te timeoutError
+	if errors.As(err, &te) {
+		return true
+	}
+	var ne *NetError
+	if !errors.As(err, &ne) {
+		return false
+	}
+	var dns *net.DNSError
+	return !errors.As(ne.Err, &dns) || dns.IsTemporary || dns.IsTimeout
+}
+
 // The policy's errors, said in the app's language when they are made.
 func errNotPublic() error  { return errors.New(locales.ErrorNotPublicAddress()) }
 func errScope() error      { return errors.New(locales.ErrorRedirectOutOfScope()) }
 func errBudget() error     { return errors.New(locales.ErrorReadBudget()) }
-func errDNSTimeout() error { return errors.New(locales.ErrorLookupTimeout()) }
+func errDNSTimeout() error { return timeoutError(locales.ErrorLookupTimeout()) }
 func errAddress() error    { return errors.New(locales.ErrorPrivateAddress()) }
 func errEncoding() error   { return errors.New(locales.ErrorUnsupportedEncoding()) }
 func errTooBig() error     { return errors.New(locales.ErrorTooLarge()) }
-func errTimeout() error    { return errors.New(locales.ErrorTimeout()) }
+func errTimeout() error    { return timeoutError(locales.ErrorTimeout()) }
 func errHops() error       { return errors.New(locales.ErrorTooManyRedirects()) }
 func errDowngrade() error  { return errors.New(locales.ErrorHTTPSDowngrade()) }
 
@@ -220,7 +241,11 @@ func newTransport(config *tls.Config, dial func(ctx context.Context, network, ad
 		TLSClientConfig: config,
 		// A new connection through a proxy can take seconds to set up, so connections are kept for the next pictures:
 		// HTTP/2 where the site speaks it carries a page's pictures over one, and idle ones wait a minute and a half.
-		ForceAttemptHTTP2:      true,
+		ForceAttemptHTTP2: true,
+		// A connection kept for the next pictures can die without closing (a proxy drops it silently), and every
+		// request given to it then stalls. After 5 s with no frame it is pinged, and closed when 5 s more bring no
+		// answer, so the next request opens a fresh one.
+		HTTP2:                  &http.HTTP2Config{SendPingTimeout: 5 * time.Second, PingTimeout: 5 * time.Second},
 		MaxIdleConnsPerHost:    6,
 		MaxResponseHeaderBytes: 16 * 1024,
 		IdleConnTimeout:        90 * time.Second,

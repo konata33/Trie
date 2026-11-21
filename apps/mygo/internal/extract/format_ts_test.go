@@ -405,13 +405,13 @@ func TestCodeBeyond128(t *testing.T) {
 }
 
 func TestLooseTextUnits(t *testing.T) {
-	f := format(t, `Loose <em>inline</em><div>Container <strong>text</strong><p>Paragraph</p></div><table><tr><td><h2>Heading in cell</h2>Cell tail</td></tr></table>`)
+	f := format(t, `Loose <em>inline</em><div>Container <strong>text</strong><p>Paragraph</p></div><table><tr><th>Cell</th></tr><tr><td><h2>Heading in cell</h2>Cell tail</td></tr></table>`)
 	d, _ := decode(t, f)
 	var texts []string
 	for _, u := range d.Units {
 		texts = append(texts, u.Text)
 	}
-	must(t, storable(t, f) && slices.Equal(texts, []string{"Loose inline", "Container text", "Paragraph", "Heading in cellCell tail"}), "%q", texts)
+	must(t, storable(t, f) && slices.Equal(texts, []string{"Loose inline", "Container text", "Paragraph", "Cell", "Heading in cellCell tail"}), "%q", texts)
 }
 
 func TestSourceImageIdentity(t *testing.T) {
@@ -422,7 +422,101 @@ func TestSourceImageIdentity(t *testing.T) {
 }
 
 func TestInvalidSizeAttributes(t *testing.T) {
-	f := format(t, `<p>Keep this text</p><img src="`+tinyPNG+`" width="0"><table><tr><td rowspan="0" colspan="oops">Span text</td></tr></table>`)
+	f := format(t, `<p>Keep this text</p><img src="`+tinyPNG+`" width="0"><table><tr><th>Head</th></tr><tr><td rowspan="0" colspan="oops">Span text</td></tr></table>`)
 	_, root := decode(t, f)
 	must(t, storable(t, f) && strings.Contains(root, "Keep this text") && strings.Contains(root, `"rowSpan":0`) && !match(`"width":0|"colSpan":"oops"`, root), "%s", root)
+}
+
+// A first paragraph labelled as the summary is the dek: the label goes, the paragraph is marked, the library keeps it,
+// and laying it out again leaves it as it is. A label with almost nothing after it, or later in the body, stays.
+func TestDek(t *testing.T) {
+	r := format(t, `<div><p><span> Summary: </span>A journey map is a visualization of the process a person goes through.</p><p>Journey maps are a common tool.</p></div>`)
+	must(t, strings.Contains(r.HTML, `<p class="reader-dek">A journey map is`) && !strings.Contains(r.HTML, "Summary"), "%s", r.HTML)
+	_, root := decode(t, r)
+	must(t, strings.Count(root, `"dataReaderRole":"dek"`) == 1 && storable(t, r), "%s", root)
+	again := format(t, r.HTML)
+	must(t, again.HTML == r.HTML, "%s\n%s", r.HTML, again.HTML)
+	for _, page := range []string{`<p>TL;DR: yes.</p><p>Body text of the post.</p>`, `<p>The opening.</p><p>Summary: a paragraph further down the article.</p>`} {
+		must(t, !strings.Contains(format(t, page).HTML, "reader-dek"), "%s", page)
+	}
+	zh := format(t, `<p>摘要：这篇文章讲旅程地图是什么、不是什么，以及怎么用它。</p><p>正文。</p>`)
+	must(t, strings.Contains(zh.HTML, `<p class="reader-dek">这篇文章讲`), "%s", zh.HTML)
+}
+
+// The furniture at a body's start and end goes, a page's or a feed's alike; the article's own first and last words stay,
+// and so do pictures at the end.
+func TestFurniture(t *testing.T) {
+	prose := `<p>` + strings.Repeat("The article itself, with enough words to be read. ", 4) + `</p>`
+	r := format(t, `<p>Translations: <a href="https://tonsky.me/ru/">Russian</a></p><p>2026-10-20</p>`+prose+`<p>The last thought of the article.</p>`+
+		`<div><p>ADS</p></div><p><img src="`+tinyPNG+`" alt="Cover"></p>`)
+	must(t, !match(`Translations|2026-10-20|ADS`, r.HTML) && strings.Contains(r.HTML, "The last thought") && strings.Contains(r.HTML, `alt="Cover"`), "%s", r.HTML)
+	for _, tail := range []string{
+		`<p>The post <a href="https://saas.example/symmetry/">Symmetry</a> appeared first on <a href="https://saas.example">SaaS Landing Page</a>.</p>`,
+		`<p><a href="https://brianlovin.com/x">Read on brianlovin.com</a></p>`,
+		`<p>Fancy a bit of It's Nice That in your inbox? Sign up to our newsletters and we'll keep you in the loop.</p>`,
+		`<p>本文文字内容著作权归 Velas电波站 所有。商业转载请联系站长获得授权；非商业转载请注明 文章来源 及链接。</p>`,
+	} {
+		got := format(t, prose+tail)
+		must(t, strings.Contains(got.HTML, "The article itself") && !match(`appeared first|Read on|newsletters|著作权`, got.HTML), "%s", got.HTML)
+	}
+	// Ordinary closing words stay, and a long last paragraph that mentions a newsletter is the article's.
+	for _, words := range []string{"Thanks for reading!", strings.Repeat("I wrote about the history of the newsletter and why people sign up to an inbox they never read. ", 4)} {
+		must(t, strings.Contains(format(t, prose+"<p>"+words+"</p>").HTML, words[:15]), "%s", words)
+	}
+}
+
+// A caption shared by a run of figures stays under the last; a different one, and the same one after other words, stays.
+func TestRepeatedCaptions(t *testing.T) {
+	fig := func(caption string) string {
+		return `<figure><img src="` + tinyPNG + `"><figcaption>` + caption + `</figcaption></figure>`
+	}
+	credit := "Source: www.instagram.com Atelier Pol. License: All Rights Reserved."
+	r := format(t, fig(credit)+`<p>The catalogue, its typefaces and its binding.</p>`+fig(credit)+"\n"+fig(credit)+fig(credit)+fig("The spine, in cloth."))
+	must(t, strings.Count(r.HTML, credit) == 2 && strings.Count(r.HTML, "<figcaption>") == 3 && strings.Contains(r.HTML, "The spine"), "%s", r.HTML)
+	must(t, format(t, r.HTML).HTML == r.HTML, "laid out again, it stays")
+}
+
+// A table's empty rows go, a cell reaching across them reaching one row less; a table that only lays things out (one
+// row, one column, pictures alone, a table in it) becomes its cells' blocks, a gutter of line numbers left out; a data
+// table, without a head too, stays with its spans. Laid out again, each stays as it is.
+func TestTables(t *testing.T) {
+	data := format(t, `<table><tr><td>Singapore</td><td>9 AM</td></tr><tr><td colspan="2"><p><em>Elsewhere:</em></p></td></tr>`+
+		`<tr><td rowspan="3">Seoul</td><td>&nbsp;10 AM&nbsp;</td></tr><tr><td> </td><td>&nbsp;</td><td></td></tr><tr><td>11 AM</td></tr><tr><td></td><td></td></tr></table>`)
+	must(t, strings.Count(data.HTML, "<tr>") == 4 && strings.Contains(data.HTML, `<td colspan="2">`) && strings.Contains(data.HTML, `<td rowspan="2">Seoul</td><td>10 AM</td>`), "%s", data.HTML)
+	must(t, format(t, data.HTML).HTML == data.HTML, "laid out again, it stays: %s", data.HTML)
+
+	pictures := format(t, `<p>Before.</p><table><tr><td><img src="`+tinyPNG+`" alt="One"></td><td><img src="`+tinyPNG+`" alt="Two"></td></tr></table><p>After.</p>`)
+	must(t, !strings.Contains(pictures.HTML, "<table") && !strings.Contains(pictures.HTML, "reader-table-scroll") && match(`<p><img [^>]*alt="One"[^>]*></p>\s*<p><img [^>]*alt="Two"`, pictures.HTML), "%s", pictures.HTML)
+	column := format(t, `<table><tr><td><strong>Note</strong> one</td></tr><tr><td><h3>Two</h3><p>Three</p>tail</td></tr></table>`)
+	must(t, !strings.Contains(column.HTML, "<table") && match(`^<p><strong>Note</strong> one</p><h3 [^>]*>Two</h3><p>Three</p><p>tail</p>$`, column.HTML), "%s", column.HTML)
+	code := format(t, `<table><tr><td class="gutter"><pre>1
+2
+3</pre></td><td class="code"><pre><code class="language-swift">let a = 1
+let b = 2
+print(a + b)</code></pre></td></tr></table>`)
+	must(t, !strings.Contains(code.HTML, "<table") && len(code.CodeBlocks) == 1 && code.CodeBlocks[0].Code == "let a = 1\nlet b = 2\nprint(a + b)", "%s", code.HTML)
+	// Code that is only numbers is no gutter when the cell beside it is numbers too.
+	numbers := format(t, `<table><tr><td><pre>1</pre></td><td><pre>1</pre></td></tr></table>`)
+	must(t, len(numbers.CodeBlocks) == 2, "%s", numbers.HTML)
+	nested := format(t, `<table><tr><td><table><tr><th>Name</th><th>Size</th></tr><tr><td>a</td><td>1</td></tr></table></td><td>Beside</td></tr><tr><td>x</td><td>y</td></tr></table>`)
+	must(t, strings.Count(nested.HTML, "<table") == 1 && strings.Contains(nested.HTML, "<th>Name</th>") && strings.Contains(nested.HTML, "<p>Beside</p>"), "%s", nested.HTML)
+	for _, f := range []Formatted{pictures, column, code, nested} {
+		must(t, format(t, f.HTML).HTML == f.HTML, "laid out again, it stays: %s", f.HTML)
+	}
+}
+
+// What shows as nothing at a heading's ends goes: the no-break space an icon left, a line break, an empty link; an
+// anchor stays. A heading repeating the one before at its level, nothing but empty blocks between, goes.
+func TestHeadingEdgesAndRepeats(t *testing.T) {
+	r := format(t, `<h2>&nbsp;Time &amp; Format</h2><p>x</p><h2><br>Design debt is real<br></h2><p>y</p>`+
+		`<h2> <a href="https://example.com/"> </a> <span> 见到李志 </span> <a href="https://example.com/en"> </a> </h2><p>z</p>`+
+		`<h3><span id="anchor"></span>&#x3000;Anchored</h3><p>w</p>`)
+	must(t, match(`>Time &#x26; Format</h2>`, r.HTML) && match(`>Design debt is real</h2>`, r.HTML) && match(`><span>见到李志</span></h2>`, r.HTML) && match(`><span id="anchor"></span>Anchored</h3>`, r.HTML), "%s", r.HTML)
+	must(t, r.Headings[0].Text == "Time & Format", "%v", r.Headings)
+
+	repeats := format(t, `<div><p></p><h2 id="agenda">Course Schedule</h2><p></p><h2>&nbsp;Course Schedule</h2><p>You can attend up to 2 courses.</p></div>`+
+		`<h3>Monday</h3><h3>Monday</h3><p>Courses.</p><h3>Monday</h3><p>Again, after words.</p><h2>Same</h2><h3>Same</h3>`)
+	must(t, strings.Count(repeats.HTML, "Course Schedule") == 1 && strings.Contains(repeats.HTML, `<h2 id="agenda">Course Schedule</h2>`), "%s", repeats.HTML)
+	must(t, strings.Count(repeats.HTML, ">Monday</h3>") == 2 && strings.Count(repeats.HTML, ">Same</h") == 2, "%s", repeats.HTML)
+	must(t, format(t, repeats.HTML).HTML == repeats.HTML && format(t, r.HTML).HTML == r.HTML, "laid out again, they stay")
 }

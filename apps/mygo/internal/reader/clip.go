@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
@@ -24,6 +25,8 @@ type Clip struct {
 	UnitID          *string `json:"unitID"`          // the unit the selection began in
 	ContentRevision *string `json:"contentRevision"` // the document's; null for a body from HTML
 	CreatedAt       string  `json:"createdAt"`
+	// The pictures of the body inside the passage, in document order.
+	Pictures []ClipPicture `json:"pictures,omitempty"`
 	// Where the selection began and ended, to the rune: the store keeps only
 	// UnitID, but the native reader can mark a clip exactly with these.
 	Start, End ClipPoint `json:"-"`
@@ -36,20 +39,30 @@ type ClipPoint struct {
 	Offset int // in runes of the paragraph the unit's text is shown in
 }
 
+// ClipPicture is a picture of the body inside a clip's passage: the unit of
+// its img, and where it stands in the clip's text.
+type ClipPicture struct {
+	Unit string `json:"unit"`
+	At   int    `json:"at"` // in runes of Text: the picture stands before the words from here on
+}
+
 type clipPart struct {
 	b        *block
 	from, to int
+	at       int // where its words start in join's text, in runes
 }
 
 // Selection returns the clip the selection makes, without keeping it: false
 // while nothing, or only white space, is selected.
 func (r *Reader) Selection() (Clip, bool) {
-	text, parts := r.join(r.selected)
-	text = strings.TrimSpace(text)
+	joined, parts := r.join(r.selected)
+	text := strings.TrimSpace(joined)
 	if text == "" || len(parts) == 0 {
 		return Clip{}, false
 	}
+	lead := utf8.RuneCountInString(joined) - utf8.RuneCountInString(strings.TrimLeftFunc(joined, unicode.IsSpace))
 	cl := Clip{ID: uuid(), ArticleID: r.Article.ID, Text: text, parts: parts}
+	cl.Pictures = r.clipPictures(parts, lead, utf8.RuneCountInString(text))
 	if u := parts[0].b.unit; u != "" {
 		cl.UnitID = &u
 	}
@@ -59,6 +72,51 @@ func (r *Reader) Selection() (Clip, bool) {
 	first, last := parts[0], parts[len(parts)-1]
 	cl.Start, cl.End = ClipPoint{first.b.unit, first.from}, ClipPoint{last.b.unit, last.to}
 	return cl, true
+}
+
+// MaxClipPictures is as many pictures as a clip keeps, as many as the library
+// takes; those past them are left out, and the words kept.
+const MaxClipPictures = 64
+
+// clipPictures are the pictures a selection of parts takes along: those
+// between its first part's block and its last's, each standing where the
+// first part after it starts, and, when it begins in a caption, the pictures
+// of the figure right before that caption, standing at 0. lead is the runes
+// of white space trimmed off the front of join's text, n the runes left.
+func (r *Reader) clipPictures(parts []clipPart, lead, n int) []ClipPicture {
+	var order []*block // the body's blocks in document order
+	pos := map[*block]int{}
+	walkBlocks(r.Body.blocks, func(b *block) { pos[b] = len(order); order = append(order, b) })
+	first, ok1 := pos[parts[0].b]
+	last, ok2 := pos[parts[len(parts)-1].b]
+	if !ok1 || !ok2 {
+		return nil
+	}
+	var out []ClipPicture
+	add := func(b *block, at int) {
+		if len(out) < MaxClipPictures && b.kind == Picture && b.unit != "" && !slices.ContainsFunc(out, func(p ClipPicture) bool { return p.Unit == b.unit }) {
+			out = append(out, ClipPicture{Unit: b.unit, At: max(0, min(n, at-lead))})
+		}
+	}
+	if parts[0].b.kind == Caption {
+		i := first
+		for i > 0 && order[i-1].kind == Picture {
+			i--
+		}
+		for ; i < first; i++ {
+			add(order[i], 0)
+		}
+	}
+	next := 0 // the first part after the block being looked at
+	for i := first + 1; i < last; i++ {
+		for next < len(parts) && pos[parts[next].b] <= i {
+			next++
+		}
+		if next < len(parts) {
+			add(order[i], parts[next].at)
+		}
+	}
+	return out
 }
 
 // Keep makes a clip of the selection and keeps it in memory, marked in the
@@ -95,6 +153,7 @@ func (r *Reader) join(sel []ui.SelectedText) (string, []clipPart) {
 	var sb strings.Builder
 	var parts []clipPart
 	var prev *para
+	n := 0 // runes written
 	for _, s := range sel {
 		p := r.paras[s.ID]
 		runes := []rune(s.Text)
@@ -103,17 +162,20 @@ func (r *Reader) join(sel []ui.SelectedText) (string, []clipPart) {
 			continue
 		}
 		if prev != nil {
+			sep := prev.sep
 			switch {
 			case p.row != 0 && p.row == prev.row:
-				sb.WriteByte('\t')
+				sep = "\t"
 			case len(p.sep) > len(prev.sep):
-				sb.WriteString(p.sep)
-			default:
-				sb.WriteString(prev.sep)
+				sep = p.sep
 			}
+			sb.WriteString(sep)
+			n += utf8.RuneCountInString(sep)
 		}
-		sb.WriteString(unmarked.Replace(string(runes[from:to])))
-		parts = append(parts, clipPart{p.b, from, to})
+		words := unmarked.Replace(string(runes[from:to]))
+		sb.WriteString(words)
+		parts = append(parts, clipPart{p.b, from, to, n})
+		n += utf8.RuneCountInString(words)
 		prev = p
 	}
 	return sb.String(), parts
@@ -316,7 +378,7 @@ func (r *Reader) SetMarks(marks []Mark) {
 				cl.parts[n-1].to = f.i + 1
 				continue
 			}
-			cl.parts = append(cl.parts, clipPart{f.b, f.i, f.i + 1})
+			cl.parts = append(cl.parts, clipPart{f.b, f.i, f.i + 1, 0})
 		}
 		r.marks = append(r.marks, cl)
 	}
@@ -432,5 +494,58 @@ func (r *Reader) Units() []string {
 	for i, u := range r.units {
 		out[i] = u.id
 	}
+	return out
+}
+
+// KeptPicture is a picture of the body a clip keeps, decoded. (Picture is
+// the Kind of a picture's block.)
+type KeptPicture struct {
+	Img     ui.ImageSource
+	Player  *ui.VideoPlayer // a GIF, which plays (looping)
+	W, H    float32         // the size it shows at, in DIPs: the article's width and height, else its own
+	Alt     string
+	Caption string     // its figure's caption
+	Src     string     // the data: URL it was saved as, for copying it as HTML
+	Clear   bool       // its edge all but see-through (a chart or logo on no ground): shown without a frame
+	Err     error      // why it did not decode
+	texts   []svgText  // an SVG's words, which MyGo's SVGs leave out
+	vb      [4]float32 // the SVG's viewBox, which they are placed in
+}
+
+// DrawTexts draws an SVG picture's words over it in box, as the reader
+// does; nothing for any other.
+func (k KeptPicture) DrawTexts(pt *ui.Painter, box ui.Rect) {
+	if len(k.texts) > 0 {
+		drawSVGTexts(pt, box, &picture{texts: k.texts, vb: k.vb})
+	}
+}
+
+// HasTexts reports whether it is an SVG with words of its own, which a
+// raster of it would leave out.
+func (k KeptPicture) HasTexts() bool { return len(k.texts) > 0 }
+
+// ClipPictures decodes the pictures of c whose units are given, keyed by
+// unit. It decodes, so call it off the UI thread.
+func ClipPictures(c *Content, units []string) map[string]KeptPicture {
+	b := &builder{codes: map[string]CodeBlock{}}
+	var nodes []*node
+	if d := c.Document; d != nil {
+		nodes, b.tokens, b.roles = d.Root.Children, d.CodeTokens, c.FormatVersion >= 4
+	} else {
+		nodes = parseHTML(c.HTML)
+	}
+	b.face = faceOf(nodes)
+	f := &flow{b: b}
+	f.nodes(nodes, 0, "")
+	out := map[string]KeptPicture{}
+	walkBlocks(f.done(), func(bl *block) {
+		if _, done := out[bl.unit]; bl.kind != Picture || bl.pic == nil || done || !slices.Contains(units, bl.unit) {
+			return
+		}
+		p := bl.pic
+		p.err = p.decode()
+		out[bl.unit] = KeptPicture{Img: p.img, Player: p.player, W: p.w, H: p.h, Alt: p.alt, Caption: p.caption, Src: p.src, Clear: p.clear, Err: p.err,
+			texts: p.texts, vb: p.vb}
+	})
 	return out
 }

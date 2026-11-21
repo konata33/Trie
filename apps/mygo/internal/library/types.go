@@ -137,27 +137,36 @@ type ReadingPosition struct {
 
 // ClipInput is a passage to keep; CreatedAt is empty for now, or the time of a clip being restored.
 type ClipInput struct {
-	ID              string  `json:"id"`
-	ArticleID       string  `json:"articleID"`
-	Text            string  `json:"text"`
-	Note            string  `json:"note"`
-	UnitID          *string `json:"unitID"`
-	ContentRevision *string `json:"contentRevision"`
-	CreatedAt       string  `json:"createdAt,omitempty"`
+	ID              string        `json:"id"`
+	ArticleID       string        `json:"articleID"`
+	Text            string        `json:"text"`
+	Note            string        `json:"note"`
+	UnitID          *string       `json:"unitID"`
+	ContentRevision *string       `json:"contentRevision"`
+	CreatedAt       string        `json:"createdAt,omitempty"`
+	Pictures        []ClipPicture `json:"pictures,omitempty"`
+}
+
+// ClipPicture is a picture of the body inside a clip's passage: the reader
+// unit of its img, and where it stands in the clip's text.
+type ClipPicture struct {
+	Unit string `json:"unit"`
+	At   int    `json:"at"` // in runes of Text: the picture stands before the words from here on
 }
 
 // Clip is a passage the reader kept. The citation is captured when the clip
 // is made, so exports stay stable even if the feed later renames the article.
 type Clip struct {
-	ID              string   `json:"id"`
-	ArticleID       string   `json:"articleID"`
-	Text            string   `json:"text"`
-	Note            string   `json:"note"`
-	UnitID          *string  `json:"unitID"`
-	ContentRevision *string  `json:"contentRevision"`
-	CreatedAt       string   `json:"createdAt"`
-	UpdatedAt       string   `json:"updatedAt"`
-	Citation        Citation `json:"citation"`
+	ID              string        `json:"id"`
+	ArticleID       string        `json:"articleID"`
+	Text            string        `json:"text"`
+	Note            string        `json:"note"`
+	UnitID          *string       `json:"unitID"`
+	ContentRevision *string       `json:"contentRevision"`
+	CreatedAt       string        `json:"createdAt"`
+	UpdatedAt       string        `json:"updatedAt"`
+	Citation        Citation      `json:"citation"`
+	Pictures        []ClipPicture `json:"pictures,omitempty"`
 }
 
 type Citation struct {

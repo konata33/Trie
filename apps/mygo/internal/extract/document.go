@@ -452,6 +452,9 @@ func (d *docBuilder) convert(n *hnode, depth int, inUnit bool) (*hnode, error) {
 			}
 		}
 	}
+	if n.tag == "p" && slices.Contains(names, "reader-dek") {
+		result.setProp("dataReaderRole", "dek")
+	}
 	if n.tag == "pre" {
 		return d.pre(n, result, names)
 	}

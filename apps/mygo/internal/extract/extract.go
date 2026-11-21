@@ -30,6 +30,9 @@ type Extracted struct {
 	FeedURLs   []string `json:"feedURLs"`
 	Message    *string  `json:"message"`
 	Work       *Work    `json:"work,omitempty"`
+	// The picture a page names for itself (og:image), also when it gives no body: a gallery's post that draws its page
+	// with scripts still has it.
+	Lead string `json:"lead,omitempty"`
 }
 
 const (
@@ -627,8 +630,11 @@ func quotesPair(call string) bool {
 }
 
 var (
-	hiddenStyle    = regexp.MustCompile(`(?i)display` + sp + `*:` + sp + `*none|visibility` + sp + `*:` + sp + `*hidden|content-visibility` + sp + `*:` + sp + `*hidden`)
-	hiddenMarker   = regexp.MustCompile(`(?i)^(?:comments?(?:-(?:list|section|container|area))?|related-posts|share-buttons)$`)
+	hiddenStyle  = regexp.MustCompile(`(?i)display` + sp + `*:` + sp + `*none|visibility` + sp + `*:` + sp + `*hidden|content-visibility` + sp + `*:` + sp + `*hidden`)
+	hiddenMarker = regexp.MustCompile(`(?i)^(?:comments?(?:-(?:list|section|container|area))?|related-posts|share-buttons)$`)
+	// narrowOnly is a class a page shows on narrow screens alone, beside its own copy for wide ones (Bootstrap's
+	// d-md-none and visible-xs, Tailwind's md:hidden, Foundation's show-for-small-only, mobile-only).
+	narrowOnly     = regexp.MustCompile(`(?i)^(?:(?:mobile|phone)[-_]?only|only[-_]?(?:mobile|phone)|(?:show|visible)[-_](?:on[-_])?(?:mobile|phone|xs)|(?:hide|hidden)[-_](?:on[-_])?desktop|is-hidden-desktop|d-(?:sm|md|lg)-none|visible-xs|show-for-small-only|(?:sm|md|lg):hidden)$`)
 	hiddenSelector = `script, template, noscript, iframe, object, embed, svg, math, nav, header, footer, aside, [hidden], [inert], [aria-hidden="true"], [role="navigation"], [role="banner"], [role="contentinfo"]`
 	styledSelector = `article, main, section, div, p, span, figure, img, form, dialog`
 )
@@ -641,6 +647,19 @@ func className(n *html.Node) string {
 	return attr(n, "class")
 }
 
+// narrow reports whether n's classes mark it shown on narrow screens alone: one of them says so (narrowOnly), or "only"
+// and "mobile" stand among them without "desktop" (Nielsen Norman Group's "only mobile"). A heading so marked is not:
+// it names a section the page folds on a phone, at times its only name; a copy of the wide screens' heading goes later
+// as a repeated heading.
+func narrow(n *html.Node) bool {
+	if headingTag.MatchString(n.Data) {
+		return false
+	}
+	words := jsSpaces.Split(strings.ToLower(className(n)), -1)
+	return slices.ContainsFunc(words, narrowOnly.MatchString) ||
+		slices.Contains(words, "only") && slices.Contains(words, "mobile") && !slices.Contains(words, "desktop")
+}
+
 // removeHidden drops what is not shown: hydration payloads, previews, page chrome, and what inline or author CSS hides.
 func removeHidden(doc *html.Node) {
 	for _, n := range queryAll(doc, hiddenSelector) {
@@ -648,7 +667,7 @@ func removeHidden(doc *html.Node) {
 	}
 	for _, n := range queryAll(doc, "*") {
 		marker := attr(n, "id") + " " + className(n)
-		if hiddenStyle.MatchString(attr(n, "style")) || slices.ContainsFunc(jsSpaces.Split(marker, -1), hiddenMarker.MatchString) {
+		if hiddenStyle.MatchString(attr(n, "style")) || slices.ContainsFunc(jsSpaces.Split(marker, -1), hiddenMarker.MatchString) || narrow(n) {
 			remove(n)
 		}
 	}
@@ -1023,6 +1042,12 @@ func ExtractPage(page, pageURL string, trustedArticle bool) (result Extracted) {
 		}
 	}
 	description = web.FromUnits(truncateUnits(web.Units(collapse(description)), 1000))
+	if h := head(doc); h != nil {
+		lead := cmpOr(attr(query(h, `meta[property="og:image"][content]`), "content"), attr(query(h, `meta[name="twitter:image"][content]`), "content"))
+		if lead = publicURL(lead, base); lead != "" {
+			defer func() { result.Lead = lead }()
+		}
+	}
 	if gallery := galleryPage(doc, base); gallery != nil && !rulesOff["gallery"] {
 		p := finish(gallery.html, base, "ready", feeds, nil, true)
 		if p.Status != "ready" {
@@ -1096,6 +1121,14 @@ func ExtractPage(page, pageURL string, trustedArticle bool) (result Extracted) {
 		return e
 	}
 	// Restrict fallback to one semantic article container, never the arbitrary page body.
+	limit := body(doc)
+	if root != nil {
+		limit = root
+	}
+	var marked []*html.Node
+	if limit != nil && !rulesOff["pictures"] {
+		marked = markElements(limit)
+	}
 	clone := cloneNode(doc)
 	if root != nil {
 		if b := body(clone); b != nil {
@@ -1106,6 +1139,9 @@ func ExtractPage(page, pageURL string, trustedArticle bool) (result Extracted) {
 	content, title := parseArticle(clone, base)
 	if content == "" && root != nil {
 		content = innerHTML(root)
+	}
+	if content != "" && marked != nil {
+		content = withPictures(content, marked, limit)
 	}
 	// The title as the page names it, with and without the site's name after a separator ("Person of Interest – Wilson
 	// Tovar"); not the page's <h1>, which may say more than the feed's title the reader shows.

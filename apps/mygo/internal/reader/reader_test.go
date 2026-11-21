@@ -437,3 +437,91 @@ func TestPictureFormats(t *testing.T) {
 		t.Errorf("the GIF shows %v after 250ms, as at first", first)
 	}
 }
+
+// Pictures one under another stand 8 apart, as a set; a portrait the column would make taller than four fifths of the
+// reader's height is narrowed to it and stands in the middle; a credit is a caption's quieter kind; a dek is marked.
+func TestPictureRunsPortraitsCreditsDek(t *testing.T) {
+	picture := func(w, h int) string {
+		var b bytes.Buffer
+		png.Encode(&b, image.NewRGBA(image.Rect(0, 0, w, h)))
+		return "data:image/png;base64," + base64.StdEncoding.EncodeToString(b.Bytes())
+	}
+	wide, tall := picture(12, 8), picture(12, 18)
+	html := `<p class="reader-dek">A journey map is a visualization of the process a person goes through.</p><p>Words.</p>` +
+		`<figure><img src="` + wide + `" alt="one" width="1200" height="800"></figure>` +
+		`<figure><img src="` + wide + `" alt="two" width="1200" height="800"></figure>` +
+		`<figure><img src="` + tall + `" alt="tall" width="1200" height="1800"><figcaption>Photo: Jocelyn Lau. License: All Rights Reserved.</figcaption></figure>` +
+		`<figure><img src="` + wide + `" alt="three" width="1200" height="800"><figcaption>The spine, in cloth.</figcaption></figure><p>After.</p>`
+	body := Prepare(&Content{Status: "ready", HTML: html})
+	var dek, credits, captions int
+	walkBlocks(body.blocks, func(b *block) {
+		if b.dek && b.bottom == dekRoom {
+			dek++
+		}
+		if b.kind == Caption {
+			captions++
+			if b.credit {
+				credits++
+			}
+		}
+	})
+	if dek != 1 || captions != 2 || credits != 1 {
+		t.Fatalf("dek %d, captions %d of which credits %d", dek, captions, credits)
+	}
+	r := NewReader(&Article{ID: "pictures", Title: "pictures"}, &Content{Status: "ready"}, body)
+	th := theme.UI()
+	tt := ui.NewTester(func(c *ui.Context) { c.SetTheme(th); r.View(c) }, 724, 900)
+	tt.Frame()
+	tt.Frame()
+	// Where each picture is laid out, whole, though the window shows only its top.
+	find := func(name string) ui.Rect {
+		t.Helper()
+		for b, box := range r.picBox {
+			if b.pic != nil && b.pic.alt == name {
+				return box
+			}
+		}
+		t.Fatalf("no picture %s", name)
+		return ui.Rect{}
+	}
+	one, two, portrait, three := find("one"), find("two"), find("tall"), find("three")
+	if gap := two.Y - (one.Y + one.H); gap < 7.5 || gap > 8.5 {
+		t.Errorf("pictures one under another %.1f apart, want 8", gap)
+	}
+	if limit := float32(900) * tallPicture; portrait.H > limit+0.5 || portrait.W >= one.W-1 {
+		t.Errorf("the portrait shows %.0f×%.0f, want at most %.0f high and narrower than %.0f", portrait.W, portrait.H, limit, one.W)
+	}
+	if mid, col := portrait.X+portrait.W/2, one.X+one.W/2; mid < col-0.5 || mid > col+0.5 {
+		t.Errorf("the narrowed portrait's middle at %.1f, the column's at %.1f", mid, col)
+	}
+	// Its credit stands under it, from its left edge, not the column's.
+	tt.Scroll(400, 400, 0, portrait.Y+portrait.H-600)
+	tt.Frame()
+	tt.Frame()
+	if credit := box(t, tt, "Jocelyn Lau"); credit.X < portrait.X-0.5 || credit.X > portrait.X+0.5 {
+		t.Errorf("the credit starts at %.1f, the portrait at %.1f", credit.X, portrait.X)
+	}
+	// Under the portrait its credit, then the next picture after a paragraph's room, not the run's.
+	if gap := three.Y - (portrait.Y + portrait.H); gap <= 8.5 {
+		t.Errorf("a picture after a captioned one %.1f under it", gap)
+	}
+}
+
+// A caption only naming where its picture comes from is a credit; one that tells what the picture shows is not.
+func TestCreditLines(t *testing.T) {
+	for text, want := range map[string]bool{
+		"Source: NN/g":                               true,
+		"Photo by Jane Doe on Unsplash":              true,
+		"Photo: Jane Doe":                            true,
+		"Image credit: NASA":                         true,
+		"Illustration by Sam":                        true,
+		"图片来源：网络":                                    true,
+		"Image: The three stages of a design review": false,
+		"Illustration: how the parts fit":            false,
+		"A diagram of the reader's column":           false,
+	} {
+		if got := isCredit([]run{{text: text}}); got != want {
+			t.Errorf("isCredit(%q) = %v", text, got)
+		}
+	}
+}

@@ -68,6 +68,8 @@ type block struct {
 	runs        []run
 	children    []*block
 	callout     string // NOTE, TIP, IMPORTANT, WARNING, CAUTION
+	dek         bool   // the article's summary, set before its first words (reader-dek)
+	credit      bool   // a caption that only credits the picture: its source, photographer or licence
 	code        *codeView
 	pic         *picture
 	rows        [][]*cell
@@ -81,8 +83,9 @@ type cell struct {
 	blocks           []*block
 	header           bool
 	colSpan, rowSpan int
-	// The width of its words on one line, at the size measuredAt.
-	measured, measuredAt float32
+	col              int // the column it starts in, from 0 (place)
+	// The width of its words on one line and of its widest word, at the size measuredAt.
+	measured, widest, measuredAt float32
 }
 
 // Body is an article's body made into blocks: what Prepare makes once, off
@@ -405,11 +408,19 @@ func (f *flow) node(n *node, st style, href string) {
 	}
 	switch tag {
 	case "p":
+		if n.prop("dataReaderRole") == "dek" || hasClass(n, "reader-dek") {
+			sub(block{kind: Paragraph, dek: true, bottom: dekRoom})
+			break
+		}
 		sub(block{kind: Paragraph, bottom: 1.15})
 	case "h1", "h2", "h3", "h4", "h5", "h6":
 		sub(block{kind: Heading, level: int(tag[1] - '0')}) // its level and margins as the body sets them: settleHeadings
 	case "figcaption", "caption":
+		start := len(f.out)
 		sub(block{kind: Caption})
+		for _, b := range f.out[start:] {
+			b.credit = tag == "figcaption" && isCredit(b.runs)
+		}
 	case "ul", "ol":
 		f.list(n, unit, id)
 	case "li": // outside a list
@@ -448,6 +459,24 @@ func lastElement(n *node) *node {
 		}
 	}
 	return nil
+}
+
+// dekRoom is the room under the dek, in ems: more than under a paragraph, so the article starts after it.
+const dekRoom = 1.6
+
+// creditLine is a caption that only says where a picture comes from: "Source: …", "Photo by … on Unsplash", "©",
+// "图片来源：…", or one that ends in a licence. "Image: …" alone may describe the picture, so a picture's kind before a
+// colon is a credit only for a photo ("Photo: …") or with "credit" or "source" ("Image credit: …").
+var creditLine = regexp.MustCompile(`(?i)^(?:(?:photo|photos|photograph|photography|image|images|picture|illustration|artwork)\s+(?:by\b|courtesy\s+of\b|(?:credits?|source)\s*[:：])|(?:source|credits?|photo|photos|photograph|photography)\s*(?:by\b|[:：])|courtesy\s+of\b|©|\(c\)\s|copyright\b|(?:图片?来源|图源|摄影|插图|来源)\s*[:：])|license:\s*all rights reserved\.?$|\b(?:on|via)\s+unsplash\.?$`)
+
+// isCredit reports whether a caption's words are a credit line (creditLine), short as one is.
+func isCredit(runs []run) bool {
+	var sb strings.Builder
+	for _, r := range runs {
+		sb.WriteString(r.text)
+	}
+	text := strings.TrimSpace(sb.String())
+	return text != "" && utf8.RuneCountInString(text) <= 200 && creditLine.MatchString(text)
 }
 
 // captionOf is the words of a figure's caption (its figcaption's
@@ -576,7 +605,7 @@ func (f *flow) table(n *node, unit, id string) {
 					if td.Type != "element" || (td.Tag != "td" && td.Tag != "th") {
 						continue
 					}
-					c := &cell{header: td.Tag == "th", colSpan: max(1, td.num("colSpan")), rowSpan: max(1, td.num("rowSpan"))}
+					c := &cell{header: td.Tag == "th", colSpan: min(max(1, td.num("colSpan")), 1000), rowSpan: max(1, td.num("rowSpan"))}
 					c.blocks = f.child(td, td.prop("dataReaderUnit"))
 					row = append(row, c)
 				}
@@ -588,30 +617,64 @@ func (f *flow) table(n *node, unit, id string) {
 	}
 	visit(n)
 	if len(t.rows) > 0 {
+		place(t.rows)
 		t.numeric = numericColumns(t.rows)
 		f.out = append(f.out, t)
 	}
 }
 
+// place sets the column each cell starts in as a browser's table does: after the cells before it in its row and
+// those reaching down into the row from above (rowspan). A cell reaches down no further than the last row, and no
+// table takes more than maxColumns columns: a cell past them stands in the last.
+func place(rows [][]*cell) {
+	// down is, for each column, how many rows from the current one a cell above still covers.
+	var down []int
+	for i, row := range rows {
+		col := 0
+		for _, cl := range row {
+			for col < len(down) && down[col] > 0 {
+				col++
+			}
+			if col >= maxColumns {
+				col, cl.colSpan = maxColumns-1, 1
+			}
+			cl.col, cl.colSpan, cl.rowSpan = col, min(cl.colSpan, maxColumns-col), min(cl.rowSpan, len(rows)-i)
+			for len(down) < col+cl.colSpan {
+				down = append(down, 0)
+			}
+			for k := col; k < col+cl.colSpan; k++ {
+				down[k] = max(down[k], cl.rowSpan)
+			}
+			col += cl.colSpan
+		}
+		for k := range down {
+			down[k] = max(0, down[k]-1)
+		}
+	}
+}
+
+// maxColumns is as many columns as a table takes, as browsers cap colspan.
+const maxColumns = 1000
+
+// columns is how many columns placed rows take.
+func columns(rows [][]*cell) int {
+	n := 0
+	for _, row := range rows {
+		for _, cl := range row {
+			n = max(n, cl.col+cl.colSpan)
+		}
+	}
+	return n
+}
+
 // numericColumns are the columns of rows whose cells under the head hold figures alone (1,024, 56ms, 9%, −3.5),
 // at least one of them, the rest empty or a dash.
 func numericColumns(rows [][]*cell) []bool {
-	cols := 0
-	for _, row := range rows {
-		n := 0
-		for _, cl := range row {
-			n += cl.colSpan
-		}
-		cols = max(cols, n)
-	}
+	cols := columns(rows)
 	figures, other := make([]int, cols), make([]bool, cols)
 	for _, row := range rows[headRows(rows):] {
-		col := 0
 		for _, cl := range row {
-			if col >= cols {
-				break
-			}
-			switch text := strings.TrimSpace(cellText(cl)); {
+			switch col, text := cl.col, strings.TrimSpace(cellText(cl)); {
 			case cl.colSpan > 1 || cl.header:
 				other[col] = true
 			case text == "" || text == "-" || text == "–" || text == "—":
@@ -620,7 +683,6 @@ func numericColumns(rows [][]*cell) []bool {
 			default:
 				other[col] = true
 			}
-			col += cl.colSpan
 		}
 	}
 	out := make([]bool, cols)

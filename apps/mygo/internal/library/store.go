@@ -642,7 +642,7 @@ func (s *Store) apply(action LibraryAction) error {
 		var f fields
 		at := web.Now()
 		clip := Clip{ID: input.ID, ArticleID: input.ArticleID, Text: input.Text, Note: input.Note, UnitID: input.UnitID,
-			ContentRevision: input.ContentRevision, CreatedAt: input.CreatedAt, UpdatedAt: at,
+			ContentRevision: input.ContentRevision, CreatedAt: input.CreatedAt, UpdatedAt: at, Pictures: input.Pictures,
 			Citation: Citation{Title: article.Title, URL: article.URL, SourceName: f.str(row[1]), Authors: article.Authors, PublishedAt: article.PublishedAt}}
 		if clip.CreatedAt == "" {
 			clip.CreatedAt = at
