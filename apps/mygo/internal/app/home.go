@@ -599,7 +599,9 @@ func (a *App) trending(c *ui.Context, items []homeItem, live bool) {
 		}
 		var title ui.Element
 		b.Children(func() {
-			if pic != nil {
+			// A post with no picture of its own stands in type alone, as a list without one shows none (Folo's list
+			// items): a grey box with the site's mark would read as a picture that failed.
+			if pic != nil && !(pic.done && pic.bmp == nil) {
 				fade := a.picFade(c, pic)
 				lean := float32(1)
 				if hover && !a.still(c) {
@@ -616,13 +618,6 @@ func (a *App) trending(c *ui.Context, items []homeItem, live bool) {
 							if fade < 1 {
 								img.Opacity(fade)
 							}
-						case pic.done:
-							// A post without a picture of its own stands as Explore's writer covers do without one: their
-							// quiet grey glow, the site's mark small in the corner.
-							if r := slot.LayoutBounds(); r.W > 0 && r.H > 0 {
-								ui.Image(c, a.ex.aura(grey, inkCover, r.W, r.H)).Fit(ui.FillBox).Absolute().Fill()
-							}
-							a.mark(c, lead.entry, 32).Absolute().Left(20).Bottom(20)
 						}
 					})
 				})

@@ -14,6 +14,7 @@ import (
 	"trie/internal/motion"
 	"trie/internal/subscription"
 	"trie/internal/theme"
+	"trie/internal/web"
 )
 
 // aheadWait is how long a refresh holds the articles it brought while their
@@ -43,10 +44,13 @@ func (r *refreshState) ask(id string) {
 	r.asked[id] = true
 }
 
-// failure is why an author's feed could not be read, if it could not.
+// failure is why an author's feed has not been read for over a day
+// (staleAfter), if so. A refresh failing now and then, the network gone for
+// a while, marks nothing: only a feed that keeps failing does (as Folo
+// flags a feed after a day of errors).
 func (a *App) failure(au *author) string {
 	id := au.src.ID
-	if a.refresh.pending[id] {
+	if a.refresh.pending[id] || !stale(au.src, time.Now()) {
 		return ""
 	}
 	if f, ok := a.refresh.failed[id]; ok {
@@ -59,6 +63,30 @@ func (a *App) failure(au *author) string {
 		return storedText(*au.src.LastError)
 	}
 	return ""
+}
+
+// staleAfter is how long a feed fails before its author is marked.
+const staleAfter = 24 * time.Hour
+
+// stale reports whether src's feed was last read well over staleAfter
+// before now, or never.
+func stale(src *library.Source, now time.Time) bool {
+	if src.LastFetchedAt == nil {
+		return true
+	}
+	at, ok := web.JSDateParse(*src.LastFetchedAt)
+	return !ok || now.UnixMilli()-at > staleAfter.Milliseconds()
+}
+
+// failing counts the authors whose feeds have not been read for over a day.
+func (a *App) failing() int {
+	n := 0
+	for _, au := range a.authors {
+		if a.failure(au) != "" {
+			n++
+		}
+	}
+	return n
 }
 
 // refreshFeeds reads every subscribed feed again, or only sourceID's; a

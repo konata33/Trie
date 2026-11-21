@@ -73,9 +73,10 @@ func (a *App) subscribeView(c *ui.Context, f *subscribeForm) {
 	}
 	ui.Column(c.Key("form")).Margin(16, 0, 0, 0).Children(func() {
 		ui.Text(c, locales.SubscribeAddress()).FontSize(theme.Label).LineHeight(16.0/12).TextColor(theme.Text2).Margin(0, 0, 8, 0)
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).AlignItems(ui.Center).Children(func() {
 			before := f.url
-			in := ui.TextInputBase(c.Key("url"), &f.url).Label(locales.SubscribeAddress()).Placeholder("https://antfu.me").Grow(1).Height(32).Padding(0, 12).
+			// The hint says it is an example, in the muted grey of hints, so the field never looks filled in.
+			in := ui.TextInputBase(c.Key("url"), &f.url).Label(locales.SubscribeAddress()).Placeholder(locales.SubscribePlaceholder()).Grow(1).Height(32).Padding(0, 12).
 				Radius(6).Background(theme.Field).FontSize(theme.Body).TextColor(theme.Text).PlaceholderColor(theme.Muted).CaretColor(theme.Accent).
 				AutoFocus().Disabled(f.working == "save")
 			edge := theme.Line
@@ -91,9 +92,6 @@ func (a *App) subscribeView(c *ui.Context, f *subscribeForm) {
 				f.preview, f.err, f.working = nil, "", ""
 			}
 			if in.Submitted() {
-				discover()
-			}
-			if a.button(c, locales.SubscribeFind(), btnOpt{loading: f.working == "preview", disabled: f.working == "save" || strings.TrimSpace(f.url) == ""}).Clicked() {
 				discover()
 			}
 		})
@@ -144,17 +142,22 @@ func (a *App) subscribeView(c *ui.Context, f *subscribeForm) {
 			})
 		}
 		ui.Row(c).Justify(ui.End).Gap(8).Margin(24, 0, 0, 0).Children(func() {
-			if a.button(c, locales.CommonCancel(), btnOpt{disabled: f.working == "save"}).Clicked() {
+			if a.button(c, locales.CommonCancel(), btnOpt{kind: ghost, disabled: f.working == "save"}).Clicked() {
 				a.layers.dialog = nil
 			}
-			if f.preview != nil {
-				label := locales.SubscribeFollow()
-				if existing != nil && existing.Subscribed {
-					label = locales.SubscribeUpdate()
+			// One main action, at the end: finding the feed, then following it.
+			if f.preview == nil {
+				if a.button(c, locales.SubscribeFind(), btnOpt{kind: primary, loading: f.working == "preview", disabled: strings.TrimSpace(f.url) == ""}).Clicked() {
+					discover()
 				}
-				if a.button(c, label, btnOpt{kind: primary, loading: f.working == "save", disabled: f.working == "preview"}).Clicked() {
-					confirm()
-				}
+				return
+			}
+			label := locales.SubscribeFollow()
+			if existing != nil && existing.Subscribed {
+				label = locales.SubscribeUpdate()
+			}
+			if a.button(c, label, btnOpt{kind: primary, loading: f.working == "save"}).Clicked() {
+				confirm()
 			}
 		})
 	})

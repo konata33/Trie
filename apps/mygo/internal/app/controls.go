@@ -113,8 +113,12 @@ func (a *App) button(c *ui.Context, label string, o btnOpt) ui.Element {
 		b.LineHeight(16.0 / 12)
 	}
 	busy := o.disabled || o.loading
+	coloured := o.kind == primary || o.kind == danger
 	if o.disabled {
-		b.Disabled(true).Opacity(0.4)
+		b.Disabled(true)
+		if !coloured {
+			b.Opacity(0.4)
+		}
 	}
 	if o.loading {
 		b.Busy(true)
@@ -129,6 +133,10 @@ func (a *App) button(c *ui.Context, label string, o btnOpt) ui.Element {
 			ground = theme.Danger
 		}
 		switch {
+		case o.disabled:
+			// Not yet possible, it keeps its pill but loses its colour: a dimmed amber would still outshine
+			// the buttons beside it.
+			ground, color = theme.Selected, theme.Faint
 		case down:
 			ground = brighten(ground, 1.12)
 		case hover:

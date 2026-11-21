@@ -358,6 +358,14 @@ func (ex *exploreState) derive() {
 			spread = append(spread, q[round])
 		}
 	}
+	// 首页 opens on the newest gallery work (exampleOf); the lead starts on the next, and that work stands
+	// first among the frames instead.
+	if home := exampleOf(ex.entries); home != nil && len(spread) > 1 {
+		if i := slices.IndexFunc(spread, func(w exWork) bool { return w.entry == home.entry && w.index == home.index }); i >= 0 && i < 5 {
+			w := spread[i]
+			spread = slices.Insert(slices.Delete(spread, i, i+1), min(5, len(spread)-1), w)
+		}
+	}
 	ex.leads, ex.frames = spread[:min(5, len(spread))], spread[min(5, len(spread)):min(13, len(spread))]
 	onFront := map[string]bool{}
 	for _, w := range append(slices.Clone(ex.leads), ex.frames...) {

@@ -2492,20 +2492,36 @@ func (msgs Messages) SidebarLatest(title string) string {
 	return Catalog.Format(msgs.locale, "sidebarLatest", map[string]any{"title": title})
 }
 
-// SidebarRefreshFailedTip says "Couldn't refresh. Click to try again."
+// SidebarRefreshFailedTip says "Hasn't refreshed for over a day. Click to try again."
 // in the language the app shows.
 //
 // Tooltip of the refresh mark on a writer's row whose feed could not be
 // read.
 func SidebarRefreshFailedTip() string { return In(i18n.Locale()).SidebarRefreshFailedTip() }
 
-// SidebarRefreshFailedTip says "Couldn't refresh. Click to try again."
+// SidebarRefreshFailedTip says "Hasn't refreshed for over a day. Click to try again."
 // in the language of msgs.
 //
 // Tooltip of the refresh mark on a writer's row whose feed could not be
 // read.
 func (msgs Messages) SidebarRefreshFailedTip() string {
 	return Catalog.Format(msgs.locale, "sidebarRefreshFailedTip", nil)
+}
+
+// SidebarStaleTip says "{count, plural, one {# writer hasn't} other {# writers haven't}} refreshed for over a day. Click to try again."
+// in the language the app shows.
+//
+// Tooltip and name of the sidebar's refresh button while some feeds have
+// failed for over a day; count is how many.
+func SidebarStaleTip(count int) string { return In(i18n.Locale()).SidebarStaleTip(count) }
+
+// SidebarStaleTip says "{count, plural, one {# writer hasn't} other {# writers haven't}} refreshed for over a day. Click to try again."
+// in the language of msgs.
+//
+// Tooltip and name of the sidebar's refresh button while some feeds have
+// failed for over a day; count is how many.
+func (msgs Messages) SidebarStaleTip(count int) string {
+	return Catalog.Format(msgs.locale, "sidebarStaleTip", map[string]any{"count": count})
 }
 
 // SidebarRefreshAgain says "Refresh {name} Again"
@@ -3246,6 +3262,22 @@ func SubscribeFind() string { return In(i18n.Locale()).SubscribeFind() }
 // Button beside the address field: looks up the feed at the address.
 func (msgs Messages) SubscribeFind() string {
 	return Catalog.Format(msgs.locale, "subscribeFind", nil)
+}
+
+// SubscribePlaceholder says "e.g. antfu.me"
+// in the language the app shows.
+//
+// Hint in the empty address field of the Follow a Blog dialog: an example
+// address, marked as an example.
+func SubscribePlaceholder() string { return In(i18n.Locale()).SubscribePlaceholder() }
+
+// SubscribePlaceholder says "e.g. antfu.me"
+// in the language of msgs.
+//
+// Hint in the empty address field of the Follow a Blog dialog: an example
+// address, marked as an example.
+func (msgs Messages) SubscribePlaceholder() string {
+	return Catalog.Format(msgs.locale, "subscribePlaceholder", nil)
 }
 
 // SubscribeFollow says "Follow"

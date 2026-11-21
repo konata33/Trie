@@ -596,7 +596,7 @@ func (a *App) mapWriters(c *ui.Context, b mapBlock, r ui.Rect, mini, quiet bool)
 					if paras := a.sheetOpening(art); len(paras) > 0 {
 						t := strings.Join(paras, "\n")
 						family, scale := reader.PassageFace(t)
-						ui.Text(c.Key("opening"), t).Font(family).FontSize(14*scale).LineHeight(24/(14*scale)).TextColor(theme.Text2).
+						ui.Text(c.Key("opening"), t).Font(family).FontSize(openingSize(scale)).LineHeight(24/openingSize(scale)).TextColor(theme.Text2).
 							MaxLines(lines).Ellipsis("…").Margin(0, 0, 6, 0)
 					}
 				}
@@ -944,7 +944,7 @@ func (a *App) paperTitle(c *ui.Context, p page, art *library.Article, lead, quie
 			if paras := a.sheetOpening(art); lead && len(paras) > 0 {
 				t := strings.Join(paras, "\n")
 				family, scale := reader.PassageFace(t)
-				ui.Text(c.Key("opening"), t).Font(family).FontSize(14 * scale).LineHeight(24 / (14 * scale)).TextColor(theme.Text2).
+				ui.Text(c.Key("opening"), t).Font(family).FontSize(openingSize(scale)).LineHeight(24 / openingSize(scale)).TextColor(theme.Text2).
 					MaxLines(3).Ellipsis("…")
 			}
 		})
@@ -1219,4 +1219,14 @@ func (a *App) wallRatio(id string) float32 {
 	}
 	w, h := p.bmp.Size()
 	return clampf(float32(w)/float32(max(1, h)), 2.0/3, 2)
+}
+
+// openingSize is how an article opens on a writer's sheet, on the ladder: 13
+// for Chinese, 15 for English, whose New York is set larger (PassageFace's
+// scale). On 24 lines they keep the reader's 1.85 and 1.6.
+func openingSize(scale float32) float32 {
+	if scale > 1 {
+		return theme.Item
+	}
+	return theme.Body
 }

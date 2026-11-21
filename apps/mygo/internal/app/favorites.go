@@ -726,6 +726,7 @@ type favPic struct {
 	done      bool
 	bmp       *ui.Bitmap
 	soft      *image.NRGBA              // blurred once, for the soft pool under the words (softOf)
+	haze      *ui.Bitmap                // blurred lightly, for a site's first screen behind a page's head (hazeOf)
 	pools     map[[9]float32]*ui.Bitmap // and cut to the pool, for each place it is drawn at (pool)
 	rest, lit float32
 	shown     time.Time // when it first showed: it fades in once
@@ -742,7 +743,7 @@ func (a *App) favPicture(key string, load func() image.Image) *favPic {
 	a.do(func() func() {
 		got := favPic{done: true, rest: 0.84, lit: 1}
 		if img := load(); img != nil && !img.Bounds().Empty() {
-			got.bmp, got.soft = ui.NewBitmap(img), softOf(img)
+			got.bmp, got.soft, got.haze = ui.NewBitmap(img), softOf(img), ui.NewBitmap(hazeOf(img))
 			got.pools = map[[9]float32]*ui.Bitmap{}
 			got.rest, got.lit = toneOf(img)
 		}
@@ -818,6 +819,17 @@ func toneOf(img image.Image) (rest, lit float32) {
 func softOf(img image.Image) *image.NRGBA {
 	b := img.Bounds()
 	w, h := 96, max(1, b.Dy()*96/max(1, b.Dx()))
+	small := image.NewNRGBA(image.Rect(0, 0, w, h))
+	xdraw.CatmullRom.Scale(small, small.Bounds(), img, b, xdraw.Src, nil)
+	return gaussian(small, 1.5)
+}
+
+// hazeOf is img blurred so that its words cannot be read, a screen's body
+// type and its headings alike, while its colours, pictures and layout still
+// show whose it is: 200 across, about 8 points of blur at a banner's width.
+func hazeOf(img image.Image) *image.NRGBA {
+	b := img.Bounds()
+	w, h := 200, max(1, b.Dy()*200/max(1, b.Dx()))
 	small := image.NewNRGBA(image.Rect(0, 0, w, h))
 	xdraw.CatmullRom.Scale(small, small.Bounds(), img, b, xdraw.Src, nil)
 	return gaussian(small, 1.5)

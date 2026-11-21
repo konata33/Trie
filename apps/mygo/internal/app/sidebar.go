@@ -390,7 +390,9 @@ func (a *App) authorRow(c *ui.Context, au *author, on bool, p *partingRow) (ui.R
 				a.end(name, page{}, "name:"+id)
 			}
 		})
-		// A failed feed: the dimmed row and the refresh mark, beside where ··· appears.
+		// A feed failing for over a day: the dimmed row, and beside where ··· appears its refresh mark, shown as ···
+		// is (pointed at, or reached by the keys) and while its retry runs, so that many failing rows are not a
+		// column of marks; the foot's refresh tells how many there are.
 		if failure != "" || pending && a.refresh.asked[id] {
 			tip := locales.SidebarRefreshFailedTip()
 			if pending {
@@ -401,6 +403,8 @@ func (a *App) authorRow(c *ui.Context, au *author, on bool, p *partingRow) (ui.R
 			if pending {
 				retry.Label(locales.SidebarRefreshingWriter(au.src.DisplayName))
 			}
+			seen := hover || retry.FocusVisible() || pending
+			retry.Opacity(retry.AnimateTo("show", map[bool]float32{true: 1, false: 0}[seen], a.ease(motion.Reveal)))
 			if dots && p.strips != nil {
 				// It fades as the name's strips would there.
 				i := (retry.LayoutBounds().X - p.name.X) / stripWidth
@@ -744,9 +748,23 @@ func (a *App) refreshButton(c *ui.Context) {
 	if r.busy {
 		label = locales.CommonRefreshing()
 	}
-	b := a.iconBtn(c, "refresh", iconOpt{icon: "refresh", label: label, tip: locales.CommonRefresh(), small: true, lit: r.busy, beside: true,
+	tip, failing := locales.CommonRefresh(), 0
+	if !r.busy {
+		failing = a.failing()
+	}
+	if failing > 0 {
+		tip = locales.SidebarStaleTip(failing)
+		label = tip
+	}
+	b := a.iconBtn(c, "refresh", iconOpt{icon: "refresh", label: label, tip: tip, small: true, lit: r.busy, beside: true,
 		turn: r.angle(c, a.still(c)), disabled: len(a.authors) == 0})
 	b.Busy(r.busy)
+	// The feeds failing for over a day, told here once rather than by a mark on each row: a dot at its corner.
+	if failing > 0 {
+		b.DrawOver(func(p *ui.Painter, box ui.Rect) {
+			p.Fill(ui.Rect{X: box.X + box.W - 7, Y: box.Y + 3, W: 5, H: 5}, theme.Danger, 2.5)
+		})
+	}
 	if b.Clicked() && !r.busy && len(a.authors) > 0 {
 		a.refreshFeeds("")
 	}

@@ -960,9 +960,19 @@
       }
     }
   },
-  "sidebarRefreshFailedTip": "Couldn't refresh. Click to try again.",
+  "sidebarRefreshFailedTip": "Hasn't refreshed for over a day. Click to try again.",
   "@sidebarRefreshFailedTip": {
     "description": "Tooltip of the refresh mark on a writer's row whose feed could not be read."
+  },
+  "sidebarStaleTip": "{count, plural, one {# writer hasn't} other {# writers haven't}} refreshed for over a day. Click to try again.",
+  "@sidebarStaleTip": {
+    "description": "Tooltip and name of the sidebar's refresh button while some feeds have failed for over a day; count is how many.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
   },
   "sidebarRefreshAgain": "Refresh {name} Again",
   "@sidebarRefreshAgain": {
@@ -1265,6 +1275,10 @@
   "subscribeFind": "Find Feed",
   "@subscribeFind": {
     "description": "Button beside the address field: looks up the feed at the address."
+  },
+  "subscribePlaceholder": "e.g. antfu.me",
+  "@subscribePlaceholder": {
+    "description": "Hint in the empty address field of the Follow a Blog dialog: an example address, marked as an example."
   },
   "subscribeFollow": "Follow",
   "@subscribeFollow": {

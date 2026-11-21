@@ -252,10 +252,14 @@ func (a *App) authorHead(c *ui.Context, au *author, p page, live bool) {
 			ground.Cache()
 		}
 		ground.Children(func() {
-			// The foot, where the portrait and the name meet it, softened (a backdrop's blur) across the banner, so
-			// that the site's own words there never crowd the name.
+			// A site's first screen lies hazed whole: its colours, pictures and layout say whose page this is,
+			// while none of its words compete with the band or the name. Another picture is softened at the foot
+			// only, where the portrait and the name meet it.
 			var soft *ui.Bitmap
-			if pic != nil && pic.soft != nil && w > 0 {
+			switch {
+			case site && pic != nil && pic.haze != nil:
+				soft = pic.haze
+			case pic != nil && pic.soft != nil && w > 0:
 				soft = pic.pool(w, gh, posOf(site), left, h, 1.6*w, 200, 0.35, 1)
 			}
 			a.groundView(c, g, pic, site, waiting, gh, bright, a.picFade(c, pic), soft)
@@ -463,7 +467,8 @@ func (a *App) entry(c *ui.Context, l *listState, p page, art *library.Article, f
 
 // entryTitle is an entry's title: 20, two lines at most.
 func entryTitle(c *ui.Context, s string) ui.Element {
-	return ui.Text(c, s).Font(reader.TitleFont(s)).FontSize(theme.Subtitle).LineHeight(1.4).FontWeight(600).TextColor(theme.Text).Balance().MaxLines(2).Ellipsis("…")
+	// 500: New York has one weight, and PingFang's medium is as dark as it is; its semibold stood heavier in the column.
+	return ui.Text(c, s).Font(reader.TitleFont(s)).FontSize(theme.Subtitle).LineHeight(1.4).FontWeight(500).TextColor(theme.Text).Balance().MaxLines(2).Ellipsis("…")
 }
 
 // entryPicture is an entry's picture across the column, 5:2, held a little
@@ -718,8 +723,12 @@ func (a *App) moonOf(c *ui.Context, art *library.Article, label string) ui.Eleme
 			a.moonBack = nil
 		}
 	}
-	return drawMoon(box, 10, lit, label)
+	// Barely begun, a moon at most gibbous: a full one, a solid grey dot, would read as "unread", which no list says.
+	return drawMoon(box, 10, min(lit, listMoonMax), label)
 }
+
+// listMoonMax is the most of a list's moon that is lit: its dark quarter stays.
+const listMoonMax = 0.7
 
 func drawMoon(box ui.Element, size, lit float32, label string) ui.Element {
 	return box.Size(size, size).Shrink(0).Label(label).Draw(func(pt *ui.Painter, r ui.Rect) {
@@ -799,7 +808,10 @@ func (a *App) emptyState(c *ui.Context, art, title, text string, action func()) 
 			a.pictogram(c, art).Margin(0, 0, 24, 0)
 		}
 		if title != "" {
-			ui.Text(c, title).FontSize(theme.Item).LineHeight(22.0/15).FontWeight(600).TextColor(theme.Text).Margin(0, 0, 8, 0).TextAlign(ui.Center)
+			t := ui.Text(c, title).FontSize(theme.Item).LineHeight(22.0 / 15).FontWeight(600).TextColor(theme.Text).TextAlign(ui.Center)
+			if text != "" {
+				t.Margin(0, 0, 8, 0)
+			}
 		}
 		if text != "" {
 			// Centred, a sentence of two lines takes two of half its length each.

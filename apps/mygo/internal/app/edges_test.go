@@ -12,7 +12,9 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"trie/internal/fetch"
+	"trie/internal/library"
 	"trie/internal/subscription"
+	"trie/internal/web"
 )
 
 // heard keeps what the tester announced, as Announcements forgets it.
@@ -170,5 +172,18 @@ func TestClipNotSaved(t *testing.T) {
 	rp := a.readers[a.page.id]
 	if rp.feedback != "摘录没能保存，再试一次。" || rp.clipBusy {
 		t.Fatalf("feedback %q, busy %v", rp.feedback, rp.clipBusy)
+	}
+}
+
+// A feed is marked only once it has failed for over a day: one read an hour
+// ago that fails now is not; one never read is.
+func TestStaleAfterADay(t *testing.T) {
+	now := time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC)
+	at := func(d time.Duration) *library.Source {
+		s := web.ISOTime(now.Add(-d).UnixMilli())
+		return &library.Source{LastFetchedAt: &s}
+	}
+	if stale(at(time.Hour), now) || !stale(at(48*time.Hour), now) || !stale(&library.Source{}, now) {
+		t.Error("a feed is stale only when it was last read over a day ago, or never")
 	}
 }

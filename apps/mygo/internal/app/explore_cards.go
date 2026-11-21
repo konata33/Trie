@@ -226,11 +226,18 @@ func (a *App) lead(c *ui.Context, w, h float32, away bool) {
 		if covering {
 			c.After(300*time.Millisecond - c.Now().Sub(ex.leadPrevAt))
 		}
+		// Pointed at, the work comes a little closer, as 首页's first screen does; the title keeps still.
+		lean := float32(1)
+		if box.Hovered() && !a.still(c) {
+			lean = 1.03
+		}
+		lean = box.AnimateTo("lean", lean, ui.Animation{Duration: motion.Lean, Ease: motion.Ease})
 		for i, p := range pics {
 			if p == nil || p.bmp == nil || i != at && !(covering && i == ex.leadPrev) {
 				continue
 			}
-			img := ui.Image(c.Key("slide-"+strconv.Itoa(i)), p.bmp).Fit(ui.Cover).ObjectPosition(0.5, 0).Absolute().Fill()
+			img := ui.Image(c.Key("slide-"+strconv.Itoa(i)), p.bmp).Fit(ui.Cover).ObjectPosition(0.5, 0).Absolute().Fill().
+				TransformOrigin(0.5, 0.5).Scale(lean, lean)
 			if i == at {
 				img.ZIndex(1)
 				if ex.leadRun > 0 {
@@ -249,7 +256,6 @@ func (a *App) lead(c *ui.Context, w, h float32, away bool) {
 		if says.FocusVisible() {
 			says.FocusRing(true).FocusRingOffset(-2)
 		}
-		hover := says.Hovered()
 		says.Children(func() {
 			// The words and their band at the foot: 32 in, 24 up; the band is
 			// as tall as the words were the frame before.
@@ -267,9 +273,6 @@ func (a *App) lead(c *ui.Context, w, h float32, away bool) {
 			words.Children(func() {
 				t := ui.Text(c.Key("title-"+strconv.Itoa(int(ex.leadRun))), work.title).FontSize(32).LineHeight(40.0 / 32).FontWeight(650).
 					LetterSpacing(-0.015 * 32).Balance().MaxLines(2).TextColor(theme.Text).Width(titleW)
-				if hover {
-					t.Underline().UnderlineOffset(8).DecorationColor(theme.Faint)
-				}
 				// A new title replaces the last at once and comes up from 4 below.
 				if !a.kbd && !a.still(c) {
 					k := t.Keyframes("in", []ui.Keyframe{{Value: 0}, {At: 180 * time.Millisecond, Value: 1, Ease: motion.Ease}}, ui.KeyframeOptions{Run: ex.leadRun})
@@ -537,13 +540,22 @@ func (a *App) story(c *ui.Context, it exFresh, size string, w, h float32, g exGe
 		var title ui.Element
 		b.Children(func() {
 			title = titleStyle(c, post.Title)
-			a.underline(title, b, b.Hovered(), theme.Faint, 0.2*ts)
+			// A large title takes the pointer on its card's ground (ink): underlined, its lines would read as bars.
+			if ts < theme.Title {
+				a.underline(title, b, b.Hovered(), theme.Faint, 0.2*ts)
+			}
 			a.end(title, page{kind: "explore"}, "title:"+a.postID(post.URL))
 			if post.Excerpt == "" {
 				return
 			}
 			if size == "brief" {
-				ui.Text(c, post.Excerpt).FontSize(ex).LineHeight(el).TextColor(theme.Muted).MaxLines(2).Pretty()
+				// A title of two lines leaves room for one of the opening, so that the byline stays whole at the foot.
+				n := 2
+				_, one := c.MeasureText(0, ui.Span{Text: "x", Size: ts, Weight: weight})
+				if _, all := c.MeasureText(w-2*pad, ui.Span{Text: post.Title, Size: ts, Weight: weight}); all > one*1.5 {
+					n = 1
+				}
+				ui.Text(c, post.Excerpt).FontSize(ex).LineHeight(el).TextColor(theme.Muted).MaxLines(n).Pretty()
 				return
 			}
 			// The opening runs to the foot of its space and fades there, on a
@@ -1154,16 +1166,16 @@ func (a *App) cover(c *ui.Context, e *explore.Entry, w, h float32) {
 				lb.FocusRing(true)
 			}
 			style := func(c *ui.Context, s string) ui.Element {
-				return ui.Text(c, s).FontSize(18).LineHeight(1.35).FontWeight(650).LetterSpacing(-0.01 * 18).Balance().MaxLines(3).TextColor(theme.Text)
+				return ui.Text(c, s).FontSize(theme.Subtitle).LineHeight(1.35).FontWeight(650).LetterSpacing(-0.01 * theme.Subtitle).Balance().MaxLines(3).TextColor(theme.Text)
 			}
 			var title ui.Element
 			lb.Children(func() {
 				title = style(c, latest.Title).Shrink(0)
-				a.underline(title, lb, lb.Hovered(), theme.Faint, 0.2*18)
+				a.underline(title, lb, lb.Hovered(), theme.Faint, 0.2*theme.Subtitle)
 				a.end(title, page{kind: "explore"}, "title:"+a.postID(latest.URL))
 				if latest.Excerpt != "" {
 					ui.Box(c.Key("ex")).Grow(1).Shrink(1).MinHeight(0).ClipY().Effect(coverFade).Children(func() {
-						ui.Text(c, latest.Excerpt).FontSize(14).LineHeight(1.65).TextColor(theme.Text2).Pretty().FillWidth()
+						ui.Text(c, latest.Excerpt).FontSize(theme.Item).LineHeight(1.6).TextColor(theme.Text2).Pretty().FillWidth()
 					})
 				} else {
 					ui.Box(c).Grow(1)
@@ -1173,7 +1185,7 @@ func (a *App) cover(c *ui.Context, e *explore.Entry, w, h float32) {
 				}
 			})
 			if lb.Clicked() {
-				a.openPost(c, e, latest, &trialFrom{title: title.Bounds(), button: lb.Bounds(), style: style, size: 18})
+				a.openPost(c, e, latest, &trialFrom{title: title.Bounds(), button: lb.Bounds(), style: style, size: theme.Subtitle})
 			}
 			if len(posts) > 1 {
 				a.toc(c, e, posts[1:], w, h)

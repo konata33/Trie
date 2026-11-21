@@ -313,8 +313,8 @@ func (a *App) cellIn(e ui.Element, in float32) {
 
 // kindTile is a work on its kind's wall: its picture fills it, resting as
 // bright as the picture allows and coming up under the pointer, held and
-// moving as its kind is looked at (wallLook); the gallery's face at its
-// foot, the title rising beside it as it lights. Opened, its ground spreads
+// moving as its kind is looked at (wallLook); the gallery's face and the
+// title rise at its foot as it lights. Opened, its ground spreads
 // into the work's page, and gathers back into it on the way back.
 func (a *App) kindTile(c *ui.Context, k string, w exWork, l wallLook, tw, th float32) {
 	pic := a.workPic(w)
@@ -366,17 +366,20 @@ func (a *App) kindTile(c *ui.Context, k string, w exWork, l wallLook, tw, th flo
 		if pic == nil || !pic.done {
 			a.breathing(c, theme.Hover)
 		}
-		// The title on the words' band, both coming up with the light; the band baked for the picture at rest.
+		// At rest the wall is the works alone: a kind with one gallery would repeat its face on every tile. Lit, the
+		// gallery's face and the title come up together on the words' band, baked for the picture at rest.
 		capH := float32(56)
 		ui.Box(c.Key("cap")).Absolute().Left(0).Right(0).Bottom(0).Height(capH).IgnoreInput(true).ZIndex(1).Opacity(light).Children(func() {
 			bandOver(c, bandKey{w: tw, h: capH, rise: 32, y: -(th - capH), ph: th, pw: tw, px: l.px, py: l.py}, pic, 10)
+			left := float32(12)
+			if icon != nil && icon.bmp != nil {
+				left = 40
+				ui.Box(c).Absolute().Left(10).Bottom(10).Size(20, 20).Radius(10).Background(theme.Text).Translate(0, 4*(1-look)).
+					Children(func() { ui.Image(c, icon.bmp).Fit(ui.Cover).Fill().Radius(10) })
+			}
 			ui.Text(c, w.title).FontSize(theme.Body).LineHeight(20.0/13).FontWeight(600).TextColor(theme.Text).SingleLine().
-				Absolute().Left(40).Right(12).Bottom(10).Translate(0, 4*(1-look))
+				Absolute().Left(left).Right(12).Bottom(10).Translate(0, 4*(1-look))
 		})
-		if icon != nil && icon.bmp != nil {
-			ui.Box(c).Absolute().Left(10).Bottom(10).Size(20, 20).Radius(10).Background(theme.Text).ZIndex(2).IgnoreInput(true).
-				Shadow(0, 0, 0, 2, theme.ScrimLight).Children(func() { ui.Image(c, icon.bmp).Fit(ui.Cover).Fill().Radius(10) })
-		}
 		ui.Box(c).Absolute().Fill().Radius(10).InsetShadow(0, 0, 0, 1, theme.LineSoft).IgnoreInput(true).ZIndex(3)
 	})
 }

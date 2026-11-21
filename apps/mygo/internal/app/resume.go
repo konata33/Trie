@@ -132,7 +132,8 @@ func (a *App) resumeView(c *ui.Context, arts []*library.Article, live bool) {
 							if hover {
 								color = theme.Text
 							}
-							ui.Text(c.Key("words"), words).Font(face).FontSize(18 * scale).LineHeight(1.65).MaxLines(3).Ellipsis("…").Pretty().
+							// The words at the size they are read in: 17 for Chinese, 20 for English (theme Reading).
+							ui.Text(c.Key("words"), words).Font(face).FontSize(theme.ReadingSize * scale).LineHeight(1.65).MaxLines(3).Ellipsis("…").Pretty().
 								TextColor(b.AnimateColor("words", color, a.ease(motion.Hover)))
 						}
 						src := a.sourceOf(art)

@@ -807,3 +807,23 @@ func TestExploreNothingRead(t *testing.T) {
 		t.Error("their page ends at its head, saying nothing of what is missing")
 	}
 }
+
+// The lead starts on another work than the one 首页 opens on: that one
+// stands first among the frames.
+func TestExploreLeadNotHomes(t *testing.T) {
+	a, _ := newExploreApp(t, nil)
+	tt := exploreTester(a)
+	toExplore(t, a, tt)
+	ex := a.ex
+	home := exampleOf(ex.entries)
+	if home == nil || len(ex.leads) < 2 || len(ex.frames) == 0 {
+		t.Fatalf("no example to compare: %v, %d leads, %d frames", home, len(ex.leads), len(ex.frames))
+	}
+	is := func(w exWork) bool { return w.entry == home.entry && w.index == home.index }
+	if slices.ContainsFunc(ex.leads, is) {
+		t.Fatalf("the lead repeats 首页's work %q", home.post.Title)
+	}
+	if !is(ex.frames[0]) {
+		t.Fatalf("首页's work stands first among the frames, not %q", ex.frames[0].title)
+	}
+}
